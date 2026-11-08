@@ -1,0 +1,189 @@
+[
+  {
+    "path": "lex-comments/main.luma",
+    "status": 0,
+    "stdout": "2\n"
+  },
+  {
+    "path": "lex-string/main.luma",
+    "status": 0,
+    "stdout": "a\n#b\n"
+  },
+  {
+    "path": "lex-escape/main.luma",
+    "status": 1,
+    "diagnostic": "E_ESCAPE",
+    "stdout": ""
+  },
+  {
+    "path": "parse-end/main.luma",
+    "status": 1,
+    "diagnostic": "E_END",
+    "stdout": ""
+  },
+  {
+    "path": "parse-braces/main.luma",
+    "status": 1,
+    "diagnostic": "E_SYNTAX",
+    "stdout": ""
+  },
+  {
+    "path": "precedence/main.luma",
+    "status": 0,
+    "stdout": "14\n"
+  },
+  {
+    "path": "scope-local/main.luma",
+    "status": 0,
+    "stdout": "10\n"
+  },
+  {
+    "path": "scope-unknown/main.luma",
+    "status": 1,
+    "diagnostic": "E_NAME",
+    "stdout": ""
+  },
+  {
+    "path": "type-reassign/main.luma",
+    "status": 1,
+    "diagnostic": "E_TYPE",
+    "stdout": ""
+  },
+  {
+    "path": "type-monomorphic/main.luma",
+    "status": 1,
+    "diagnostic": "E_TYPE",
+    "stdout": ""
+  },
+  {
+    "path": "module-public/main.luma",
+    "status": 0,
+    "stdout": "16\n"
+  },
+  {
+    "path": "module-private/main.luma",
+    "status": 1,
+    "diagnostic": "E_PRIVATE",
+    "stdout": ""
+  },
+  {
+    "path": "module-cycle/main.luma",
+    "status": 1,
+    "diagnostic": "E_IMPORT_CYCLE",
+    "stdout": ""
+  },
+  {
+    "path": "match-first/main.luma",
+    "status": 0,
+    "stdout": "Hot\n"
+  },
+  {
+    "path": "match-lazy/main.luma",
+    "status": 0,
+    "stdout": "7\n"
+  },
+  {
+    "path": "match-exhaustive/main.luma",
+    "status": 1,
+    "diagnostic": "E_MATCH_FALLBACK",
+    "stdout": ""
+  },
+  {
+    "path": "match-types/main.luma",
+    "status": 1,
+    "diagnostic": "E_TYPE",
+    "stdout": ""
+  },
+  {
+    "path": "pipe-chain/main.luma",
+    "status": 0,
+    "stdout": "16\n"
+  },
+  {
+    "path": "pipe-first-argument/main.luma",
+    "status": 0,
+    "stdout": "7\n"
+  },
+  {
+    "path": "pipe-destination/main.luma",
+    "status": 1,
+    "diagnostic": "E_NAME",
+    "stdout": ""
+  },
+  {
+    "path": "object-capture/main.luma",
+    "status": 0,
+    "stdout": "3000\n"
+  },
+  {
+    "path": "array-copy/main.luma",
+    "status": 0,
+    "stdout": "1\n"
+  },
+  {
+    "path": "array-heterogeneous/main.luma",
+    "status": 1,
+    "diagnostic": "E_TYPE",
+    "stdout": ""
+  },
+  {
+    "path": "array-bounds/main.luma",
+    "status": 3,
+    "diagnostic": "E_INDEX",
+    "stdout": ""
+  },
+  {
+    "path": "parallel-order/main.luma",
+    "status": 0,
+    "stdout": ""
+  },
+  {
+    "path": "parallel-transitive-io/main.luma",
+    "status": 1,
+    "diagnostic": "E_EFFECT",
+    "stdout": ""
+  },
+  {
+    "path": "repeat-precheck/main.luma",
+    "status": 0,
+    "stdout": "10\n"
+  },
+  {
+    "path": "divide-zero/main.luma",
+    "status": 3,
+    "diagnostic": "E_DIV_ZERO",
+    "stdout": ""
+  },
+  {
+    "path": "array-empty/main.luma",
+    "status": 1,
+    "diagnostic": "E_INFERENCE",
+    "stdout": ""
+  },
+  {
+    "path": "arity/main.luma",
+    "status": 1,
+    "diagnostic": "E_ARITY",
+    "stdout": ""
+  },
+  {
+    "path": "stdlib-fold/main.luma",
+    "status": 0,
+    "stdout": "30\n"
+  },
+  {
+    "path": "stdlib-parallel-sum/main.luma",
+    "status": 0,
+    "stdout": "30\n"
+  },
+  {
+    "path": "operations/main.luma",
+    "status": 0,
+    "stdout": "5\n5\n6\n4\n1\n8\n-2\ntrue\nfalse\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\nhello\n"
+  },
+  {
+    "path": "library/main.luma",
+    "status": 0,
+    "stdout": "4\n16\n30\n30\n5\n"
+  }
+]

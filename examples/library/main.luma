@@ -1,0 +1,21 @@
+fn square(x)
+return x*x
+end
+fn even(x)
+return x%2==0
+end
+fn add(a,b)
+return a+b
+end
+fn step(x)
+return x+1
+end
+fn done(x)
+return x>=5
+end
+a=[1,2,3,4] -> map(square) -> filter(even)
+print(a[0])
+print(a[1])
+print(a -> reduce(10,add))
+print([1,2,3,4] -> parallel(square) -> sum)
+print(0 -> repeat(step,done))

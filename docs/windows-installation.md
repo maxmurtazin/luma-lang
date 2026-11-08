@@ -44,7 +44,7 @@ cd ../..
 ./packaging/windows/Smoke-Test.ps1
 ```
 
-CI builds on windows-2022, tests Rust and extension units, compiles the installer, installs twice, checks preservation of unrelated files, invokes the installed Run/Check/Graph CLI, installs the bundled VSIX into isolated VS Code directories, and uninstalls. VSIX installation is not an Extension Host UI test. Manually verify command palette Run/Check/Graph, source navigation, custom executable settings, missing VS Code, and SmartScreen on a clean Windows account before a public release. No new language syntax is introduced; map/sum/parallel/repeat remain deferred.
+CI builds on windows-2022, tests Rust and extension units, compiles the installer, installs twice, checks preservation of unrelated files, invokes the installed Run/Check/Graph CLI, installs the bundled VSIX into isolated VS Code directories, and uninstalls. VSIX installation is not an Extension Host UI test. Manually verify command palette Run/Check/Graph, source navigation, custom executable settings, missing VS Code, and SmartScreen on a clean Windows account before a public release. All six 0.1D2 standard library operations execute.
 
 
-0.1D2 / distribution 0.1.1: `map`, `filter`, `reduce`, `sum`, `repeat`, and CPU-threaded `parallel` now execute. The current contract and bounds are in [standard-library](../standard-library/) (Hugo docs: `site/content/docs/standard-library.md`); this supersedes earlier deferred-runtime statements. A4 pagination remains unverified.
+0.1D2 / distribution 0.1.2: `map`, `filter`, `reduce`, `sum`, `repeat`, and CPU-threaded `parallel` now execute. The current contract and bounds are in [standard-library](../standard-library/) (Hugo docs: `site/content/docs/standard-library.md`); this supersedes earlier deferred-runtime statements. A4 pagination remains unverified.

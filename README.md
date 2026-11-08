@@ -1,82 +1,19 @@
-# Luma
+# Luma 0.1.2
 
-An early design for a minimal procedural language built around functions, data flow, and explicit parallelism. The bounded execution core is an interpreter written in Rust.
+A bounded Rust interpreter with static inference, functions, arrays, structural objects, sibling modules, match, pipelines, and map/filter/reduce/sum/repeat/isolated CPU parallel.
 
-**Luma 0.1D1 provides `luma run file.luma`, a bounded interpreter using the existing checker and validated AST.** See [execution core](site/content/docs/runtime.md) for supported behavior, gates and exit statuses.
+- [English documentation](https://maxmurtazin.github.io/luma-lang/en/)
+- [Документация на русском](https://maxmurtazin.github.io/luma-lang/ru/)
+- [Windows releases](https://github.com/maxmurtazin/luma-lang/releases)
+- [Windows Actions artifacts](https://github.com/maxmurtazin/luma-lang/actions/workflows/windows-installer.yml)
+- [Runnable examples and expected results](examples/manifest.json)
 
-## Documentation
+Build: stable Rust plus platform C/C++ linker, then cargo build --release --locked. Run target/release/luma run examples/library/main.luma (add .exe on Windows). Windows setup bundles CLI and VSIX; see [installation](docs/windows-installation.md).
 
-The Hugo + Hextra site lives in `site/`. It covers getting started, a one-page syntax draft, language design, modules, arrays, functions, structural objects, match and pipelines, parallelism, standard-library planning, and the CLI/VS Code graph roadmap.
+Validate: cargo fmt --check; cargo clippy --all-targets -- -D warnings; cargo test --locked; cargo build --locked; node tools/validate-conformance.cjs; node tools/test-examples.cjs. For the extension: npm ci, npm test, npm run package from editors/vscode.
 
-Intended Pages address: https://maxmurtazin.github.io/luma-lang/ (available only after deployment).
+Documentation uses Hugo Extended 0.167.0, Go 1.25.7 and pinned Hextra v0.13.0. Run hugo --source site --gc --minify --panicOnWarning. Both /en/ and /ru/ have matching guides and a language selector. GitHub Pages deploys main via Actions; configure Pages source as GitHub Actions. Update both translations together. Historical stage documents remain in spec/history.
 
-### Local setup
+Implementation limits: finite binary64 numbers, monomorphic callbacks, 100,000 expression steps, depth 32, repeat at most 10,000 transitions, parallel at most 256 elements/eight workers. Parallel callbacks exclude captures, I/O and higher-order effects. Output is buffered until success. No package manager, interactive I/O, classes, async, arbitrary indirect calls or debugger. See the published guides for full contracts.
 
-Install **Hugo Extended 0.167.0**, **Go 1.25.7**, and Git. These are documentation tools, not Luma dependencies. Hextra is pinned to v0.13.0 through `site/go.mod` and `site/go.sum`; the first build downloads it and requires internet access. No theme submodule or Node setup is required.
-
-```sh
-git clone https://github.com/maxmurtazin/luma-lang.git
-cd luma-lang/site
-hugo server --disableFastRender
-```
-
-Open the local URL printed by Hugo. Stop the server with Ctrl+C.
-
-### Production build
-
-From `site/`:
-
-```sh
-hugo --gc --minify --panicOnWarning
-```
-
-The generated site is in `site/public/` and is ignored by Git. The configured production base URL includes `/luma-lang/`. For another host, pass `--baseURL https://example.com/your-path/`.
-
-### GitHub Pages
-
-1. Push this repository to the `main` branch on GitHub.
-2. In **Settings → Pages → Build and deployment**, choose **GitHub Actions** as the source.
-3. Open **Actions → Documentation → Run workflow**, or push another change to `main`.
-4. Inspect the successful deployment job for the actual site URL.
-
-The workflow builds pull requests without deploying them. Pushes to `main` and manual runs on `main` build and deploy through the `github-pages` environment. Repository Pages availability and any environment approval rules must permit deployment. No personal access token is required by the workflow.
-
-The workflow pins the same Hugo and Go versions used for local verification. Hextra updates should be intentional: run `hugo mod get github.com/imfing/hextra@VERSION` from `site/`, commit both module files, and rebuild.
-
-## Design boundary
-
-Chosen direction: interpreter-first Rust, static type inference, simple number/string concepts, no classes, overloading, `let`, or `var`; file-based modules with `pub`/`use`; structural objects; insignificant indentation and mandatory `end`; one `->` arrow; `match`; function-based repetition; explicit parallel work without async; future VS Code graph visualization.
-
-Draft 001 fixes the core syntax and semantics; additional bounded rules are labeled proposals. Numeric edge cases, resource limits and wider library APIs remain open. See `site/content/docs/specification.md`. Do not describe a proposal as implemented until code and verification support it.
-
-## Contributing
-
-Keep pages in English. Label examples as proposed and use `text` fences until there is a stable Luma grammar. Record open questions instead of silently choosing semantics. Use Hugo `relref` links for internal pages so the build catches missing targets.
-
-## References
-
-- [Hextra setup](https://imfing.github.io/hextra/docs/getting-started/)
-- [Hugo GitHub Pages deployment](https://gohugo.io/host-and-deploy/deploy-to-github-pages/)
-
-Hextra is an external theme with its own license. No license for the Luma project is selected by this documentation change.
-
-## Stage 0.1A
-
-Draft 001: `site/content/docs/specification.md`. Compact syntax and conformance matrix live alongside it. Thirty fixtures in `conformance/` specify positive and negative outcomes. They are not implemented interpreter tests.
-
-Run `node tools/validate-conformance.cjs` (Node.js 22+) to validate fixture metadata and coverage. This does not execute Luma. Actual validation results: `spec/validation-results.md`. Next stage: **0.1B — Rust Lexer, Parser & AST**.
-
-## Rust frontend (0.1B)
-
-Build with cargo build. Run cargo run -- check file.luma for bounded semantic validation; add --syntax-only for the original parser behavior. Export a graph with cargo run -- check --graph graph.json file.luma. See [0.1C documentation](site/content/docs/semantics.md) for decisions, graph schema and limitations. The execution core is available through `luma run`; see its documented limits.
-
-## VS Code 0.1A
-
-[Language Tools & Graph Explorer](editors/vscode/README.md) provides an installable extension with CLI diagnostics, execution and interactive graph navigation.
-
-## Windows installer
-
-See [Windows installation and build instructions](docs/windows-installation.md) for the combined CLI and Graph Explorer installer, options, upgrades and uninstall. Download build artifacts from the [Windows distribution workflow](https://github.com/maxmurtazin/luma-lang/actions/workflows/windows-installer.yml).
-
-
-0.1D2 / distribution 0.1.1: `map`, `filter`, `reduce`, `sum`, `repeat`, and CPU-threaded `parallel` now execute. The current contract and bounds are in [standard-library](../standard-library/) (Hugo docs: `site/content/docs/standard-library.md`); this supersedes earlier deferred-runtime statements. A4 pagination remains unverified.
+Windows CI tests installation, repeated installation, CLI/graph export, isolated VSIX registration, user-file preservation and uninstall. Interactive Windows/VS Code behavior and migration from an older installer require separate manual validation.

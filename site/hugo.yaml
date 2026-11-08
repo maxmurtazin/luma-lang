@@ -1,5 +1,17 @@
 baseURL: https://maxmurtazin.github.io/luma-lang/
-locale: en
+defaultContentLanguage: en
+defaultContentLanguageInSubdir: true
+languages:
+  en:
+    label: English
+    locale: en
+    contentDir: content/en
+    weight: 1
+  ru:
+    label: Русский
+    locale: ru
+    contentDir: content/ru
+    weight: 2
 title: Luma
 module:
   imports:
@@ -17,7 +29,9 @@ menu:
       params:
         type: search
 params:
-  description: A minimal language taking shape. Explore the Luma design drafts.
+  description: Luma 0.1.2 language documentation.
+  languageSwitch:
+    display: true
   theme:
     default: system
     displayToggle: true

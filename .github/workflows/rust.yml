@@ -16,6 +16,8 @@ jobs:
       - run: node tools/validate-conformance.cjs
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo build --locked
+      - run: node tools/test-examples.cjs
       - run: cargo test --locked
       - run: cargo run --locked -- check --graph semantic-graph.json conformance/cases/module-public/main.luma
       - uses: actions/upload-artifact@v4

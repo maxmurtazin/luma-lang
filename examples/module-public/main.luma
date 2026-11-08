@@ -1,0 +1,4 @@
+use math
+result = math.square(4)
+
+print(result)

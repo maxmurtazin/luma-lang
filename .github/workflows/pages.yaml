@@ -34,6 +34,8 @@ jobs:
       - name: Build documentation
         working-directory: site
         run: hugo --gc --minify --panicOnWarning
+      - name: Validate translations, generated routes and release versions
+        run: node tools/validate-docs.cjs
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site/public

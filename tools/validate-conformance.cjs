@@ -4,7 +4,7 @@ const manifest = JSON.parse(fs.readFileSync(path.join(root, 'conformance/manifes
 assert.equal(manifest.execution, 'not-executed');
 assert(manifest.cases.length >= 25 && manifest.cases.length <= 40);
 const ids = new Set(), categories = new Set(), counts = {};
-const matrix = fs.readFileSync(path.join(root, 'site/content/docs/conformance.md'), 'utf8');
+const matrix = fs.readFileSync(path.join(root, 'spec/history/conformance.md'), 'utf8');
 for (const c of manifest.cases) {
   assert(/^[a-z][a-z0-9-]+$/.test(c.id)); assert(!ids.has(c.id)); ids.add(c.id);
   categories.add(c.category); assert.equal(c.status, 'specified-not-executed');

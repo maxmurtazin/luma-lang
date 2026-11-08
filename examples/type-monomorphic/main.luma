@@ -1,0 +1,5 @@
+fn identity(x)
+return x
+end
+a = identity(1)
+b = identity("s")

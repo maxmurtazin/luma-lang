@@ -1,0 +1,6 @@
+result = match 1
+1: 7
+*: 1 / 0
+end
+
+print(result)

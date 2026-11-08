@@ -1,5 +1,5 @@
-# Semantic fixtures, not implemented Luma tests
+# Conformance fixtures
 
-30 conceptual programs and machine-readable expected outcomes. Run node tools/validate-conformance.cjs for integrity validation only. No Luma code is executed. The Hugo conformance page contains the coverage matrix. Each fixture is an isolated program rooted at main.luma; all listed .luma files are inputs. Positive observations refer to final module bindings. Diagnostic IDs classify errors, not exact wording. All semantic statuses remain specified-not-executed.
+32 isolated projects with static/runtime expected outcomes in manifest.json. Historical metadata retains specified-not-executed as its original inventory status; cargo test executes syntax, semantic and runtime assertions today. tools/validate-conformance.cjs checks the historical matrix in spec/history/conformance.md without executing Luma.
 
-Mutation of a local by-value array is covered by array-copy; transitive I/O is rejected by parallel-transitive-io. External shared writes are excluded by the assignment grammar and lexical local-assignment rule. Further effect-analysis implementation tests must cover indirect/unknown effects and changing captures once a checker exists.
+The examples directory provides observable versions of all fixtures plus operator/library demonstrations; node tools/test-examples.cjs validates these with the real CLI after cargo build.

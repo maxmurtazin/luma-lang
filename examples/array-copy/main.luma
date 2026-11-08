@@ -1,0 +1,9 @@
+fn change(xs)
+xs[0] = 9
+return xs[0]
+end
+xs = [1, 2]
+y = change(xs)
+result = xs[0]
+
+print(result)

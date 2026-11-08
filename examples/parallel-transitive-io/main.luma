@@ -1,0 +1,8 @@
+fn emit(x)
+print(x)
+return x
+end
+fn worker(x)
+return emit(x)
+end
+result = [1, 2] -> parallel(worker)

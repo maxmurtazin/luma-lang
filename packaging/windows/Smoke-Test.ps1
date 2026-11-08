@@ -4,7 +4,7 @@ $installer = (Get-ChildItem dist/*-setup.exe | Select-Object -First 1).FullName
 $app = Join-Path $env:LOCALAPPDATA 'Programs\Luma'
 if (Test-Path $app) { throw 'Refusing to test over an existing Luma installation' }
 function Run-Setup {
-    $p = Start-Process -FilePath $installer -ArgumentList '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /TASKS=""' -Wait -PassThru
+    $p = Start-Process -FilePath $installer -ArgumentList '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /TASKS=""' -WindowStyle Hidden -Wait -PassThru
     if ($p.ExitCode -ne 0) { throw "Setup failed: $($p.ExitCode)" }
 }
 try {
@@ -31,7 +31,7 @@ print([1,2,3] -> parallel(square) -> sum)"
     $code = Get-Command code.cmd -ErrorAction Stop
     $userDir = "$env:RUNNER_TEMP\luma-vscode-user"
     $extDir = "$env:RUNNER_TEMP\luma-vscode-extensions"
-    & $code.Source --user-data-dir $userDir --extensions-dir $extDir --install-extension "$app\luma-language-tools-0.1.1.vsix" --force
+    & $code.Source --user-data-dir $userDir --extensions-dir $extDir --install-extension "$app\luma-language-tools-0.1.2.vsix" --force
     if ($LASTEXITCODE) { throw 'VSIX installation failed' }
     $extensions = & $code.Source --user-data-dir $userDir --extensions-dir $extDir --list-extensions
     if ($extensions -notcontains 'maxmurtazin.luma-language-tools') { throw 'Extension missing' }

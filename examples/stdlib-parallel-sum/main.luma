@@ -1,0 +1,6 @@
+fn square(x)
+return x*x
+end
+result=[1,2,3,4] -> parallel(square) -> sum
+
+print(result)

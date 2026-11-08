@@ -25,6 +25,11 @@ jobs:
           node-version: '22'
       - run: cargo test --locked --target x86_64-pc-windows-msvc
       - run: cargo build --release --locked --target x86_64-pc-windows-msvc
+      - name: Verify runnable examples with release CLI
+        run: |
+          $env:LUMA_BIN = (Resolve-Path target/x86_64-pc-windows-msvc/release/luma.exe).Path
+          node tools/test-examples.cjs
+          if ($LASTEXITCODE) { throw 'Example validation failed' }
       - run: npm ci
         working-directory: editors/vscode
       - run: npm test
