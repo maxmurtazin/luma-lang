@@ -32,11 +32,15 @@ struct Scope {
     module: bool,
 }
 pub struct Report {
+    pub runtime_gates: Vec<(String, Diagnostic)>,
+    pub programs: BTreeMap<PathBuf, Vec<Node>>,
     pub diagnostics: Vec<(String, Diagnostic)>,
     pub graph: Value,
 }
 #[derive(Default)]
 struct Checker {
+    runtime_gates: Vec<(String, Diagnostic)>,
+    programs: BTreeMap<PathBuf, Vec<Node>>,
     scopes: Vec<Scope>,
     types: Vec<Option<Ty>>,
     diagnostics: Vec<(String, Diagnostic)>,
@@ -288,6 +292,16 @@ impl Checker {
                 at = self.scopes[i].parent;
             }
             if !shadow && matches!(s.as_str(), "print" | "sum" | "map" | "parallel" | "repeat") {
+                if s != "print" {
+                    self.runtime_gates.push((
+                        self.file.clone(),
+                        error(
+                            "E_RUNTIME_UNSUPPORTED",
+                            span,
+                            format!("{s} is deferred to 0.1D2; remove this call before running"),
+                        ),
+                    ));
+                }
                 let expected = match s.as_str() {
                     "print" | "sum" => 1,
                     "repeat" => 3,
@@ -697,6 +711,7 @@ impl Checker {
             }
         };
         let scope = self.scope(None, true);
+        self.programs.insert(path.clone(), body.clone());
         self.active.insert(path.clone());
         self.modules.insert(path.clone(), scope);
         for n in &body {
@@ -809,6 +824,8 @@ pub fn check(path: impl AsRef<Path>) -> Report {
         .map(|(from, to, kind)| json!({"from":from,"to":to,"kind":kind}))
         .collect();
     Report {
+        runtime_gates: c.runtime_gates,
+        programs: c.programs,
         graph: json!({"schemaVersion":1,"producer":"luma-0.1C","valid":c.diagnostics.is_empty(),"nodes":c.nodes.values().collect::<Vec<_>>(),"edges":edges}),
         diagnostics: c.diagnostics,
     }

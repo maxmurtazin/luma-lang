@@ -10,7 +10,7 @@ Luma is a planned minimal procedural language built around functions, data flow,
 **Early design · Interpreter-first · Rust**
 
 {{< callout type="warning" >}}
-Luma is not implemented yet. This site records design decisions and proposals. No interpreter, standard library, or VS Code extension is available. All Luma examples are illustrative and cannot be run.
+Luma 0.1D1 implements a bounded execution core with `luma run`. Parallel work and the wider standard library remain deferred to 0.1D2; the parallel example below is a design illustration. See the execution core documentation for runnable features.
 {{< /callout >}}
 
 ```text

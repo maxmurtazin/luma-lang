@@ -1,16 +1,34 @@
 use std::{env, fs, process::ExitCode};
 fn main() -> ExitCode {
     let mut args: Vec<_> = env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some("run") {
+        if args.len() != 2 {
+            eprintln!("Usage: luma run <file.luma>");
+            return ExitCode::from(2);
+        }
+        return match luma::runtime::run(&args[1]) {
+            Ok(output) => {
+                print!("{output}");
+                ExitCode::SUCCESS
+            }
+            Err(failure) => {
+                for (file, d) in failure.diagnostics {
+                    eprintln!(
+                        "{file}:bytes {}..{}: {}: {}",
+                        d.span.start, d.span.end, d.code, d.message
+                    );
+                }
+                ExitCode::from(if failure.runtime { 3 } else { 1 })
+            }
+        };
+    }
     if args == ["version"] || args == ["--version"] {
-        println!(
-            "luma {} (0.1C bounded static checker; no execution)",
-            env!("CARGO_PKG_VERSION")
-        );
+        println!("luma {} (0.1D1 execution core)", env!("CARGO_PKG_VERSION"));
         return ExitCode::SUCCESS;
     }
     if args.first().map(String::as_str) != Some("check") || args.len() < 2 {
         eprintln!(
-            "Usage: luma check [--syntax-only] [--graph output.json] <file.luma> | luma version"
+            "Usage: luma check [--syntax-only] [--graph output.json] <file.luma> | luma run <file.luma> | luma version"
         );
         return ExitCode::from(2);
     }

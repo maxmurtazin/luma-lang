@@ -1,4 +1,4 @@
-name: Rust syntax and semantics
+name: Rust syntax, semantics and runtime
 on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read

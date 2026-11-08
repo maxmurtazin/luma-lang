@@ -1,4 +1,5 @@
 //! Syntax frontend. Spans are half-open UTF-8 byte offsets in one source file.
+pub mod runtime;
 pub mod semantic;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {

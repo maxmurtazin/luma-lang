@@ -5,7 +5,7 @@ weight: 13
 
 The Rust crate provides `lex(source)` and `parse(source)`, and a `luma check file.luma...` CLI. Build with `cargo build`; run with `cargo run -- check path/to/main.luma`. `luma version` reports the frontend version.
 
-This page records the **0.1B historical syntax baseline**. In 0.1C, use `luma check --syntax-only file.luma` to select that behavior. The default now performs [bounded semantic analysis](../semantics/) across sibling imports and can export a versioned graph. There is no `run` command or object runtime. Statements below describing missing analysis refer to 0.1B.
+This page records the **0.1B historical syntax baseline**. In 0.1C, use `luma check --syntax-only file.luma` to select that behavior. The default now performs [bounded semantic analysis](../semantics/) across sibling imports and can export a versioned graph. 0.1D1 adds `luma run` and structural namespace execution; see [execution core](../runtime/). Statements below describing missing analysis refer to 0.1B.
 
 ## Review of 0.1A proposals
 

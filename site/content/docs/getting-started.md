@@ -3,12 +3,12 @@ title: Getting started
 weight: 12
 ---
 
-**Draft 001 · Proposed, unimplemented.**
+Build the Rust execution core with `cargo build --release`. Save the following as `hello.luma`:
 
-There is no interpreter, installer, CLI or extension yet. Read Draft 001, then review the conformance matrix. Repository validation checks fixture integrity only.
-
-~~~text
+```text
 print("Hello, Luma")
-~~~
+```
 
-See [the formal specification]({{< relref "specification" >}}) and [conformance matrix]({{< relref "conformance" >}}) for scope, open decisions and expected behavior.
+Run `cargo run -- run hello.luma`, or `target/release/luma run hello.luma`. Check without execution with `luma check hello.luma`.
+
+Read [execution core]({{< relref "runtime" >}}) for supported behavior, diagnostics and deferred features, and [the specification]({{< relref "specification" >}}) for the broader design.

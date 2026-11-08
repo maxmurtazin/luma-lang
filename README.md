@@ -1,8 +1,8 @@
 # Luma
 
-An early design for a minimal procedural language built around functions, data flow, and explicit parallelism. The first execution implementation is planned as an interpreter written in Rust.
+An early design for a minimal procedural language built around functions, data flow, and explicit parallelism. The bounded execution core is an interpreter written in Rust.
 
-**Luma 0.1C provides a bounded static checker and JSON semantic graph.** The Rust CLI checks syntax, names, types, sibling imports and conservative effects. No interpreter, executable standard library or VS Code extension exists; examples cannot be executed.
+**Luma 0.1D1 provides `luma run file.luma`, a bounded interpreter using the existing checker and validated AST.** See [execution core](site/content/docs/runtime.md) for supported behavior, gates and exit statuses.
 
 ## Documentation
 
@@ -68,4 +68,4 @@ Run `node tools/validate-conformance.cjs` (Node.js 22+) to validate fixture meta
 
 ## Rust frontend (0.1B)
 
-Build with cargo build. Run cargo run -- check file.luma for bounded semantic validation; add --syntax-only for the original parser behavior. Export a graph with cargo run -- check --graph graph.json file.luma. See [0.1C documentation](site/content/docs/semantics.md) for decisions, graph schema and limitations. No interpreter exists.
+Build with cargo build. Run cargo run -- check file.luma for bounded semantic validation; add --syntax-only for the original parser behavior. Export a graph with cargo run -- check --graph graph.json file.luma. See [0.1C documentation](site/content/docs/semantics.md) for decisions, graph schema and limitations. The execution core is available through `luma run`; see its documented limits.
