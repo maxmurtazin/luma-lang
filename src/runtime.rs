@@ -15,7 +15,7 @@ enum Value {
     Scope(usize),
     Function(usize, PathBuf, Vec<Node>, Vec<Node>),
 }
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct Scope {
     parent: Option<usize>,
     values: BTreeMap<String, Value>,
@@ -25,6 +25,7 @@ pub struct Failure {
     pub diagnostics: Vec<(String, Diagnostic)>,
     pub runtime: bool,
 }
+#[derive(Clone)]
 struct Engine {
     programs: BTreeMap<PathBuf, Vec<Node>>,
     modules: BTreeMap<PathBuf, usize>,
@@ -227,7 +228,18 @@ impl Engine {
             self.output.push('\n');
             return Ok(Value::Unit);
         }
+        if callee.is_none()
+            && matches!(
+                name(c),
+                "sum" | "map" | "filter" | "reduce" | "repeat" | "parallel"
+            )
+        {
+            return self.library(name(c), values, n);
+        }
         let f = self.eval(c, s, path)?;
+        self.apply(f, values, n)
+    }
+    fn apply(&mut self, f: Value, values: Vec<Value>, n: &Node) -> Result<Value> {
         if let Value::Function(parent, file, params, body) = f {
             if self.depth >= 32 {
                 return Err(self.fail(n, "call depth limit (32) exceeded"));
@@ -243,6 +255,103 @@ impl Engine {
         } else {
             Err(self.fail(n, "value is not callable"))
         }
+    }
+    fn library(&mut self, op: &str, mut values: Vec<Value>, n: &Node) -> Result<Value> {
+        let input = values.remove(0);
+        if op == "repeat" {
+            let mut state = input;
+            for _ in 0..10000 {
+                if self.apply(values[1].clone(), vec![state.clone()], n)? == Value::Bool(true) {
+                    return Ok(state);
+                }
+                state = self.apply(values[0].clone(), vec![state], n)?;
+            }
+            if self.apply(values[1].clone(), vec![state.clone()], n)? == Value::Bool(true) {
+                return Ok(state);
+            }
+            return Err(self.fail(n, "repeat limit (10000 transitions) exceeded"));
+        }
+        let Value::Array(xs) = input else {
+            return Err(self.fail(n, "library requires array"));
+        };
+        if op == "sum" {
+            let mut total = Value::Number(0.0);
+            for x in xs {
+                total = self.binary("+", total, x, n)?;
+            }
+            return Ok(total);
+        }
+        if op == "reduce" {
+            let mut acc = values.remove(0);
+            let f = values.remove(0);
+            for x in xs {
+                acc = self.apply(f.clone(), vec![acc, x], n)?;
+            }
+            return Ok(acc);
+        }
+        let f = values.remove(0);
+        if op == "parallel" {
+            if xs.len() > 256 {
+                return Err(self.fail(n, "parallel input limit (256) exceeded"));
+            }
+            // Each task owns a complete snapshot; no mutable state crosses workers.
+            // Fixed indexed chunks and ordered joins make failures deterministic.
+            let workers = xs.len().clamp(1, 8);
+            let size = xs.len().div_ceil(workers).max(1);
+            let snapshot = &*self;
+            let result = std::thread::scope(|scope| {
+                let mut handles = Vec::new();
+                for chunk in xs.chunks(size) {
+                    let f = &f;
+                    handles.push(scope.spawn(move || {
+                        chunk
+                            .iter()
+                            .map(|x| {
+                                let mut worker = snapshot.clone();
+                                #[cfg(test)]
+                                WORKER_THREADS
+                                    .lock()
+                                    .unwrap()
+                                    .push(std::thread::current().id());
+                                worker.fuel = 100000;
+                                worker.apply(f.clone(), vec![x.clone()], n)
+                            })
+                            .collect::<Result<Vec<_>>>()
+                    }));
+                }
+                let mut out = Vec::new();
+                let mut failure = None;
+                for handle in handles {
+                    match handle.join() {
+                        Ok(Ok(xs)) => out.extend(xs),
+                        Ok(Err(e)) => {
+                            if failure.is_none() {
+                                failure = Some(e);
+                            }
+                        }
+                        Err(_) => {
+                            if failure.is_none() {
+                                failure = Some(snapshot.fail(n, "parallel worker panicked"));
+                            }
+                        }
+                    }
+                }
+                failure.map_or(Ok(out), Err)
+            });
+            return result.map(Value::Array);
+        }
+        let mut out = Vec::new();
+        for x in xs {
+            let v = self.apply(f.clone(), vec![x.clone()], n)?;
+            if op == "filter" {
+                if v == Value::Bool(true) {
+                    out.push(x);
+                }
+            } else {
+                out.push(v);
+            }
+        }
+        Ok(Value::Array(out))
     }
     fn binary(&self, op: &str, a: Value, b: Value, n: &Node) -> Result<Value> {
         if op == "==" {
@@ -386,6 +495,44 @@ impl Engine {
             _ => Err(self.fail(n, "unsupported expression")),
         }
     }
+}
+#[cfg(test)]
+static WORKER_THREADS: std::sync::Mutex<Vec<std::thread::ThreadId>> =
+    std::sync::Mutex::new(Vec::new());
+
+#[cfg(test)]
+#[test]
+fn parallel_uses_distinct_native_threads() {
+    let nodes = crate::parse("fn square(x)\nreturn x*x\nend").unwrap();
+    let mut engine = Engine {
+        programs: BTreeMap::new(),
+        modules: BTreeMap::new(),
+        scopes: vec![Scope::default()],
+        output: String::new(),
+        fuel: 100000,
+        depth: 0,
+        error_file: None,
+    };
+    engine.prepare(&nodes, 0, Path::new("test.luma"));
+    let f = engine.lookup(0, "square").unwrap();
+    let result = engine
+        .library(
+            "parallel",
+            vec![
+                Value::Array((0..16).map(|i| Value::Number(i as f64)).collect()),
+                f,
+            ],
+            &nodes[0],
+        )
+        .unwrap();
+    assert_eq!(
+        result,
+        Value::Array((0..16).map(|i| Value::Number((i * i) as f64)).collect())
+    );
+    let ids = WORKER_THREADS.lock().unwrap();
+    let unique: std::collections::HashSet<_> = ids.iter().collect();
+    assert_eq!(unique.len(), 8);
+    assert!(!unique.contains(&std::thread::current().id()));
 }
 /// Checks and gates the entire import graph before evaluating any statement.
 pub fn run(path: impl AsRef<Path>) -> std::result::Result<String, Failure> {

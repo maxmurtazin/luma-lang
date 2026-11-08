@@ -77,3 +77,6 @@ Build with cargo build. Run cargo run -- check file.luma for bounded semantic va
 ## Windows installer
 
 See [Windows installation and build instructions](docs/windows-installation.md) for the combined CLI and Graph Explorer installer, options, upgrades and uninstall. Download build artifacts from the [Windows distribution workflow](https://github.com/maxmurtazin/luma-lang/actions/workflows/windows-installer.yml).
+
+
+0.1D2 / distribution 0.1.1: `map`, `filter`, `reduce`, `sum`, `repeat`, and CPU-threaded `parallel` now execute. The current contract and bounds are in [standard-library](../standard-library/) (Hugo docs: `site/content/docs/standard-library.md`); this supersedes earlier deferred-runtime statements. A4 pagination remains unverified.

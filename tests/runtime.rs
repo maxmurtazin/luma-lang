@@ -66,15 +66,6 @@ fn runtime_conformance() {
                     .any(|(_, d)| d.code == c["expected"]["diagnostic"].as_str().unwrap()),
                 "{id}: {e:?}"
             );
-        } else if matches!(id, "parallel-order" | "repeat-precheck") {
-            assert!(
-                result
-                    .unwrap_err()
-                    .diagnostics
-                    .iter()
-                    .any(|(_, d)| d.code == "E_RUNTIME_UNSUPPORTED"),
-                "{id}"
-            );
         } else {
             assert_eq!(result.unwrap(), expected, "{id}");
         }
@@ -111,9 +102,7 @@ fn execution_regressions() {
 fn preflight_and_cli() {
     let c = Case::new();
     c.write("main.luma", "print(123)\nx=sum([1])");
-    let e = c.run().unwrap_err();
-    assert!(!e.runtime);
-    assert_eq!(e.diagnostics[0].1.code, "E_RUNTIME_UNSUPPORTED");
+    assert_eq!(c.run().unwrap(), "123\n");
     for (source, status) in [("print(42)", 0), ("print(unknown)", 1), ("print(1/0)", 3)] {
         c.write("main.luma", source);
         let out = std::process::Command::new(env!("CARGO_BIN_EXE_luma"))
@@ -146,9 +135,7 @@ fn imports_gates_and_limits() {
     c.write("shared.luma", "print(5)\npub value=2\n");
     assert_eq!(c.run().unwrap(), "5\n4\n");
     c.write("main.luma", "print(match true\ntrue: 1\n*: sum([2])\nend)");
-    let e = c.run().unwrap_err();
-    assert!(!e.runtime);
-    assert!(e.diagnostics[0].1.span.start > 0);
+    assert_eq!(c.run().unwrap(), "1\n");
     c.write(
         "main.luma",
         "fn f(n)\nreturn match n\n0: 0\n*: f(n-1)\nend\nend\nprint(f(200))",
@@ -156,4 +143,29 @@ fn imports_gates_and_limits() {
     let e = c.run().unwrap_err();
     assert!(e.runtime);
     assert!(e.diagnostics[0].1.message.contains("depth"));
+}
+
+#[test]
+fn standard_library() {
+    let c = Case::new();
+    c.write("main.luma", "fn square(x)\nreturn x*x\nend\nfn even(x)\nreturn x%2==0\nend\nfn add(a,b)\nreturn a+b\nend\nfn step(x)\nreturn x+1\nend\nfn done(x)\nreturn x>=5\nend\na=[1,2,3,4] -> map(square) -> filter(even)\nprint(a[0])\nprint(a[1])\nprint(a -> reduce(10,add))\nprint([1,2,3,4] -> parallel(square) -> sum)\nprint(0 -> repeat(step,done))");
+    assert_eq!(c.run().unwrap(), "4\n16\n30\n30\n5\n");
+    for source in [
+        "print([true] -> sum)",
+        "fn f(x)\nreturn x\nend\na=[1] -> filter(f)",
+        "fn f(x)\nprint(x)\nreturn x\nend\na=[1] -> parallel(f)",
+    ] {
+        c.write("main.luma", source);
+        assert!(!c.run().unwrap_err().runtime);
+    }
+    c.write(
+        "main.luma",
+        "fn step(x)\nreturn x+1\nend\nfn done(x)\nreturn x<0\nend\nprint(0 -> repeat(step,done))",
+    );
+    assert!(c.run().unwrap_err().runtime);
+    c.write(
+        "main.luma",
+        "fn f(x)\nreturn 1/x\nend\na=[1,0,2] -> parallel(f)",
+    );
+    assert_eq!(c.run().unwrap_err().diagnostics[0].1.code, "E_DIV_ZERO");
 }

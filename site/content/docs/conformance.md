@@ -43,3 +43,7 @@ Run node tools/validate-conformance.cjs from the repository root. It checks mani
 No interpreter runner adapter is provided until a real interpreter and diagnostic protocol exist. A future adapter must check exit status, phase, diagnostic location/category and exact expected bindings, record interpreter revision and distinguish skips from passes. Runtime-error cases must pass static analysis first.
 
 Read [Draft 001]({{< relref "specification" >}}). **Bounded GO for parser implementation review**; numeric edge cases and remaining APIs still prevent full runtime acceptance. Actual checks are recorded in spec/validation-results.md.
+
+| stdlib-fold | pipelines | accept | Not executed |
+
+| stdlib-parallel-sum | pipelines | accept | Not executed |

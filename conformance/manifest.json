@@ -522,6 +522,38 @@
       },
       "rationale": "Contract: arity. See Draft 001 functions rules.",
       "status": "specified-not-executed"
+    },
+    {
+      "id": "stdlib-fold",
+      "category": "pipelines",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "accept",
+        "bindings": {
+          "result": 30
+        }
+      },
+      "rationale": "Executable 0.1D2 standard library pipeline contract.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "stdlib-parallel-sum",
+      "category": "pipelines",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "accept",
+        "bindings": {
+          "result": 30
+        }
+      },
+      "rationale": "Executable 0.1D2 standard library pipeline contract.",
+      "status": "specified-not-executed"
     }
   ]
 }

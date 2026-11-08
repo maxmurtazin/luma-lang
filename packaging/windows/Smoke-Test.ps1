@@ -13,6 +13,13 @@ try {
     Run-Setup
     if (!(Test-Path "$app\user-marker.txt")) { throw 'Upgrade removed user data' }
     $cli = "$app\bin\luma.exe"
+    $sample = "$env:RUNNER_TEMP\stdlib.luma"
+    Set-Content $sample "fn square(x)
+return x*x
+end
+print([1,2,3] -> parallel(square) -> sum)"
+    $result = & $cli run $sample
+    if ($LASTEXITCODE -or $result -ne '14') { throw 'Installed stdlib failed' }
     & $cli version
     if ($LASTEXITCODE) { throw 'Version failed' }
     & $cli run editors/vscode/test/fixtures/main.luma
@@ -24,7 +31,7 @@ try {
     $code = Get-Command code.cmd -ErrorAction Stop
     $userDir = "$env:RUNNER_TEMP\luma-vscode-user"
     $extDir = "$env:RUNNER_TEMP\luma-vscode-extensions"
-    & $code.Source --user-data-dir $userDir --extensions-dir $extDir --install-extension "$app\luma-language-tools-0.1.0.vsix" --force
+    & $code.Source --user-data-dir $userDir --extensions-dir $extDir --install-extension "$app\luma-language-tools-0.1.1.vsix" --force
     if ($LASTEXITCODE) { throw 'VSIX installation failed' }
     $extensions = & $code.Source --user-data-dir $userDir --extensions-dir $extDir --list-extensions
     if ($extensions -notcontains 'maxmurtazin.luma-language-tools') { throw 'Extension missing' }

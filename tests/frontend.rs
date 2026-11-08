@@ -9,7 +9,7 @@ fn fixtures() {
             .map(|l| l.split('\t').next().unwrap())
             .collect::<std::collections::HashSet<_>>()
             .len(),
-        30
+        32
     );
     for row in cases.lines() {
         let fields: Vec<_> = row.split('\t').collect();

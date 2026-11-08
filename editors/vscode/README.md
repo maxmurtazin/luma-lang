@@ -15,3 +15,6 @@ Runtime map, sum, parallel and repeat remain gated and cannot execute. Processes
 Node.js 22+: npm ci, npm test, npm run package. Output: luma-language-tools-0.1.0.vsix. CI checks actual CLI output and packages on Windows, Linux and macOS. No production npm dependencies.
 
 Manual release validation: install VSIX, configure CLI, check/run test/fixtures/main.luma, navigate function/object/module nodes, edit/save, and try invalid code and a missing executable. Unit tests do not launch an Extension Host.
+
+
+0.1D2 / distribution 0.1.1: `map`, `filter`, `reduce`, `sum`, `repeat`, and CPU-threaded `parallel` now execute. The current contract and bounds are in [standard-library](../standard-library/) (Hugo docs: `site/content/docs/standard-library.md`); this supersedes earlier deferred-runtime statements. A4 pagination remains unverified.

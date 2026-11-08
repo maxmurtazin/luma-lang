@@ -2,7 +2,7 @@
   "name": "luma-language-tools",
   "displayName": "Luma Language Tools & Graph Explorer",
   "description": "Luma syntax, diagnostics, execution and semantic graph navigation.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "maxmurtazin",
   "engines": {
     "vscode": "^1.90.0"

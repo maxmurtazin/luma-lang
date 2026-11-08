@@ -291,20 +291,15 @@ impl Checker {
                 shadow |= self.scopes[i].names.contains_key(s);
                 at = self.scopes[i].parent;
             }
-            if !shadow && matches!(s.as_str(), "print" | "sum" | "map" | "parallel" | "repeat") {
-                if s != "print" {
-                    self.runtime_gates.push((
-                        self.file.clone(),
-                        error(
-                            "E_RUNTIME_UNSUPPORTED",
-                            span,
-                            format!("{s} is deferred to 0.1D2; remove this call before running"),
-                        ),
-                    ));
-                }
+            if !shadow
+                && matches!(
+                    s.as_str(),
+                    "print" | "sum" | "map" | "filter" | "reduce" | "parallel" | "repeat"
+                )
+            {
                 let expected = match s.as_str() {
                     "print" | "sum" => 1,
-                    "repeat" => 3,
+                    "repeat" | "reduce" => 3,
                     _ => 2,
                 };
                 if args.len() != expected {
@@ -324,6 +319,28 @@ impl Checker {
                     "sum" => {
                         self.unify(args[0].clone(), Ty::Array(Box::new(Ty::Number)), span);
                         return Ty::Number;
+                    }
+                    "reduce" => {
+                        let a = self.fresh();
+                        self.unify(args[0].clone(), Ty::Array(Box::new(a.clone())), span);
+                        self.unify(
+                            args[2].clone(),
+                            Ty::Function(vec![args[1].clone(), a], Box::new(args[1].clone())),
+                            span,
+                        );
+                        self.effects.insert(self.owner.clone());
+                        return args[1].clone();
+                    }
+                    "filter" => {
+                        let a = self.fresh();
+                        self.unify(args[0].clone(), Ty::Array(Box::new(a.clone())), span);
+                        self.unify(
+                            args[1].clone(),
+                            Ty::Function(vec![a], Box::new(Ty::Bool)),
+                            span,
+                        );
+                        self.effects.insert(self.owner.clone());
+                        return args[0].clone();
                     }
                     "map" | "parallel" => {
                         let a = self.fresh();

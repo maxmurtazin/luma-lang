@@ -98,3 +98,6 @@ Planned Rust pipeline: lexer → parser → AST → module/name resolution → t
 
 0.1A is **bounded GO for lexer/parser implementation review**, subject to approval of the labeled bounded proposals. Full runtime acceptance remains pending numeric and library decisions and an interpreter. Native compilation, WebAssembly, object identity, anonymous functions, generic user functions, structured recovery and Luma Mark mapping remain deferred. Memory strategy, recursion/resource limits and Unicode text indexing remain implementation/design questions. See the conformance page for executable-concept cases and actual validation evidence.
 
+
+
+0.1D2 / distribution 0.1.1: `map`, `filter`, `reduce`, `sum`, `repeat`, and CPU-threaded `parallel` now execute. The current contract and bounds are in [standard-library](../standard-library/) (Hugo docs: `site/content/docs/standard-library.md`); this supersedes earlier deferred-runtime statements. A4 pagination remains unverified.

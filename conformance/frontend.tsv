@@ -31,3 +31,5 @@ repeat-precheck	main.luma	accept
 divide-zero	main.luma	accept
 array-empty	main.luma	accept
 arity	main.luma	accept
+stdlib-fold	main.luma	accept
+stdlib-parallel-sum	main.luma	accept

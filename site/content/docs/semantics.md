@@ -30,3 +30,6 @@ Diagnostics retain filename, stable category and source byte span. Imported file
 Syntax tests independently check all files listed in `frontend.tsv`. Semantic integration tests read all 30 manifest entries: lexical/parser failures retain their categories, semantic failures require the specified category, and accept/runtime-error fixtures must pass static checking. Runtime-error fixtures passing static analysis do not verify their runtime result. Regression tests cover scope shadowing, duplicates, return placement, call-order conflicts, inference and infinite types; graph tests check determinism and endpoint integrity. CI runs formatting, clippy, tests, fixture inventory validation and uploads a sample graph. Documentation retains its strict Hugo build.
 
 A4 physical pagination remains unverified. Numeric runtime representation, overflow, dynamic bounds, division by zero, parallel scheduling and execution remain deferred.
+
+
+0.1D2 / distribution 0.1.1: `map`, `filter`, `reduce`, `sum`, `repeat`, and CPU-threaded `parallel` now execute. The current contract and bounds are in [standard-library](../standard-library/) (Hugo docs: `site/content/docs/standard-library.md`); this supersedes earlier deferred-runtime statements. A4 pagination remains unverified.

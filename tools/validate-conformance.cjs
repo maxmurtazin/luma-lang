@@ -2,7 +2,7 @@ const fs = require('node:fs'), path = require('node:path'), assert = require('no
 const root = path.resolve(__dirname, '..');
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'conformance/manifest.json')));
 assert.equal(manifest.execution, 'not-executed');
-assert(manifest.cases.length >= 25 && manifest.cases.length <= 30);
+assert(manifest.cases.length >= 25 && manifest.cases.length <= 40);
 const ids = new Set(), categories = new Set(), counts = {};
 const matrix = fs.readFileSync(path.join(root, 'site/content/docs/conformance.md'), 'utf8');
 for (const c of manifest.cases) {

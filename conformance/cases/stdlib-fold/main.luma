@@ -1,0 +1,10 @@
+fn square(x)
+return x*x
+end
+fn even(x)
+return x%2==0
+end
+fn add(a,b)
+return a+b
+end
+result=[1,2,3,4] -> map(square) -> filter(even) -> reduce(10,add)

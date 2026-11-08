@@ -23,7 +23,10 @@ fn main() -> ExitCode {
         };
     }
     if args == ["version"] || args == ["--version"] {
-        println!("luma {} (0.1D1 execution core)", env!("CARGO_PKG_VERSION"));
+        println!(
+            "luma {} (0.1D2 standard library)",
+            env!("CARGO_PKG_VERSION")
+        );
         return ExitCode::SUCCESS;
     }
     if args.first().map(String::as_str) != Some("check") || args.len() < 2 {

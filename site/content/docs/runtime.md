@@ -30,3 +30,6 @@ Exit statuses: **0** success, **1** source/import/static error or preflight gate
 `tests/semantic.rs` retains independent static conformance coverage of all 30 original fixtures. `tests/runtime.rs` executes their accepted core cases, checks expected scalar bindings through appended print observations in temporary copies, verifies specified runtime errors and static rejections, and explicitly verifies gates for deferred fixtures. Additional regressions cover nested array copies/writes, lazy evaluation, recursion, local scopes, early return, builtin shadowing, imported error spans, and CLI statuses. Historical fixture metadata remains the design contract; it does not itself record execution success.
 
 Validation commands: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test --locked`, `node tools/validate-conformance.cjs`, and `hugo --source site --gc --minify --panicOnWarning`. Rust CI runs both semantic and runtime suites. A4 print pagination requires separate visual verification.
+
+
+0.1D2 / distribution 0.1.1: `map`, `filter`, `reduce`, `sum`, `repeat`, and CPU-threaded `parallel` now execute. The current contract and bounds are in [standard-library](../standard-library/) (Hugo docs: `site/content/docs/standard-library.md`); this supersedes earlier deferred-runtime statements. A4 pagination remains unverified.
