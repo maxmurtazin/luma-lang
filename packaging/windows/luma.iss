@@ -26,6 +26,7 @@ Source: "Install-Extension.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\docs\windows-installation.md"; DestDir: "{app}"; Flags: ignoreversion
 [Run]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\Install-Extension.ps1"" -InstallDir ""{app}"""; Flags: runhidden waituntilterminated; Tasks: vscode
+Filename: "{app}\extension-install.log"; Description: "View VS Code extension installation result"; Flags: shellexec postinstall skipifsilent unchecked; Tasks: vscode
 [Code]
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
