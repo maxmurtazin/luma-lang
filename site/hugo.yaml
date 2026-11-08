@@ -1,0 +1,38 @@
+baseURL: https://maxmurtazin.github.io/luma-lang/
+locale: en
+title: Luma
+module:
+  imports:
+    - path: github.com/imfing/hextra
+menu:
+  main:
+    - name: Documentation
+      pageRef: /docs
+      weight: 1
+    - name: GitHub
+      url: https://github.com/maxmurtazin/luma-lang
+      weight: 2
+    - name: Search
+      weight: 3
+      params:
+        type: search
+params:
+  description: A minimal language taking shape. Explore the Luma design drafts.
+  theme:
+    default: system
+    displayToggle: true
+  navbar:
+    displayTitle: true
+    displayLogo: false
+  footer:
+    displayCopyright: false
+    displayPoweredBy: true
+  editURL:
+    enable: true
+    base: https://github.com/maxmurtazin/luma-lang/edit/main/site/content
+markup:
+  highlight:
+    noClasses: false
+  goldmark:
+    renderer:
+      unsafe: false
