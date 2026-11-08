@@ -69,3 +69,7 @@ Run `node tools/validate-conformance.cjs` (Node.js 22+) to validate fixture meta
 ## Rust frontend (0.1B)
 
 Build with cargo build. Run cargo run -- check file.luma for bounded semantic validation; add --syntax-only for the original parser behavior. Export a graph with cargo run -- check --graph graph.json file.luma. See [0.1C documentation](site/content/docs/semantics.md) for decisions, graph schema and limitations. The execution core is available through `luma run`; see its documented limits.
+
+## VS Code 0.1A
+
+[Language Tools & Graph Explorer](editors/vscode/README.md) provides an installable extension with CLI diagnostics, execution and interactive graph navigation.

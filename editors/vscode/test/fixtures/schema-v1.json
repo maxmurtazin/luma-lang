@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "valid": true,
+  "nodes": [
+    {
+      "id": "file:main.luma",
+      "kind": "module",
+      "file": "main.luma"
+    },
+    {
+      "id": "d",
+      "kind": "definition",
+      "file": "main.luma",
+      "start": 3,
+      "end": 4,
+      "type": "Function([Number], Number)"
+    },
+    {
+      "id": "builtin:print",
+      "kind": "builtin"
+    }
+  ],
+  "edges": [
+    {
+      "from": "file:main.luma",
+      "to": "d",
+      "kind": "contains"
+    }
+  ]
+}

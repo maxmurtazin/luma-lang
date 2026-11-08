@@ -1,0 +1,30 @@
+name: VS Code extension
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  extension:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --locked
+      - run: cargo run -- check --graph editors/vscode/test/fixtures/actual.json editors/vscode/test/fixtures/main.luma
+      - run: npm ci
+        working-directory: editors/vscode
+      - run: npm test
+        working-directory: editors/vscode
+        env:
+          LUMA_GRAPH: test/fixtures/actual.json
+      - run: npm run package
+        working-directory: editors/vscode
+      - uses: actions/upload-artifact@v4
+        with:
+          name: luma-vscode-${{ matrix.os }}
+          path: editors/vscode/*.vsix

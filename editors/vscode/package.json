@@ -1,0 +1,84 @@
+{
+  "name": "luma-language-tools",
+  "displayName": "Luma Language Tools & Graph Explorer",
+  "description": "Luma syntax, diagnostics, execution and semantic graph navigation.",
+  "version": "0.1.0",
+  "publisher": "maxmurtazin",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/maxmurtazin/luma-lang"
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onLanguage:luma"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "npm run build && node --test test/*.cjs",
+    "package": "npm run build && vsce package --allow-missing-repository --skip-license"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "luma",
+        "aliases": [
+          "Luma"
+        ],
+        "extensions": [
+          ".luma"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "luma",
+        "scopeName": "source.luma",
+        "path": "./syntaxes/luma.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "luma.run",
+        "title": "Luma: Run File"
+      },
+      {
+        "command": "luma.check",
+        "title": "Luma: Check File"
+      },
+      {
+        "command": "luma.graph",
+        "title": "Luma: Open Graph Explorer"
+      }
+    ],
+    "configuration": {
+      "title": "Luma",
+      "properties": {
+        "luma.executablePath": {
+          "type": "string",
+          "default": "luma",
+          "description": "Executable name on PATH or absolute path to luma (luma.exe on Windows). Runtime is installed separately."
+        },
+        "luma.debounceMs": {
+          "type": "number",
+          "default": 500,
+          "minimum": 100,
+          "maximum": 10000,
+          "description": "Delay before refreshing saved files. Unsaved changes wait for save."
+        }
+      }
+    }
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.7.0"
+  }
+}

@@ -4,3 +4,8 @@ site/.hugo_build.lock
 site/.hugo-cache/
 
 /target/
+
+editors/vscode/node_modules/
+editors/vscode/dist/
+*.vsix
+editors/vscode/test/fixtures/actual.json

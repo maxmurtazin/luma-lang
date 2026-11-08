@@ -1,0 +1,36 @@
+{
+  "scopeName": "source.luma",
+  "patterns": [
+    {
+      "name": "comment.line.number-sign.luma",
+      "match": "#.*$"
+    },
+    {
+      "name": "string.quoted.double.luma",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.luma",
+          "match": "\\\\."
+        }
+      ]
+    },
+    {
+      "name": "keyword.control.luma",
+      "match": "\\b(fn|function|object|end|return|match|use|pub|and|or|not)\\b"
+    },
+    {
+      "name": "constant.language.luma",
+      "match": "\\b(true|false)\\b"
+    },
+    {
+      "name": "constant.numeric.luma",
+      "match": "\\b[0-9]+(\\.[0-9]+)?\\b"
+    },
+    {
+      "name": "keyword.operator.luma",
+      "match": "->|==|!=|<=|>=|[+*/=<>-]"
+    }
+  ]
+}

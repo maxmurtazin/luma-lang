@@ -1,0 +1,7 @@
+fn double(x)
+return x * 2
+end
+object Box
+value = 4
+end
+print(double(Box.value))
