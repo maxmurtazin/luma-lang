@@ -185,5 +185,10 @@
     "path": "library/main.luma",
     "status": 0,
     "stdout": "4\n16\n30\n30\n5\n"
+  },
+  {
+    "path": "functions/main.luma",
+    "status": 0,
+    "stdout": "12\n3\n10\n120\n"
   }
 ]

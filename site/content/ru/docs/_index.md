@@ -15,3 +15,5 @@ title: Документация
 - [CLI и выполнение]({{< relref "cli" >}})
 - [Graph Explorer в VS Code]({{< relref "vscode" >}})
 - [Примеры и диагностика]({{< relref "examples" >}})
+
+- [Справочник синтаксиса]({{< relref "syntax" >}})

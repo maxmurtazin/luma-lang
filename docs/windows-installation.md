@@ -1,6 +1,6 @@
 # Windows x64 installation
 
-Download the Windows installation distribution from the successful **Windows installation distribution** GitHub Actions run on main (signed-in GitHub account required for Actions artifacts), or from a tagged GitHub Release when available. Extract the artifact ZIP and run `Luma-0.1.0-windows-x64-setup.exe`. Verify SHA256SUMS.txt with `Get-FileHash`. This installer is unsigned: Windows SmartScreen may display a warning. No code-signing certificate is configured.
+Download the Windows installation distribution from the successful **Windows installation distribution** GitHub Actions run on main (signed-in GitHub account required for Actions artifacts), or from a tagged GitHub Release when available. Extract the artifact ZIP and run `Luma-0.1.2-windows-x64-setup.exe`. Verify SHA256SUMS.txt with `Get-FileHash`. This installer is unsigned: Windows SmartScreen may display a warning. No code-signing certificate is configured.
 
 The installer runs as the current user without administrator rights. It installs the native Rust CLI, bundled VSIX, documentation and extension setup helper in `%LOCALAPPDATA%\Programs\Luma`. Rust, Node.js and build tools are not needed on the user's machine. Windows x64 is supported.
 
@@ -46,5 +46,4 @@ cd ../..
 
 CI builds on windows-2022, tests Rust and extension units, compiles the installer, installs twice, checks preservation of unrelated files, invokes the installed Run/Check/Graph CLI, installs the bundled VSIX into isolated VS Code directories, and uninstalls. VSIX installation is not an Extension Host UI test. Manually verify command palette Run/Check/Graph, source navigation, custom executable settings, missing VS Code, and SmartScreen on a clean Windows account before a public release. All six 0.1D2 standard library operations execute.
 
-
-0.1D2 / distribution 0.1.2: `map`, `filter`, `reduce`, `sum`, `repeat`, and CPU-threaded `parallel` now execute. The current contract and bounds are in [standard-library](../standard-library/) (Hugo docs: `site/content/docs/standard-library.md`); this supersedes earlier deferred-runtime statements. A4 pagination remains unverified.
+Current guides: [English](https://maxmurtazin.github.io/luma-lang/en/docs/windows/) · [Русский](https://maxmurtazin.github.io/luma-lang/ru/docs/windows/).

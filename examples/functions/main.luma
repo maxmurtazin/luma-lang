@@ -1,0 +1,23 @@
+# Captures, recursion, local scope and Unit return
+base = 10
+fn captured(x)
+return x + base
+end
+fn local(x)
+base = x
+return base
+end
+fn factorial(n)
+return match n
+0: 1
+*: n * factorial(n-1)
+end
+end
+fn unit()
+return
+end
+unit()
+print(captured(2))
+print(local(3))
+print(base)
+print(factorial(5))

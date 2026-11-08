@@ -1,5 +1,6 @@
 ---
 title: Documentation
+aliases: ["/docs/"]
 ---
 
 - [Getting started]({{< relref "getting-started" >}})
@@ -15,3 +16,5 @@ title: Documentation
 - [CLI and execution]({{< relref "cli" >}})
 - [VS Code Graph Explorer]({{< relref "vscode" >}})
 - [Runnable examples and diagnostics]({{< relref "examples" >}})
+
+- [Syntax reference]({{< relref "syntax" >}})
