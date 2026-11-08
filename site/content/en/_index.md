@@ -1,5 +1,5 @@
 ---
-title: Luma 0.1.2
+title: Luma 0.1.3
 ---
 
 A bounded Rust interpreter with static inference, pipelines and isolated CPU parallelism.

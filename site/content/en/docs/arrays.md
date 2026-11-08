@@ -13,3 +13,23 @@ b[0][1] = 9
 print(a[0][1])
 print(b[0][1])
 ~~~
+
+**Expected output:**
+
+~~~text
+2
+9
+~~~
+
+
+~~~text
+print([[1, 2], [3, 4]])
+print(["hello", "world"])
+~~~
+
+**Expected output:**
+
+~~~text
+[[1, 2], [3, 4]]
+["hello", "world"]
+~~~

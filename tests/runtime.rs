@@ -200,3 +200,31 @@ fn stdlib_bounds_order_and_isolation() {
         assert_eq!(c.run().unwrap_err().diagnostics[0].1.code, "E_DIV_ZERO");
     }
 }
+
+#[test]
+fn print_arrays() {
+    let c = Case::new();
+    c.write(
+        "main.luma",
+        "print([[1, 2], [3, 4]])\nprint([true, false])\nprint([\"hello\", \"world\"])\n",
+    );
+    assert_eq!(
+        c.run().unwrap(),
+        "[[1, 2], [3, 4]]\n[true, false]\n[\"hello\", \"world\"]\n"
+    );
+}
+
+#[test]
+fn print_rejects_non_values_and_equality_stays_scalar() {
+    for source in [
+        "fn f()\nend\nprint(f())",
+        "object a\nx = 1\nend\nprint(a)",
+        "print([1] == [1])",
+    ] {
+        let c = Case::new();
+        c.write("main.luma", source);
+        let failure = c.run().unwrap_err();
+        assert!(!failure.runtime);
+        assert!(failure.diagnostics.iter().any(|(_, d)| d.code == "E_TYPE"));
+    }
+}

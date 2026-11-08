@@ -1,4 +1,4 @@
-#define AppVersion "0.1.2"
+#define AppVersion "0.1.3"
 [Setup]
 AppId={{645701D5-8D27-43BB-9AE5-215EFB75CA84}
 AppName=Luma
@@ -21,7 +21,7 @@ UninstallDisplayIcon={app}\bin\luma.exe
 Name: "vscode"; Description: "Install Graph Explorer extension in VS Code (if available)"
 [Files]
 Source: "..\..\target\x86_64-pc-windows-msvc\release\luma.exe"; DestDir: "{app}\bin"; Flags: ignoreversion
-Source: "..\..\editors\vscode\luma-language-tools-0.1.2.vsix"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\editors\vscode\luma-language-tools-0.1.3.vsix"; DestDir: "{app}"; Flags: ignoreversion
 Source: "Install-Extension.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\docs\windows-installation.md"; DestDir: "{app}"; Flags: ignoreversion
 [Run]

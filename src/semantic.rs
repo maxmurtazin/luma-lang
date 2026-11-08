@@ -57,6 +57,7 @@ struct Checker {
     parallel: Vec<(String, Span, String)>,
     obligations: Vec<(String, Span, Ty)>,
     print: Vec<(String, Span, Ty)>,
+    equality: Vec<(String, Span, Ty)>,
     initializing: Option<String>,
     captures: BTreeSet<(String, String)>,
     top_calls: Vec<(String, Span, String, BTreeSet<String>)>,
@@ -492,7 +493,7 @@ impl Checker {
                 self.unify(a.clone(), b, n.span);
                 match op.as_str() {
                     "==" | "!=" => {
-                        self.print.push((self.file.clone(), n.span, a));
+                        self.equality.push((self.file.clone(), n.span, a));
                         Ty::Bool
                     }
                     "and" | "or" => {
@@ -803,13 +804,30 @@ pub fn check(path: impl AsRef<Path>) -> Report {
             )
         }
     }
+    fn printable(t: &Ty) -> bool {
+        match t {
+            Ty::Number | Ty::String | Ty::Bool | Ty::Var(_) => true,
+            Ty::Array(element) => printable(element),
+            _ => false,
+        }
+    }
     for (file, span, t) in c.print.clone() {
+        if !printable(&c.resolve(&t)) {
+            c.file = file;
+            c.fail(
+                "E_TYPE",
+                span,
+                "print requires a scalar or arrays of scalars",
+            )
+        }
+    }
+    for (file, span, t) in c.equality.clone() {
         if !matches!(
             c.resolve(&t),
             Ty::Number | Ty::String | Ty::Bool | Ty::Var(_)
         ) {
             c.file = file;
-            c.fail("E_TYPE", span, "only scalar print/equality is supported")
+            c.fail("E_TYPE", span, "only scalar equality is supported")
         }
     }
     for (file, span, t) in c.obligations.clone() {

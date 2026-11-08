@@ -15,3 +15,9 @@ object Building
 end
 print(Building.volume(120))
 ~~~
+
+**Expected output:**
+
+~~~text
+3000
+~~~

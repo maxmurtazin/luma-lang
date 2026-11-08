@@ -16,3 +16,9 @@ print(match value
     *: "small"
 end)
 ~~~
+
+**Expected output:**
+
+~~~text
+large
+~~~

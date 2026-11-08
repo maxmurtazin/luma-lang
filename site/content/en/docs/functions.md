@@ -12,3 +12,9 @@ fn square(x)
 end
 print(square(4))
 ~~~
+
+**Expected output:**
+
+~~~text
+16
+~~~

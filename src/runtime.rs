@@ -218,12 +218,24 @@ impl Engine {
             values.push(self.eval(a, s, path)?);
         }
         if name(c) == "print" && callee.is_none() {
-            let text = match &values[0] {
-                Value::Number(x) => x.to_string(),
-                Value::String(x) => x.clone(),
-                Value::Bool(x) => x.to_string(),
-                _ => return Err(self.fail(n, "print requires scalar")),
-            };
+            fn format_value(value: &Value, nested: bool) -> Option<String> {
+                Some(match value {
+                    Value::Number(x) => x.to_string(),
+                    Value::String(x) if nested => serde_json::to_string(x).ok()?,
+                    Value::String(x) => x.clone(),
+                    Value::Bool(x) => x.to_string(),
+                    Value::Array(xs) => format!(
+                        "[{}]",
+                        xs.iter()
+                            .map(|x| format_value(x, true))
+                            .collect::<Option<Vec<_>>>()?
+                            .join(", ")
+                    ),
+                    _ => return None,
+                })
+            }
+            let text = format_value(&values[0], false)
+                .ok_or_else(|| self.fail(n, "print requires a scalar or arrays of scalars"))?;
             self.output.push_str(&text);
             self.output.push('\n');
             return Ok(Value::Unit);
