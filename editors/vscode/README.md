@@ -1,6 +1,6 @@
 # Luma Language Tools & Graph Explorer 0.1A
 
-Install the VSIX with Extensions: Install from VSIX in VS Code 1.90+. Build the runtime separately with cargo build --release. Add target/release to PATH or set luma.executablePath to the absolute executable path (luma.exe on Windows). Paths with spaces work. The setting accepts an executable, not shell arguments. No runtime is bundled. Execution requires a trusted workspace.
+Install the VSIX with Extensions: Install from VSIX in VS Code 1.90+. Build the runtime separately with cargo build --release. Add target/release to PATH or set luma.executablePath to the absolute executable path (luma.exe on Windows). Paths with spaces work. The setting accepts an executable, not shell arguments. The standalone VSIX has no runtime. The [Windows installer](../../docs/windows-installation.md) bundles both and the default setting discovers its per-user runtime without changing settings. Execution requires a trusted workspace.
 
 Save a local .luma file and use Luma: Check File, Luma: Run File or Luma: Open Graph Explorer. Problems uses CLI UTF-8 spans converted to editor positions, including sibling imports. Run output appears in the Luma output channel.
 

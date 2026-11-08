@@ -63,7 +63,7 @@
         "luma.executablePath": {
           "type": "string",
           "default": "luma",
-          "description": "Executable name on PATH or absolute path to luma (luma.exe on Windows). Runtime is installed separately."
+          "description": "Executable name on PATH or absolute path to luma (luma.exe on Windows). The Windows installer bundles the runtime; the default searches its standard per-user location."
         },
         "luma.debounceMs": {
           "type": "number",

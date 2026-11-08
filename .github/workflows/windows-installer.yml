@@ -1,0 +1,60 @@
+name: Windows installation distribution
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  windows:
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: cargo test --locked --target x86_64-pc-windows-msvc
+      - run: cargo build --release --locked --target x86_64-pc-windows-msvc
+      - run: npm ci
+        working-directory: editors/vscode
+      - run: npm test
+        working-directory: editors/vscode
+      - run: npm run package
+        working-directory: editors/vscode
+      - name: Compile installer
+        run: |
+          $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $compiler)) { throw 'Inno Setup 6 is required on the runner' }
+          & $compiler packaging/windows/luma.iss
+          if ($LASTEXITCODE) { throw 'Installer compilation failed' }
+      - name: Provision isolated VS Code CLI for testing
+        run: |
+          Invoke-WebRequest https://update.code.visualstudio.com/latest/win32-x64-archive/stable -OutFile "$env:RUNNER_TEMP/vscode.zip"
+          Expand-Archive "$env:RUNNER_TEMP/vscode.zip" "$env:RUNNER_TEMP/vscode"
+          "$env:RUNNER_TEMP/vscode/bin" | Out-File $env:GITHUB_PATH -Append
+      - name: Install, upgrade, CLI, VSIX and uninstall smoke test
+        run: ./packaging/windows/Smoke-Test.ps1
+      - name: Checksums
+        run: |
+          Get-FileHash dist/*.exe -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $([IO.Path]::GetFileName($_.Path))" } | Set-Content dist/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Luma-windows-x64-${{ github.sha }}
+          path: |
+            dist/*.exe
+            dist/SHA256SUMS.txt
+            editors/vscode/*.vsix
+          if-no-files-found: error
+      - name: Publish tagged release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create $env:GITHUB_REF_NAME dist/*.exe dist/SHA256SUMS.txt editors/vscode/*.vsix --verify-tag --generate-notes

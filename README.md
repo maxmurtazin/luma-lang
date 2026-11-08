@@ -73,3 +73,7 @@ Build with cargo build. Run cargo run -- check file.luma for bounded semantic va
 ## VS Code 0.1A
 
 [Language Tools & Graph Explorer](editors/vscode/README.md) provides an installable extension with CLI diagnostics, execution and interactive graph navigation.
+
+## Windows installer
+
+See [Windows installation and build instructions](docs/windows-installation.md) for the combined CLI and Graph Explorer installer, options, upgrades and uninstall. Download build artifacts from the [Windows distribution workflow](https://github.com/maxmurtazin/luma-lang/actions/workflows/windows-installer.yml).
