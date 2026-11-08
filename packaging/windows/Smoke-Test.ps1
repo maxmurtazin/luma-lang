@@ -10,12 +10,18 @@ function Run-Setup([string]$Setup = $installer) {
 }
 try {
     if ($PreviousInstaller) {
+        Run-Setup
+        $fresh = & "$app/bin/luma.exe" version
+        if ($LASTEXITCODE -or $fresh -notmatch '0\.1\.3') { throw 'Fresh installation failed' }
+        $removed = Start-Process "$app/unins000.exe" -ArgumentList '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART' -WindowStyle Hidden -Wait -PassThru
+        if ($removed.ExitCode -or (Test-Path "$app/bin/luma.exe")) { throw 'Fresh uninstall failed' }
         Run-Setup $PreviousInstaller
         $old = & "$app/bin/luma.exe" version
         if ($LASTEXITCODE -or $old -notmatch '0\.1\.2') { throw 'Previous installation version failed' }
         Set-Content "$app/user-marker.txt" 'preserve on upgrade'
     }
     Run-Setup
+    if ($PreviousInstaller -and !(Test-Path "$app/user-marker.txt")) { throw 'Upgrade from 0.1.2 removed user data' }
     Set-Content "$app\user-marker.txt" 'preserve on upgrade'
     Run-Setup
     if (!(Test-Path "$app\user-marker.txt")) { throw 'Upgrade removed user data' }
