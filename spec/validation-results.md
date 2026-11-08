@@ -26,3 +26,5 @@ Baseline: f404373 on main. Adopted lexical/grammar proposals; semantic proposals
 - BLOCKED: cargo test cannot link because Windows MSVC link.exe is absent, including outside restricted execution. Tests type-check under clippy; execution is delegated to the Linux CI job and is not claimed locally.
 - A4 physical pagination remains unverified; no rendered print artifact was produced.
 - Semantic/runtime fixtures remain unexecuted. No interpreter exists.
+
+Remote verification: [Rust frontend CI](https://github.com/maxmurtazin/luma-lang/actions/runs/42458555390) passed for ee1e08c, including formatting, clippy, fixture integrity and all five integration tests (one parses every file across 30 cases). This validates syntax behavior only; no semantic/runtime expectations were executed.
