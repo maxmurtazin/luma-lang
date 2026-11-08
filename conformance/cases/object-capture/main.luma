@@ -1,0 +1,7 @@
+object Building
+height = 25
+fn volume(area)
+return area * height
+end
+end
+result = Building.volume(120)

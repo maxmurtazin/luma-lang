@@ -5,7 +5,11 @@ weight: 11
 
 No interpreter, CLI, language server, or VS Code extension is available. This roadmap is ordered by dependency, with no dates or release commitments.
 
-## 1. Specify the smallest coherent language
+## 0.1A — Syntax and Semantics Validation
+
+Draft 001 and 30 semantic fixtures now provide a bounded specification baseline. Fixture integrity is runnable; interpreter semantics remain unexecuted. Review the labeled bounded proposals before implementation.
+
+## 0.1B — Rust Lexer, Parser & AST
 
 Resolve block parsing, value types, bindings, function calls, evaluation order, and errors. Turn accepted examples into fixtures. Record each decision and its remaining constraints.
 

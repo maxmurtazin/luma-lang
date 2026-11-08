@@ -1,0 +1,5 @@
+result = match 35
+> 30: "Hot"
+> 20: "Warm"
+*: "Cold"
+end

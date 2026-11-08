@@ -19,10 +19,10 @@ fn square(x)
 end
 
 numbers = [1, 2, 3, 4]
-numbers -> parallel(square) -> result
+result = numbers -> parallel(square)
 ```
 
-*Proposed syntax.* The example sketches explicit parallel work. Pipeline binding, scheduling, ordering, and failure behavior remain open.
+*Proposed syntax.* The example sketches explicit parallel work. Draft 001 defines first-argument piping and ordered synchronous results; scheduling remains unspecified.
 
 {{< cards >}}
   {{< card link="docs/getting-started" title="Start here" subtitle="Understand the project status and read your first draft." >}}

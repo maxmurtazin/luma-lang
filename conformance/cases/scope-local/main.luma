@@ -1,0 +1,7 @@
+x = 10
+fn f()
+x = 20
+return x
+end
+y = f()
+result = x

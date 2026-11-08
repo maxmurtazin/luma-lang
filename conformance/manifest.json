@@ -1,0 +1,527 @@
+{
+  "spec": "Draft 001 / 0.1A bounded proposals",
+  "execution": "not-executed",
+  "cases": [
+    {
+      "id": "lex-comments",
+      "category": "lexical",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "accept",
+        "bindings": {
+          "result": 2
+        }
+      },
+      "rationale": "Contract: lex comments. See Draft 001 lexical rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "lex-string",
+      "category": "lexical",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "accept",
+        "bindings": {
+          "result": "a\n#b"
+        }
+      },
+      "rationale": "Contract: lex string. See Draft 001 lexical rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "lex-escape",
+      "category": "lexical",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "static-error",
+        "diagnostic": "E_ESCAPE",
+        "location": {
+          "file": "main.luma",
+          "required": true
+        }
+      },
+      "rationale": "Contract: lex escape. See Draft 001 lexical rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "parse-end",
+      "category": "parser",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "static-error",
+        "diagnostic": "E_END",
+        "location": {
+          "file": "main.luma",
+          "required": true
+        }
+      },
+      "rationale": "Contract: parse end. See Draft 001 parser rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "parse-braces",
+      "category": "parser",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "static-error",
+        "diagnostic": "E_SYNTAX",
+        "location": {
+          "file": "main.luma",
+          "required": true
+        }
+      },
+      "rationale": "Contract: parse braces. See Draft 001 parser rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "precedence",
+      "category": "parser",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "accept",
+        "bindings": {
+          "result": 14
+        }
+      },
+      "rationale": "Contract: precedence. See Draft 001 parser rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "scope-local",
+      "category": "scope",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "accept",
+        "bindings": {
+          "result": 10
+        }
+      },
+      "rationale": "Contract: scope local. See Draft 001 scope rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "scope-unknown",
+      "category": "scope",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "static-error",
+        "diagnostic": "E_NAME",
+        "location": {
+          "file": "main.luma",
+          "required": true
+        }
+      },
+      "rationale": "Contract: scope unknown. See Draft 001 scope rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "type-reassign",
+      "category": "type-inference",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "static-error",
+        "diagnostic": "E_TYPE",
+        "location": {
+          "file": "main.luma",
+          "required": true
+        }
+      },
+      "rationale": "Contract: type reassign. See Draft 001 type-inference rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "type-monomorphic",
+      "category": "type-inference",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "static-error",
+        "diagnostic": "E_TYPE",
+        "location": {
+          "file": "main.luma",
+          "required": true
+        }
+      },
+      "rationale": "Contract: type monomorphic. See Draft 001 type-inference rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "module-public",
+      "category": "module-imports",
+      "entry": "main.luma",
+      "files": [
+        "main.luma",
+        "math.luma"
+      ],
+      "expected": {
+        "outcome": "accept",
+        "bindings": {
+          "result": 16
+        }
+      },
+      "rationale": "Contract: module public. See Draft 001 module-imports rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "module-private",
+      "category": "module-imports",
+      "entry": "main.luma",
+      "files": [
+        "main.luma",
+        "math.luma"
+      ],
+      "expected": {
+        "outcome": "static-error",
+        "diagnostic": "E_PRIVATE",
+        "location": {
+          "file": "main.luma",
+          "required": true
+        }
+      },
+      "rationale": "Contract: module private. See Draft 001 module-imports rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "module-cycle",
+      "category": "module-imports",
+      "entry": "main.luma",
+      "files": [
+        "main.luma",
+        "other.luma"
+      ],
+      "expected": {
+        "outcome": "static-error",
+        "diagnostic": "E_IMPORT_CYCLE",
+        "location": {
+          "file": "main.luma",
+          "required": true
+        }
+      },
+      "rationale": "Contract: module cycle. See Draft 001 module-imports rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "match-first",
+      "category": "match",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "accept",
+        "bindings": {
+          "result": "Hot"
+        }
+      },
+      "rationale": "Contract: match first. See Draft 001 match rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "match-lazy",
+      "category": "match",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "accept",
+        "bindings": {
+          "result": 7
+        }
+      },
+      "rationale": "Contract: match lazy. See Draft 001 match rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "match-exhaustive",
+      "category": "match",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "static-error",
+        "diagnostic": "E_MATCH_FALLBACK",
+        "location": {
+          "file": "main.luma",
+          "required": true
+        }
+      },
+      "rationale": "Contract: match exhaustive. See Draft 001 match rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "match-types",
+      "category": "match",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "static-error",
+        "diagnostic": "E_TYPE",
+        "location": {
+          "file": "main.luma",
+          "required": true
+        }
+      },
+      "rationale": "Contract: match types. See Draft 001 match rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "pipe-chain",
+      "category": "pipelines",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "accept",
+        "bindings": {
+          "result": 16
+        }
+      },
+      "rationale": "Contract: pipe chain. See Draft 001 pipelines rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "pipe-first-argument",
+      "category": "pipelines",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "accept",
+        "bindings": {
+          "result": 7
+        }
+      },
+      "rationale": "Contract: pipe first argument. See Draft 001 pipelines rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "pipe-destination",
+      "category": "pipelines",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "static-error",
+        "diagnostic": "E_NAME",
+        "location": {
+          "file": "main.luma",
+          "required": true
+        }
+      },
+      "rationale": "Contract: pipe destination. See Draft 001 pipelines rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "object-capture",
+      "category": "objects",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "accept",
+        "bindings": {
+          "result": 3000
+        }
+      },
+      "rationale": "Contract: object capture. See Draft 001 objects rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "array-copy",
+      "category": "arrays",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "accept",
+        "bindings": {
+          "result": 1
+        }
+      },
+      "rationale": "Contract: array copy. See Draft 001 arrays rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "array-heterogeneous",
+      "category": "arrays",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "static-error",
+        "diagnostic": "E_TYPE",
+        "location": {
+          "file": "main.luma",
+          "required": true
+        }
+      },
+      "rationale": "Contract: array heterogeneous. See Draft 001 arrays rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "array-bounds",
+      "category": "arrays",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "runtime-error",
+        "diagnostic": "E_INDEX",
+        "location": {
+          "file": "main.luma",
+          "required": true
+        }
+      },
+      "rationale": "Contract: array bounds. See Draft 001 arrays rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "parallel-order",
+      "category": "parallel-effects",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "accept",
+        "bindings": {
+          "result": [
+            9,
+            1,
+            4
+          ]
+        }
+      },
+      "rationale": "Contract: parallel order. See Draft 001 parallel-effects rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "parallel-transitive-io",
+      "category": "parallel-effects",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "static-error",
+        "diagnostic": "E_EFFECT",
+        "location": {
+          "file": "main.luma",
+          "required": true
+        }
+      },
+      "rationale": "Contract: parallel transitive io. See Draft 001 parallel-effects rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "repeat-precheck",
+      "category": "repetition",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "accept",
+        "bindings": {
+          "result": 10
+        }
+      },
+      "rationale": "Contract: repeat precheck. See Draft 001 repetition rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "divide-zero",
+      "category": "errors",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "runtime-error",
+        "diagnostic": "E_DIV_ZERO",
+        "location": {
+          "file": "main.luma",
+          "required": true
+        }
+      },
+      "rationale": "Contract: divide zero. See Draft 001 errors rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "array-empty",
+      "category": "arrays",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "static-error",
+        "diagnostic": "E_INFERENCE",
+        "location": {
+          "file": "main.luma",
+          "required": true
+        }
+      },
+      "rationale": "Contract: array empty. See Draft 001 arrays rules.",
+      "status": "specified-not-executed"
+    },
+    {
+      "id": "arity",
+      "category": "functions",
+      "entry": "main.luma",
+      "files": [
+        "main.luma"
+      ],
+      "expected": {
+        "outcome": "static-error",
+        "diagnostic": "E_ARITY",
+        "location": {
+          "file": "main.luma",
+          "required": true
+        }
+      },
+      "rationale": "Contract: arity. See Draft 001 functions rules.",
+      "status": "specified-not-executed"
+    }
+  ]
+}

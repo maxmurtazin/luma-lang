@@ -1,0 +1,4 @@
+fn square(x)
+return x * x
+end
+result = square(1, 2)

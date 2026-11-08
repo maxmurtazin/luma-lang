@@ -1,0 +1,4 @@
+fn square(x)
+return x * x
+end
+result = [3, 1, 2] -> parallel(square)

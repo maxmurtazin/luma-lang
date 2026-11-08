@@ -45,9 +45,9 @@ The workflow pins the same Hugo and Go versions used for local verification. Hex
 
 ## Design boundary
 
-Chosen direction: interpreter-first Rust, static type inference, simple number/string concepts, no classes, overloading, `let`, or `var`; file-based modules with `pub`/`use`; structural objects; indentation and `end` block forms; one `->` arrow; `match`; function-based repetition; explicit parallel work without async; future VS Code graph visualization.
+Chosen direction: interpreter-first Rust, static type inference, simple number/string concepts, no classes, overloading, `let`, or `var`; file-based modules with `pub`/`use`; structural objects; insignificant indentation and mandatory `end`; one `->` arrow; `match`; function-based repetition; explicit parallel work without async; future VS Code graph visualization.
 
-Mutability, numeric representation, imports, capture, block-form interaction, match grammar, pipeline binding, memory management, and parallel behavior remain open. See `site/content/docs/language-design.md`. Do not describe a proposal as implemented until code and verification support it.
+Draft 001 fixes the core syntax and semantics; additional bounded rules are labeled proposals. Numeric edge cases, resource limits and wider library APIs remain open. See `site/content/docs/specification.md`. Do not describe a proposal as implemented until code and verification support it.
 
 ## Contributing
 
@@ -59,3 +59,9 @@ Keep pages in English. Label examples as proposed and use `text` fences until th
 - [Hugo GitHub Pages deployment](https://gohugo.io/host-and-deploy/deploy-to-github-pages/)
 
 Hextra is an external theme with its own license. No license for the Luma project is selected by this documentation change.
+
+## Stage 0.1A
+
+Draft 001: `site/content/docs/specification.md`. Compact syntax and conformance matrix live alongside it. Thirty fixtures in `conformance/` specify positive and negative outcomes. They are not implemented interpreter tests.
+
+Run `node tools/validate-conformance.cjs` (Node.js 22+) to validate fixture metadata and coverage. This does not execute Luma. Actual validation results: `spec/validation-results.md`. Next stage: **0.1B — Rust Lexer, Parser & AST**.

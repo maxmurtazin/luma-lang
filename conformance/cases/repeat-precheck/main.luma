@@ -1,0 +1,7 @@
+fn step(x)
+return x / 0
+end
+fn done(x)
+return x >= 10
+end
+result = 10 -> repeat(step, done)
