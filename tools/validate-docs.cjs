@@ -4,3 +4,4 @@ const version=JSON.parse(fs.readFileSync('editors/vscode/package.json')).version
 for(const f of ['Cargo.toml','Cargo.lock','packaging/windows/luma.iss','packaging/windows/Install-Extension.ps1','packaging/windows/Smoke-Test.ps1'])assert(fs.readFileSync(f,'utf8').includes(version),f+' version');
 for(const lang of ['en','ru'])for(const file of en){const slug=file==='_index.md'?'':file.slice(0,-3)+'/';const html=fs.readFileSync('site/public/'+lang+'/docs/'+slug+'index.html','utf8');assert(html.includes('/luma-lang/'+(lang==='en'?'ru':'en')+'/docs/'+slug),'translation switch '+file);}
 console.log('PASS translation parity, generated routes/switches and versions');
+for(const file of en){const s=fs.readFileSync('site/content/en/docs/'+file,'utf8'),m=s.match(/^aliases: (.*)$/m);if(m)for(const alias of JSON.parse(m[1]))assert(fs.existsSync('site/public'+alias+'index.html'),'legacy route '+alias)}
