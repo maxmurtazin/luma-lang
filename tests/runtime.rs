@@ -169,3 +169,34 @@ fn standard_library() {
     );
     assert_eq!(c.run().unwrap_err().diagnostics[0].1.code, "E_DIV_ZERO");
 }
+
+#[test]
+fn stdlib_bounds_order_and_isolation() {
+    let c = Case::new();
+    for (source, expected) in [
+        ("fn f(x)\nreturn x+1\nend\na=[] -> map(f)\nprint(a -> sum)", "0\n"),
+        ("fn add(a,b)\nreturn a+b\nend\nprint([] -> reduce(7,add))", "7\n"),
+        ("fn sub(a,b)\nreturn a-b\nend\nprint([1,2,3] -> reduce(10,sub))", "4\n"),
+        ("fn f(a)\na[0]=a[0]+10\nreturn a[0]\nend\nx=[[1],[2],[3]]\ny=x -> parallel(f)\nprint(x[0][0])\nprint(y[0])\nprint(y[2])", "1\n11\n13\n"),
+        ("fn f(x)\nreturn x*x\nend\nfn wrapper(x)\nreturn x -> parallel(f)\nend\nprint(wrapper([2,3]) -> sum)", "13\n"),
+    ] {
+        c.write("main.luma", source);
+        assert_eq!(c.run().unwrap(), expected);
+    }
+    let xs = vec!["1"; 257].join(",");
+    c.write(
+        "main.luma",
+        &format!("fn f(x)\nreturn x+1\nend\na=[{xs}] -> parallel(f)"),
+    );
+    assert!(c.run().unwrap_err().diagnostics[0]
+        .1
+        .message
+        .contains("256"));
+    for _ in 0..10 {
+        c.write(
+            "main.luma",
+            "fn f(x)\nreturn match x\n0: 1/0\n*: (-1)^0.5\nend\nend\na=[0,1,2,3] -> parallel(f)",
+        );
+        assert_eq!(c.run().unwrap_err().diagnostics[0].1.code, "E_DIV_ZERO");
+    }
+}
