@@ -3,11 +3,11 @@ title: Luma 0.1 — Draft 001
 weight: 12
 ---
 
-**Draft 001 · November 2026 · Proposed, unimplemented.** Stage 0.1A validates syntax and semantics on paper. The first execution target is an independent Rust interpreter. No interpreter conformance has been executed.
+**Draft 001 · November 2026 · Syntax implemented in 0.1B; semantics proposed and unimplemented.** Stage 0.1A validates syntax and semantics on paper. The first execution target is an independent Rust interpreter. No interpreter conformance has been executed.
 
 ## Authority and status
 
-This formalizes the conversation's “Luma 0.1 — Language Specification”, Draft 001. Agreed rules below preserve that design. Rules explicitly called **0.1A bounded proposal** close a small parsing or checking gap for fixtures; they remain reviewable proposals. Deferred features have no implied behavior. The compact syntax reference has a one-A4-page goal; this full specification is intentionally separate.
+This formalizes the conversation's “Luma 0.1 — Language Specification”, Draft 001. Agreed rules below preserve that design. Rules explicitly called **0.1A bounded proposal** close a small parsing or checking gap for fixtures; their lexical and grammatical subset is adopted in 0.1B; semantic proposals remain reviewable. See [frontend](../frontend/). Deferred features have no implied behavior. The compact syntax reference has a one-A4-page goal; this full specification is intentionally separate.
 
 ## Lexical rules — 0.1A bounded proposal
 
@@ -97,3 +97,4 @@ Agreed: parallel maps a callback over an array, returns only after completion or
 Planned Rust pipeline: lexer → parser → AST → module/name resolution → type/effect analysis → interpreter → runtime/library. Source locations survive all stages. Planned CLI: luma check, luma run, luma version. VS Code structural, dependency and control-flow graphs derive from analyzed structure; no flow/goto syntax is added.
 
 0.1A is **bounded GO for lexer/parser implementation review**, subject to approval of the labeled bounded proposals. Full runtime acceptance remains pending numeric and library decisions and an interpreter. Native compilation, WebAssembly, object identity, anonymous functions, generic user functions, structured recovery and Luma Mark mapping remain deferred. Memory strategy, recursion/resource limits and Unicode text indexing remain implementation/design questions. See the conformance page for executable-concept cases and actual validation evidence.
+

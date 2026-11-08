@@ -28,3 +28,9 @@ for(const category of ['lexical','parser','scope','type-inference','module-impor
 assert(counts.accept && counts['static-error'] && counts['runtime-error']);
 console.log('PASS fixture integrity: '+ids.size+' cases '+JSON.stringify(counts));
 console.log('Luma interpreter executions: 0; semantic conformance: NOT EXECUTED.');
+
+// Frontend expectations cover every file while preserving future semantic outcomes.
+const frontend = fs.readFileSync(path.join(root, 'conformance/frontend.tsv'), 'utf8').trim().split(/\r?\n/).map(l => l.split('\t'));
+const expectedFrontend = manifest.cases.flatMap(c => c.files.map(f => [c.id, f, ['lex-escape','parse-end','parse-braces'].includes(c.id) ? c.expected.diagnostic : 'accept']));
+assert.deepEqual(frontend, expectedFrontend);
+console.log('PASS frontend expectation coverage; semantic/runtime expectations remain unexecuted.');

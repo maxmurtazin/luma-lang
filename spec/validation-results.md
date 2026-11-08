@@ -15,3 +15,14 @@ The initial build attempt could not write the default theme cache. Using a works
 The manifest validator only checks metadata, inventory and matrix consistency. It cannot establish that a program parses, infers or executes correctly. Fixture expected outcomes are specification assertions for future implementation. CI now runs this integrity validator before building documentation; no remote CI or Pages deployment result is claimed here.
 
 Decision: bounded GO for reviewing the lexer/parser baseline. Labeled 0.1A proposals need design acceptance; remaining numeric, library and resource questions are explicit in the specification. Full language/runtime acceptance is pending. Next stage: 0.1B — Rust Lexer, Parser & AST.
+
+## 0.1B validation — 2026-11-08
+
+Baseline: f404373 on main. Adopted lexical/grammar proposals; semantic proposals and open runtime decisions remain documented in the frontend page.
+
+- PASS: cargo fmt; cargo clippy --offline --all-targets -- -D warnings (environment emitted incremental-cache hard-link warnings).
+- PASS: fixture integrity and independent frontend expectation inventory, 30 cases / every file.
+- PASS: strict Hugo Extended 0.167.0 build, 24 pages.
+- BLOCKED: cargo test cannot link because Windows MSVC link.exe is absent, including outside restricted execution. Tests type-check under clippy; execution is delegated to the Linux CI job and is not claimed locally.
+- A4 physical pagination remains unverified; no rendered print artifact was produced.
+- Semantic/runtime fixtures remain unexecuted. No interpreter exists.

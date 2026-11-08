@@ -3,7 +3,7 @@ title: CLI and VS Code roadmap
 weight: 11
 ---
 
-No interpreter, CLI, language server, or VS Code extension is available. This roadmap is ordered by dependency, with no dates or release commitments.
+A Rust syntax-only CLI is available in 0.1B; no interpreter, language server, or VS Code extension is available. See [frontend](../frontend/). This roadmap is ordered by dependency, with no dates or release commitments.
 
 ## 0.1A — Syntax and Semantics Validation
 
@@ -11,7 +11,7 @@ Draft 001 and 30 semantic fixtures now provide a bounded specification baseline.
 
 ## 0.1B — Rust Lexer, Parser & AST
 
-Resolve block parsing, value types, bindings, function calls, evaluation order, and errors. Turn accepted examples into fixtures. Record each decision and its remaining constraints.
+Lexer, parser, spanned AST and syntax-only check are implemented. Type inference, module resolution, evaluation order enforcement and execution remain future work.
 
 ## 2. Build the Rust interpreter
 
@@ -19,7 +19,7 @@ Implement a lexer and parser with source locations, static type inference, diagn
 
 ## 3. Introduce a CLI
 
-Script execution and useful diagnostics are the initial goals. A command such as `luma run main.luma` is only a candidate spelling; there is no executable to invoke. REPL, formatting, checking commands, exit codes, and distribution format remain open.
+Script execution and useful diagnostics are the initial goals. A command such as `luma run main.luma` is only a candidate spelling; run is not implemented. Use cargo run -- check main.luma for syntax-only validation. REPL, formatting, checking commands, exit codes, and distribution format remain open.
 
 ## 4. Add collections and explicit parallel work
 
@@ -38,3 +38,4 @@ Graph editing, runtime tracing, and graph-directed control flow need separate de
 ## Contributing now
 
 Open a focused issue or propose a documentation change in the repository. State the problem, a small example, alternatives, and unresolved semantics. Keep accepted direction distinct from a proposal. Once an interpreter exists, label behavior as implemented only with corresponding code and verification.
+

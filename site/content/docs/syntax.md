@@ -3,7 +3,7 @@ title: One-page syntax reference
 weight: 2
 ---
 
-**Draft 001 · Proposed · Unimplemented.** A compact one-A4-page syntax goal; physical pagination has not been verified. Full rules: [specification]({{< relref "specification" >}}).
+**Draft 001 · Syntax frontend available; execution unimplemented.** A compact one-A4-page syntax goal; physical pagination has not been verified. Full rules: [specification]({{< relref "specification" >}}).
 
 ~~~text
 # Values and assignments; indentation is insignificant
@@ -51,3 +51,4 @@ answer = 4 -> math.twice
 ~~~
 
 Blocks: fn / object / match … end. Match arms use : and final *. -> inserts its input as the first argument; = assigns. Operators: + - * / % ^, == != < > <= >=, and or not; calls (), arrays/indexes [], qualification .; # comments. No braces, significant indentation, let/var, classes, overloads, async, for/while. Static inference, by-value arguments, ordered synchronous parallel results; callbacks require conservative effect checking.
+

@@ -65,3 +65,7 @@ Hextra is an external theme with its own license. No license for the Luma projec
 Draft 001: `site/content/docs/specification.md`. Compact syntax and conformance matrix live alongside it. Thirty fixtures in `conformance/` specify positive and negative outcomes. They are not implemented interpreter tests.
 
 Run `node tools/validate-conformance.cjs` (Node.js 22+) to validate fixture metadata and coverage. This does not execute Luma. Actual validation results: `spec/validation-results.md`. Next stage: **0.1B — Rust Lexer, Parser & AST**.
+
+## Rust frontend (0.1B)
+
+Build with cargo build. Run cargo run -- check file.luma for syntax-only validation. See [frontend documentation](site/content/docs/frontend.md) for adopted decisions, diagnostics, validation and limitations. No semantic analyzer or interpreter exists.
