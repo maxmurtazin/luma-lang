@@ -1,5 +1,19 @@
 # 0.1A validation results — 2026-11-08
 
+## 0.1C validation — 2026-11-08
+
+Built on 4e3bfe6 on main. Implemented bounded static checking and graph schema v1; see the semantics documentation for conservative exclusions.
+
+- PASS locally using Rust 1.99.1 Windows GNU: cargo fmt --check, cargo clippy --all-targets -- -D warnings, cargo test --locked (five frontend and two semantic integration tests; semantic test checks all 30 manifest outcomes and graph determinism/endpoints).
+- PASS: node tools/validate-conformance.cjs (30 fixture inventories).
+- PASS: Hugo Extended 0.167.0 strict build (--gc --minify --panicOnWarning), 25 pages.
+- PASS: git diff --check. Windows incremental-cache hard-link warnings fall back to copying; checks exit successfully.
+- Default Windows MSVC compilation initially failed because link.exe is absent; installing the GNU toolchain enabled actual local test execution.
+- A4 pagination remains unverified. The one-page syntax source is unchanged.
+- No interpreter/runtime tests or execution results are claimed. Runtime-error fixtures pass static checking only.
+
+Earlier results below are historical.
+
 Baseline inspected: repository commit 66aaab6 and the referenced conversation's November 2026 Draft 001. No interpreter, Rust crate, analyzer or runtime was present.
 
 | Check actually executed | Result |

@@ -5,7 +5,7 @@ weight: 13
 
 The Rust crate provides `lex(source)` and `parse(source)`, and a `luma check file.luma...` CLI. Build with `cargo build`; run with `cargo run -- check path/to/main.luma`. `luma version` reports the frontend version.
 
-Check is **syntax-only**. Success means lexical and grammatical acceptance of each explicitly supplied file. It does not resolve imports, infer types, validate names, check effects, or execute code. There is no `run` command. Imports and structural objects are AST nodes; no module loader or object runtime exists.
+This page records the **0.1B historical syntax baseline**. In 0.1C, use `luma check --syntax-only file.luma` to select that behavior. The default now performs [bounded semantic analysis](../semantics/) across sibling imports and can export a versioned graph. There is no `run` command or object runtime. Statements below describing missing analysis refer to 0.1B.
 
 ## Review of 0.1A proposals
 

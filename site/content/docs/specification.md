@@ -3,7 +3,7 @@ title: Luma 0.1 — Draft 001
 weight: 12
 ---
 
-**Draft 001 · November 2026 · Syntax implemented in 0.1B; semantics proposed and unimplemented.** Stage 0.1A validates syntax and semantics on paper. The first execution target is an independent Rust interpreter. No interpreter conformance has been executed.
+**Draft 001 · November 2026 · Syntax implemented in 0.1B; bounded static semantics implemented in 0.1C.** See [implementation boundaries](../semantics/) for adopted semantic proposals and conservative exclusions. Runtime contracts below remain proposals. No interpreter conformance has been executed.
 
 ## Authority and status
 

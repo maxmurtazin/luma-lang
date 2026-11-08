@@ -27,10 +27,10 @@ assert.deepEqual(fs.readdirSync(path.join(root,'conformance/cases')).sort(),[...
 for(const category of ['lexical','parser','scope','type-inference','module-imports','match','pipelines','objects','arrays','parallel-effects','errors']) assert(categories.has(category));
 assert(counts.accept && counts['static-error'] && counts['runtime-error']);
 console.log('PASS fixture integrity: '+ids.size+' cases '+JSON.stringify(counts));
-console.log('Luma interpreter executions: 0; semantic conformance: NOT EXECUTED.');
+console.log('Inventory validation only; run cargo test for syntax and semantic conformance. No interpreter executions.');
 
 // Frontend expectations cover every file while preserving future semantic outcomes.
 const frontend = fs.readFileSync(path.join(root, 'conformance/frontend.tsv'), 'utf8').trim().split(/\r?\n/).map(l => l.split('\t'));
 const expectedFrontend = manifest.cases.flatMap(c => c.files.map(f => [c.id, f, ['lex-escape','parse-end','parse-braces'].includes(c.id) ? c.expected.diagnostic : 'accept']));
 assert.deepEqual(frontend, expectedFrontend);
-console.log('PASS frontend expectation coverage; semantic/runtime expectations remain unexecuted.');
+console.log('PASS frontend expectation coverage; runtime contracts remain unexecuted.');

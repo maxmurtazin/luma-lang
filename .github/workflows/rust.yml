@@ -1,4 +1,4 @@
-name: Rust frontend
+name: Rust syntax and semantics
 on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
@@ -17,3 +17,8 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test --locked
+      - run: cargo run --locked -- check --graph semantic-graph.json conformance/cases/module-public/main.luma
+      - uses: actions/upload-artifact@v4
+        with:
+          name: semantic-graph-v1
+          path: semantic-graph.json

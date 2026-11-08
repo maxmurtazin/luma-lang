@@ -3,6 +3,9 @@ name = "luma"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-description = "Luma syntax frontend (no semantic analysis or execution)"
+description = "Luma bounded static frontend (no execution)"
+
+[dependencies]
+serde_json = "1"
 
 

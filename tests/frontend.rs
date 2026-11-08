@@ -86,7 +86,11 @@ fn utf8_and_strings() {
 #[test]
 fn cli_is_syntax_only() {
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_luma"))
-        .args(["check", "conformance/cases/scope-unknown/main.luma"])
+        .args([
+            "check",
+            "--syntax-only",
+            "conformance/cases/scope-unknown/main.luma",
+        ])
         .output()
         .unwrap();
     assert!(output.status.success());

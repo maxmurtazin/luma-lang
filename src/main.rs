@@ -1,34 +1,77 @@
 use std::{env, fs, process::ExitCode};
 fn main() -> ExitCode {
-    let args: Vec<_> = env::args().skip(1).collect();
+    let mut args: Vec<_> = env::args().skip(1).collect();
     if args == ["version"] || args == ["--version"] {
-        println!("luma {} (syntax frontend)", env!("CARGO_PKG_VERSION"));
+        println!(
+            "luma {} (0.1C bounded static checker; no execution)",
+            env!("CARGO_PKG_VERSION")
+        );
         return ExitCode::SUCCESS;
     }
     if args.first().map(String::as_str) != Some("check") || args.len() < 2 {
-        eprintln!("Usage: luma check <file.luma>... | luma version\ncheck is syntax-only; no semantic analysis or execution.");
+        eprintln!(
+            "Usage: luma check [--syntax-only] [--graph output.json] <file.luma> | luma version"
+        );
+        return ExitCode::from(2);
+    }
+    args.remove(0);
+    let syntax = args.first().map(String::as_str) == Some("--syntax-only");
+    if syntax {
+        args.remove(0);
+    }
+    let graph = if args.first().map(String::as_str) == Some("--graph") && args.len() >= 3 {
+        args.remove(0);
+        Some(args.remove(0))
+    } else {
+        None
+    };
+    if args.is_empty() || (graph.is_some() && (syntax || args.len() != 1)) {
         return ExitCode::from(2);
     }
     eprintln!(
-        "Syntax-only check: names, types, imports and effects are not analyzed; no execution."
+        "{}; no execution.",
+        if syntax {
+            "Syntax-only check"
+        } else {
+            "Bounded semantic check (0.1C)"
+        }
     );
     let mut failed = false;
-    for path in &args[1..] {
-        match fs::read_to_string(path) {
-            Ok(source) => match luma::parse(&source) {
-                Ok(_) => println!("{path}: syntax OK"),
-                Err(d) => {
-                    let (line, col) = luma::position(&source, d.span.start);
-                    eprintln!(
-                        "{path}:{line}:{col}: {}: {} [bytes {}..{}]",
-                        d.code, d.message, d.span.start, d.span.end
-                    );
-                    failed = true;
+    for path in args {
+        if syntax {
+            match fs::read_to_string(&path) {
+                Ok(source) => match luma::parse(&source) {
+                    Ok(_) => println!("{path}: syntax OK"),
+                    Err(d) => {
+                        let (line, col) = luma::position(&source, d.span.start);
+                        eprintln!("{path}:{line}:{col}: {}: {}", d.code, d.message);
+                        failed = true
+                    }
+                },
+                Err(e) => {
+                    eprintln!("{path}: {e}");
+                    failed = true
                 }
-            },
-            Err(e) => {
-                eprintln!("{path}: {e}");
-                failed = true;
+            }
+        } else {
+            let report = luma::semantic::check(&path);
+            for (file, d) in &report.diagnostics {
+                eprintln!(
+                    "{file}:bytes {}..{}: {}: {}",
+                    d.span.start, d.span.end, d.code, d.message
+                )
+            }
+            failed |= !report.diagnostics.is_empty();
+            if report.diagnostics.is_empty() {
+                println!("{path}: bounded semantics OK")
+            }
+            if let Some(output) = &graph {
+                if let Err(e) =
+                    fs::write(output, serde_json::to_string_pretty(&report.graph).unwrap())
+                {
+                    eprintln!("{output}: {e}");
+                    failed = true
+                }
             }
         }
     }
