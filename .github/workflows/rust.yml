@@ -21,6 +21,16 @@ jobs:
       - run: node tools/test-doc-examples.cjs
       - run: cargo test --locked
       - run: cargo run --locked -- check --graph semantic-graph.json conformance/cases/module-public/main.luma
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install jsonschema==4.23.0
+      - run: cargo run --locked -- ir tests/fixtures/structural/main.luma > structural-ir.json
+      - run: python tools/validate-structural.py structural-ir.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: structural-ir-v1
+          path: structural-ir.json
       - uses: actions/upload-artifact@v4
         with:
           name: semantic-graph-v1

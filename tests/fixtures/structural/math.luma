@@ -1,0 +1,6 @@
+pub fn square(x)
+return x*x
+end
+pub object constants
+value = 2
+end

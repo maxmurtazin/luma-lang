@@ -605,3 +605,5 @@ pub fn parse(source: &str) -> Result<Vec<Node>, Diagnostic> {
     }
     .body(0)
 }
+
+pub mod structural;

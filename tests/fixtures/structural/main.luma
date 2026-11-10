@@ -1,0 +1,29 @@
+use math
+fn positive(n)
+return n > 0
+end
+fn add(a,b)
+return a+b
+end
+fn step(n)
+return n+1
+end
+fn done(n)
+return n >= 3
+end
+object local
+value = 1
+fn get(n)
+return n+value
+end
+end
+numbers = [1,2,3] -> map(math.square)
+selected = filter(numbers, positive)
+total = reduce(selected, 0, add)
+par = parallel([1,2], math.square)
+last = repeat(0, step, done)
+answer = match total
+> 10: local.get(math.constants.value)
+*: 0
+end
+print(answer)

@@ -1,6 +1,20 @@
 use std::{env, fs, process::ExitCode};
 fn main() -> ExitCode {
     let mut args: Vec<_> = env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some("ir") {
+        if args.len() != 2 {
+            eprintln!("Usage: luma ir <file.luma>");
+            return ExitCode::from(2);
+        }
+        let document = luma::structural::analyze(&args[1]);
+        println!(
+            "{}",
+            document
+                .to_json()
+                .expect("serializable structural document")
+        );
+        return ExitCode::from(u8::from(!document.valid));
+    }
     if args.first().map(String::as_str) == Some("run") {
         if args.len() != 2 {
             eprintln!("Usage: luma run <file.luma>");
@@ -31,7 +45,7 @@ fn main() -> ExitCode {
     }
     if args.first().map(String::as_str) != Some("check") || args.len() < 2 {
         eprintln!(
-            "Usage: luma check [--syntax-only] [--graph output.json] <file.luma> | luma run <file.luma> | luma version"
+            "Usage: luma check [--syntax-only] [--graph output.json] <file.luma> | luma run <file.luma> | luma ir <file.luma> | luma version"
         );
         return ExitCode::from(2);
     }

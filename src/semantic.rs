@@ -39,6 +39,12 @@ pub struct Report {
 }
 #[derive(Default)]
 struct Checker {
+    structural: bool,
+    root: PathBuf,
+    sources: BTreeMap<String, String>,
+    source_programs: BTreeMap<String, Vec<Node>>,
+    observed: BTreeMap<String, Ty>,
+    scope_ids: BTreeMap<usize, String>,
     runtime_gates: Vec<(String, Diagnostic)>,
     programs: BTreeMap<PathBuf, Vec<Node>>,
     scopes: Vec<Scope>,
@@ -161,6 +167,13 @@ impl Checker {
         function: bool,
     ) {
         let id = self.id(n, "definition");
+        if self.structural {
+            self.nodes.get_mut(&id).unwrap()["public"] = json!(public);
+            self.observed.insert(id.clone(), ty.clone());
+            if let Ty::Scope(s) = &ty {
+                self.scope_ids.entry(*s).or_insert_with(|| id.clone());
+            }
+        }
         self.edge(self.owner.clone(), id.clone(), "contains");
         if self.scopes[scope].names.contains_key(name(n)) {
             self.fail(
@@ -237,6 +250,9 @@ impl Checker {
                     self.captures.insert((self.owner.clone(), b.id.clone()));
                 }
                 let id = self.id(n, "reference");
+                if self.structural {
+                    self.observed.insert(id.clone(), b.ty.clone());
+                }
                 self.edge(self.owner.clone(), id.clone(), "reads");
                 self.edge(id, b.id.clone(), "resolves_to");
                 return Some((s, b));
@@ -264,6 +280,9 @@ impl Checker {
                             self.captures.insert((self.owner.clone(), b.id.clone()));
                         }
                         let id = self.id(member, "reference");
+                        if self.structural {
+                            self.observed.insert(id.clone(), b.ty.clone());
+                        }
                         self.edge(self.owner.clone(), id.clone(), "reads");
                         self.edge(id, b.id.clone(), "resolves_to");
                         Some(b)
@@ -284,6 +303,17 @@ impl Checker {
         }
     }
     fn invoke(&mut self, scope: usize, callee: &Node, args: Vec<Ty>, span: Span) -> Ty {
+        let parameters = args.clone();
+        let result = self.invoke_inner(scope, callee, args, span);
+        if self.structural {
+            let id = self.id(callee, "expression");
+            self.edge(self.owner.clone(), id.clone(), "contains");
+            self.observed
+                .insert(id, Ty::Function(parameters, Box::new(result.clone())));
+        }
+        result
+    }
+    fn invoke_inner(&mut self, scope: usize, callee: &Node, args: Vec<Ty>, span: Span) -> Ty {
         // Library contracts exist only at direct calls; library values are deliberately unsupported.
         if let Kind::Name(s) = &callee.kind {
             let mut at = Some(scope);
@@ -310,6 +340,10 @@ impl Checker {
                 let lib = format!("builtin:{s}");
                 self.nodes
                     .insert(lib.clone(), json!({"id":lib,"kind":"builtin"}));
+                if self.structural {
+                    let reference = self.id(callee, "reference");
+                    self.edge(reference, lib.clone(), "resolves_to");
+                }
                 self.edge(self.owner.clone(), lib, "calls");
                 match s.as_str() {
                     "print" => {
@@ -482,7 +516,13 @@ impl Checker {
             Kind::Binary(op, a, b) if op == "->" => {
                 let t = self.expr(scope, a);
                 if let Kind::Call(c, args) = &b.kind {
-                    self.call(scope, c, args, Some(t), n.span)
+                    let result = self.call(scope, c, args, Some(t), n.span);
+                    if self.structural {
+                        let id = self.id(b, "expression");
+                        self.observed.insert(id.clone(), result.clone());
+                        self.edge(self.owner.clone(), id, "contains");
+                    }
+                    result
                 } else {
                     self.call(scope, b, &[], Some(t), n.span)
                 }
@@ -537,6 +577,10 @@ impl Checker {
                                 }
                                 _ => self.expr(scope, pattern),
                             };
+                            if self.structural {
+                                let id = self.id(pattern, "pattern");
+                                self.observed.insert(id, p.clone());
+                            }
                             self.unify(subject.clone(), p, pattern.span)
                         }
                         let v = self.expr(scope, value);
@@ -568,6 +612,9 @@ impl Checker {
         } else {
             self.expr_nonbinding(scope, n)
         };
+        if self.structural {
+            self.observed.insert(id, t.clone());
+        }
         self.obligations
             .push((self.file.clone(), n.span, t.clone()));
         t
@@ -711,7 +758,17 @@ impl Checker {
             }
         };
         let previous = (self.file.clone(), self.source.clone(), self.owner.clone());
-        self.file = path.file_name().unwrap().to_string_lossy().into();
+        self.file = if self.structural {
+            path.strip_prefix(&self.root)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .replace('\\', "/")
+        } else {
+            path.file_name().unwrap().to_string_lossy().into()
+        };
+        if self.structural {
+            self.sources.insert(self.file.clone(), source.clone());
+        }
         self.source = source.clone();
         self.owner = format!("file:{}", self.file);
         self.nodes.insert(
@@ -729,6 +786,10 @@ impl Checker {
             }
         };
         let scope = self.scope(None, true);
+        self.scope_ids.insert(scope, self.owner.clone());
+        if self.structural {
+            self.source_programs.insert(self.file.clone(), body.clone());
+        }
         self.programs.insert(path.clone(), body.clone());
         self.active.insert(path.clone());
         self.modules.insert(path.clone(), scope);
@@ -737,11 +798,7 @@ impl Checker {
                 let import = path.with_file_name(format!("{}.luma", name(module)));
                 if let Some(s) = self.load(&import) {
                     self.declare(scope, module, Ty::Scope(s), true, false, false);
-                    self.edge(
-                        self.owner.clone(),
-                        format!("file:{}.luma", name(module)),
-                        "imports",
-                    )
+                    self.edge(self.owner.clone(), self.scope_ids[&s].clone(), "imports")
                 }
             }
         }
@@ -758,11 +815,23 @@ fn crate_name(n: &Node) -> &str {
     name(n)
 }
 pub fn check(path: impl AsRef<Path>) -> Report {
+    check_impl(path.as_ref(), false).0
+}
+pub(crate) fn check_structural(path: &Path) -> crate::structural::Document {
+    check_impl(path, true).1.unwrap()
+}
+fn check_impl(path: &Path, structural: bool) -> (Report, Option<crate::structural::Document>) {
     let mut c = Checker {
-        file: path.as_ref().to_string_lossy().into(),
+        structural,
+        root: path
+            .canonicalize()
+            .ok()
+            .and_then(|p| p.parent().map(Path::to_path_buf))
+            .unwrap_or_default(),
+        file: path.to_string_lossy().into(),
         ..Checker::default()
     };
-    c.load(path.as_ref());
+    c.load(path);
     loop {
         let before = (c.effects.len(), c.captures.len());
         for (a, b) in &c.calls {
@@ -853,17 +922,53 @@ pub fn check(path: impl AsRef<Path>) -> Report {
     c.diagnostics
         .sort_by_key(|(f, d)| (f.clone(), d.span.start, d.code));
     c.diagnostics.dedup();
+    if structural {
+        for (owner, value) in &c.captures {
+            c.edges
+                .insert((owner.clone(), value.clone(), "captures".into()));
+        }
+    }
     let edges: Vec<_> = c
         .edges
         .iter()
         .map(|(from, to, kind)| json!({"from":from,"to":to,"kind":kind}))
         .collect();
-    Report {
-        runtime_gates: c.runtime_gates,
-        programs: c.programs,
-        graph: json!({"schemaVersion":1,"producer":"luma-0.1C","valid":c.diagnostics.is_empty(),"nodes":c.nodes.values().collect::<Vec<_>>(),"edges":edges}),
-        diagnostics: c.diagnostics,
+    if structural {
+        for (id, t) in &c.observed {
+            if let Some(n) = c.nodes.get_mut(id) {
+                n["structuralType"] = serde_json::to_value(structural_type(
+                    &resolve_types(&c.types, t),
+                    &c.scope_ids,
+                ))
+                .unwrap();
+            }
+        }
+        for (id, n) in &mut c.nodes {
+            if n["kind"] == "module"
+                || c.scopes
+                    .iter()
+                    .any(|s| s.names.values().any(|b| b.function && &b.id == id))
+            {
+                n["effect"] = json!(if c.effects.contains(id) {
+                    "conservative_effectful"
+                } else {
+                    "not_flagged"
+                });
+            }
+        }
     }
+    let graph = json!({"schemaVersion":1,"producer":"luma-0.1C","valid":c.diagnostics.is_empty(),"nodes":c.nodes.values().collect::<Vec<_>>(),"edges":edges});
+    let document = structural
+        .then(|| crate::structural::build(&c.sources, &c.source_programs, &graph, &c.diagnostics));
+    (
+        Report {
+            runtime_gates: c.runtime_gates,
+            programs: c.programs,
+            graph,
+            diagnostics: c.diagnostics,
+        },
+        document,
+    )
 }
 fn resolve_types(types: &[Option<Ty>], t: &Ty) -> Ty {
     match t {
@@ -885,5 +990,26 @@ fn unresolved(t: &Ty) -> bool {
         Ty::Array(t) => unresolved(t),
         Ty::Function(a, r) => a.iter().any(unresolved) || unresolved(r),
         _ => false,
+    }
+}
+
+fn structural_type(t: &Ty, scopes: &BTreeMap<usize, String>) -> crate::structural::Type {
+    use crate::structural::Type;
+    match t {
+        Ty::Var(_) => Type::Unresolved,
+        Ty::Number => Type::Number,
+        Ty::String => Type::String,
+        Ty::Bool => Type::Bool,
+        Ty::Unit => Type::Unit,
+        Ty::Array(t) => Type::Array {
+            element: Box::new(structural_type(t, scopes)),
+        },
+        Ty::Function(a, r) => Type::Function {
+            parameters: a.iter().map(|t| structural_type(t, scopes)).collect(),
+            result: Box::new(structural_type(r, scopes)),
+        },
+        Ty::Scope(s) => Type::Namespace {
+            target: scopes[s].clone(),
+        },
     }
 }
