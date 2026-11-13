@@ -38,7 +38,8 @@ pub struct Report {
     pub graph: Value,
 }
 #[derive(Default)]
-struct Checker {
+struct Checker<'a> {
+    snapshot: Option<&'a BTreeMap<String, String>>,
     structural: bool,
     root: PathBuf,
     sources: BTreeMap<String, String>,
@@ -82,7 +83,7 @@ fn inner(n: &Node) -> &Node {
         n
     }
 }
-impl Checker {
+impl Checker<'_> {
     fn fresh(&mut self) -> Ty {
         let i = self.types.len();
         self.types.push(None);
@@ -732,7 +733,12 @@ impl Checker {
         }
     }
     fn load(&mut self, path: &Path) -> Option<usize> {
-        let path = match path.canonicalize() {
+        let resolved = if self.snapshot.is_some() {
+            Ok(path.to_path_buf())
+        } else {
+            path.canonicalize()
+        };
+        let path = match resolved {
             Ok(p) => p,
             Err(e) => {
                 self.fail("E_IMPORT", Span { start: 0, end: 0 }, e.to_string());
@@ -750,7 +756,17 @@ impl Checker {
         if let Some(s) = self.modules.get(&path) {
             return Some(*s);
         }
-        let source = match std::fs::read_to_string(&path) {
+        let source = if let Some(files) = self.snapshot {
+            files
+                .get(path.to_str().unwrap_or_default())
+                .cloned()
+                .ok_or_else(|| {
+                    std::io::Error::other(format!("missing snapshot module {}", path.display()))
+                })
+        } else {
+            std::fs::read_to_string(&path)
+        };
+        let source = match source {
             Ok(s) => s,
             Err(e) => {
                 self.fail("E_IMPORT", Span { start: 0, end: 0 }, e.to_string());
@@ -815,19 +831,35 @@ fn crate_name(n: &Node) -> &str {
     name(n)
 }
 pub fn check(path: impl AsRef<Path>) -> Report {
-    check_impl(path.as_ref(), false).0
+    check_impl(path.as_ref(), false, None).0
 }
 pub(crate) fn check_structural(path: &Path) -> crate::structural::Document {
-    check_impl(path, true).1.unwrap()
+    check_impl(path, true, None).1.unwrap()
 }
-fn check_impl(path: &Path, structural: bool) -> (Report, Option<crate::structural::Document>) {
+pub(crate) fn check_snapshot(
+    entry: &str,
+    files: &BTreeMap<String, String>,
+) -> (Report, crate::structural::Document) {
+    let (_, document) = check_impl(Path::new(entry), true, Some(files));
+    let report = check_impl(Path::new(entry), false, Some(files)).0;
+    (report, document.unwrap())
+}
+fn check_impl(
+    path: &Path,
+    structural: bool,
+    snapshot: Option<&BTreeMap<String, String>>,
+) -> (Report, Option<crate::structural::Document>) {
     let mut c = Checker {
+        snapshot,
         structural,
-        root: path
-            .canonicalize()
-            .ok()
-            .and_then(|p| p.parent().map(Path::to_path_buf))
-            .unwrap_or_default(),
+        root: if snapshot.is_some() {
+            PathBuf::new()
+        } else {
+            path.canonicalize()
+                .ok()
+                .and_then(|p| p.parent().map(Path::to_path_buf))
+                .unwrap_or_default()
+        },
         file: path.to_string_lossy().into(),
         ..Checker::default()
     };

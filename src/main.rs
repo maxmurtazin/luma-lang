@@ -1,6 +1,10 @@
 use std::{env, fs, process::ExitCode};
 fn main() -> ExitCode {
     let mut args: Vec<_> = env::args().skip(1).collect();
+    if args == ["edit"] {
+        return luma::edits::serve(std::io::stdin().lock(), std::io::stdout().lock())
+            .map_or(ExitCode::FAILURE, |()| ExitCode::SUCCESS);
+    }
     if args.first().map(String::as_str) == Some("ir") {
         if args.len() != 2 {
             eprintln!("Usage: luma ir <file.luma>");
@@ -45,7 +49,7 @@ fn main() -> ExitCode {
     }
     if args.first().map(String::as_str) != Some("check") || args.len() < 2 {
         eprintln!(
-            "Usage: luma check [--syntax-only] [--graph output.json] <file.luma> | luma run <file.luma> | luma ir <file.luma> | luma version"
+            "Usage: luma check [--syntax-only] [--graph output.json] <file.luma> | luma run <file.luma> | luma ir <file.luma> | luma edit | luma version"
         );
         return ExitCode::from(2);
     }
