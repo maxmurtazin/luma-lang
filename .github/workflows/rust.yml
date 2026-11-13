@@ -27,6 +27,7 @@ jobs:
       - run: python -m pip install jsonschema==4.23.0
       - run: cargo run --locked -- ir tests/fixtures/structural/main.luma > structural-ir.json
       - run: python tools/validate-structural.py structural-ir.json
+      - run: python tools/validate-edit-api.py
       - uses: actions/upload-artifact@v4
         with:
           name: structural-ir-v1

@@ -1,0 +1,352 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Luma structural edits request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "request": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action",
+            "entry",
+            "files"
+          ],
+          "properties": {
+            "action": {
+              "const": "open"
+            },
+            "entry": {
+              "type": "string",
+              "pattern": "^[a-z_][a-z0-9_]{0,63}\\.luma$"
+            },
+            "files": {
+              "type": "object",
+              "minProperties": 1,
+              "maxProperties": 16,
+              "propertyNames": {
+                "type": "string",
+                "pattern": "^[a-z_][a-z0-9_]{0,63}\\.luma$"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action"
+          ],
+          "properties": {
+            "action": {
+              "const": "snapshot"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action",
+            "proposal"
+          ],
+          "properties": {
+            "action": {
+              "const": "preview"
+            },
+            "proposal": {
+              "$ref": "#/$defs/proposal"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action",
+            "proposal"
+          ],
+          "properties": {
+            "action": {
+              "const": "commit"
+            },
+            "proposal": {
+              "$ref": "#/$defs/proposal"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action",
+            "entry",
+            "modules"
+          ],
+          "properties": {
+            "entry": {
+              "type": "string",
+              "pattern": "^[a-z_][a-z0-9_]{0,63}\\.luma$"
+            },
+            "action": {
+              "const": "open_disk"
+            },
+            "modules": {
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z_][a-z0-9_]{0,63}\\.luma$"
+              },
+              "maxItems": 16,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            }
+          }
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "operand": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "value"
+          ],
+          "properties": {
+            "kind": {
+              "const": "number"
+            },
+            "value": {
+              "type": "integer",
+              "minimum": -2147483648,
+              "maximum": 2147483647
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "value"
+          ],
+          "properties": {
+            "kind": {
+              "const": "bool"
+            },
+            "value": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "name"
+          ],
+          "properties": {
+            "kind": {
+              "const": "name"
+            },
+            "name": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+            }
+          }
+        }
+      ]
+    },
+    "proposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "expected_revision",
+        "operations"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "expected_revision": {
+          "type": "string"
+        },
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/operation"
+          }
+        }
+      }
+    },
+    "operation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "file",
+            "name"
+          ],
+          "properties": {
+            "kind": {
+              "const": "create_function"
+            },
+            "file": {
+              "type": "string",
+              "pattern": "^[a-z_][a-z0-9_]{0,63}\\.luma$"
+            },
+            "name": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "function",
+            "name"
+          ],
+          "properties": {
+            "kind": {
+              "const": "add_parameter"
+            },
+            "function": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "file",
+            "name",
+            "value"
+          ],
+          "properties": {
+            "kind": {
+              "const": "create_value"
+            },
+            "file": {
+              "type": "string",
+              "pattern": "^[a-z_][a-z0-9_]{0,63}\\.luma$"
+            },
+            "name": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+            },
+            "value": {
+              "$ref": "#/$defs/operand"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "file",
+            "callee",
+            "arguments"
+          ],
+          "properties": {
+            "kind": {
+              "const": "insert_call"
+            },
+            "file": {
+              "type": "string",
+              "pattern": "^[a-z_][a-z0-9_]{0,63}\\.luma$"
+            },
+            "callee": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 2,
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+              }
+            },
+            "arguments": {
+              "type": "array",
+              "maxItems": 16,
+              "items": {
+                "$ref": "#/$defs/operand"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "call",
+            "argument",
+            "value"
+          ],
+          "properties": {
+            "kind": {
+              "const": "connect"
+            },
+            "call": {
+              "type": "string"
+            },
+            "argument": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "value": {
+              "$ref": "#/$defs/operand"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "node"
+          ],
+          "properties": {
+            "kind": {
+              "const": "remove_node"
+            },
+            "node": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
