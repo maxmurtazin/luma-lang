@@ -335,13 +335,29 @@ mod tests {
     }
 
     #[test]
-    fn second_session_detects_stale_disk_snapshot() {
-        let (root, mut first) = fixture();
-        let mut second = open(root.path());
-        first.commit(&proposal(&first)).unwrap();
-        let error = second.commit(&proposal(&second)).unwrap_err();
-        assert_eq!(error.code, "source_conflict");
-        assert_eq!(open(root.path()).snapshot().ir, first.snapshot().ir);
+    fn concurrent_sessions_conflict_under_file_lock() {
+        let (root, first) = fixture();
+        let second = open(root.path());
+        let barrier = std::sync::Barrier::new(2);
+        let outcomes = std::thread::scope(|scope| {
+            [first, second]
+                .map(|mut workspace| {
+                    let barrier = &barrier;
+                    scope.spawn(move || {
+                        let proposal = proposal(&workspace);
+                        barrier.wait();
+                        workspace
+                            .commit(&proposal)
+                            .map(|snapshot| snapshot.ir.clone())
+                            .map_err(|error| error.code)
+                    })
+                })
+                .map(|worker| worker.join().unwrap())
+        });
+        assert_eq!(outcomes.iter().filter(|result| result.is_ok()).count(), 1);
+        assert!(outcomes.contains(&Err("source_conflict")));
+        let winning = outcomes.into_iter().find_map(Result::ok).unwrap();
+        assert_eq!(open(root.path()).snapshot().ir, winning);
     }
 
     #[test]

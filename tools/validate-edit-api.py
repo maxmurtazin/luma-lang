@@ -10,7 +10,7 @@ schema = json.loads(Path("schema/edit-request-v1.json").read_text(encoding="utf-
 Draft202012Validator.check_schema(schema)
 validator = Draft202012Validator(schema)
 ir_validator = Draft202012Validator(
-    json.loads(next(Path("schema").glob("*ir*v1.json")).read_text(encoding="utf-8"))
+    json.loads(Path("schema/structural-v1.json").read_text(encoding="utf-8"))
 )
 
 with tempfile.TemporaryDirectory(prefix="luma edit ") as directory:
