@@ -86,6 +86,34 @@
               "$ref": "#/$defs/proposal"
             }
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action",
+            "entry",
+            "modules"
+          ],
+          "properties": {
+            "entry": {
+              "type": "string",
+              "pattern": "^[a-z_][a-z0-9_]{0,63}\\.luma$"
+            },
+            "action": {
+              "const": "open_disk"
+            },
+            "modules": {
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z_][a-z0-9_]{0,63}\\.luma$"
+              },
+              "maxItems": 16,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            }
+          }
         }
       ]
     }

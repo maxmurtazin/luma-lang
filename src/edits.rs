@@ -3,6 +3,11 @@ use crate::{lex, parse, semantic, structural, Kind, Node, Span};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
+
+#[path = "edits_disk.rs"]
+mod disk;
+pub use disk::DiskWorkspace;
 
 pub const SCHEMA_VERSION: u32 = 1;
 pub const MAX_REQUEST_BYTES: usize = 128 * 1024;
@@ -452,6 +457,12 @@ fn operand(value: &Operand) -> Result<String, Failure> {
     })
 }
 
+fn valid_file(file: &str) -> bool {
+    file.strip_suffix(".luma")
+        .is_some_and(|stem| identifier(stem).is_ok())
+        && !file.bytes().any(|b| b.is_ascii_uppercase())
+}
+
 fn analyze(
     entry: &str,
     files: &BTreeMap<String, String>,
@@ -466,11 +477,7 @@ fn analyze(
     }
     let mut token_count = 0;
     for (file, source) in files {
-        if !file
-            .strip_suffix(".luma")
-            .is_some_and(|stem| identifier(stem).is_ok())
-            || file.bytes().any(|b| b.is_ascii_uppercase())
-        {
+        if !valid_file(file) {
             return Err(Failure::new(
                 "invalid_file",
                 "expected a lowercase sibling .luma filename",
@@ -518,6 +525,10 @@ enum Request {
         entry: String,
         files: BTreeMap<String, String>,
     },
+    OpenDisk {
+        entry: String,
+        modules: Vec<String>,
+    },
     Snapshot,
     Preview {
         proposal: Proposal,
@@ -534,7 +545,16 @@ struct Envelope {
     request: Request,
 }
 
-fn dispatch(workspace: &mut Option<Workspace>, bytes: &[u8]) -> Result<serde_json::Value, Failure> {
+enum Session {
+    Memory(Workspace),
+    Disk(DiskWorkspace),
+}
+
+fn dispatch(
+    workspace: &mut Option<Session>,
+    root: Option<&Path>,
+    bytes: &[u8],
+) -> Result<serde_json::Value, Failure> {
     let envelope: Envelope = serde_json::from_slice(bytes)
         .map_err(|e| Failure::new("invalid_request", e.to_string()))?;
     if envelope.schema_version != SCHEMA_VERSION {
@@ -543,32 +563,67 @@ fn dispatch(workspace: &mut Option<Workspace>, bytes: &[u8]) -> Result<serde_jso
             "expected schema_version 1",
         ));
     }
-    if let Request::Open { entry, files } = envelope.request {
+    if matches!(
+        &envelope.request,
+        Request::Open { .. } | Request::OpenDisk { .. }
+    ) {
         if workspace.is_some() {
             return Err(Failure::new(
                 "already_open",
                 "start a new session to open another workspace",
             ));
         }
-        *workspace = Some(Workspace::open(entry, files)?);
-        return Ok(serde_json::json!(workspace.as_ref().unwrap().snapshot()));
+        let session = match envelope.request {
+            Request::Open { entry, files } => Session::Memory(Workspace::open(entry, files)?),
+            Request::OpenDisk { entry, modules } => {
+                let root = root.ok_or_else(|| {
+                    Failure::new(
+                        "disk_disabled",
+                        "start luma edit --workspace to allow disk access",
+                    )
+                })?;
+                Session::Disk(DiskWorkspace::open(root, entry, modules)?)
+            }
+            _ => unreachable!(),
+        };
+        let snapshot = match &session {
+            Session::Memory(workspace) => serde_json::json!(workspace.snapshot()),
+            Session::Disk(workspace) => serde_json::json!(workspace.snapshot()),
+        };
+        *workspace = Some(session);
+        return Ok(snapshot);
     }
     let workspace = workspace
         .as_mut()
         .ok_or_else(|| Failure::new("not_open", "open a workspace first"))?;
-    Ok(match envelope.request {
-        Request::Open { .. } => unreachable!(),
-        Request::Snapshot => serde_json::json!(workspace.snapshot()),
-        Request::Preview { proposal } => serde_json::json!(workspace.preview(&proposal)?),
-        Request::Commit { proposal } => serde_json::json!(workspace.commit(&proposal)?),
+    Ok(match (workspace, envelope.request) {
+        (Session::Memory(w), Request::Snapshot) => serde_json::json!(w.snapshot()),
+        (Session::Disk(w), Request::Snapshot) => serde_json::json!(w.snapshot()),
+        (Session::Memory(w), Request::Preview { proposal }) => {
+            serde_json::json!(w.preview(&proposal)?)
+        }
+        (Session::Disk(w), Request::Preview { proposal }) => {
+            serde_json::json!(w.preview(&proposal)?)
+        }
+        (Session::Memory(w), Request::Commit { proposal }) => {
+            serde_json::json!(w.commit(&proposal)?)
+        }
+        (Session::Disk(w), Request::Commit { proposal }) => serde_json::json!(w.commit(&proposal)?),
+        (_, Request::Open { .. } | Request::OpenDisk { .. }) => unreachable!(),
     })
 }
 
 /// Run a JSON Lines session. An oversized frame returns a structured error
 /// and closes the session without reading the rest of that frame.
-pub fn serve(
+pub fn serve(reader: impl std::io::BufRead, writer: impl std::io::Write) -> std::io::Result<()> {
+    serve_workspace(reader, writer, None)
+}
+
+/// Enable disk operations only within the directory chosen by the host.
+pub fn serve_workspace(
     mut reader: impl std::io::BufRead,
     mut writer: impl std::io::Write,
+    root: Option<&Path>,
 ) -> std::io::Result<()> {
     use std::io::{BufRead, Read};
     let mut workspace = None;
@@ -585,7 +640,7 @@ pub fn serve(
         let result = if too_large {
             Err(Failure::new("limit", "request frame exceeds 128 KiB"))
         } else {
-            dispatch(&mut workspace, &line)
+            dispatch(&mut workspace, root, &line)
         };
         let reply = match result {
             Ok(result) => serde_json::json!({ "schema_version": SCHEMA_VERSION, "result": result }),
