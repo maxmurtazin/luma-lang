@@ -40,7 +40,6 @@ cargo run --locked -- cad plan examples/cad/plate-geometry.json --mode recipe
 python3 -B tools/cad/check-core-geometry.py /path/to/clean/core-checkout
 ```
 
-Интерфейс `geometry-plan/1` служит для локальной подготовки. Проектный
-адаптер будет отвечать за регистрацию идентичности в Core, работу со
-снимками и CAS, а также публикацию намерений View после commit.
-[Контракт CAD-0 и lock](README.md)
+Интерфейс `geometry-plan/1` служит для локальной подготовки. Применение
+через Core доступно в отдельном локальном профиле ProjectStore.
+[Адаптер проекта и CAS](core-project.md) · [Контракт CAD-0 и lock](README.md)

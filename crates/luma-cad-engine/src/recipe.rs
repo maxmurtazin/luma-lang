@@ -169,17 +169,7 @@ impl ParameterHost {
                     .map(|(name, operation)| operation.descriptor(name)),
             ),
         )?;
-        let scope = {
-            let mut next = NEXT_SCOPE.lock().map_err(|_| poisoned())?;
-            let scope = *next;
-            *next = scope.checked_add(1).ok_or_else(|| {
-                Error::new(
-                    "ParameterScopeExhausted",
-                    "could not allocate a preparation scope",
-                )
-            })?;
-            scope
-        };
+        let scope = next_scope()?;
         Ok(Self {
             units,
             registry,
@@ -465,6 +455,18 @@ fn bad_handle() -> Error {
         "InvalidParameterHandle",
         "expected a typed local parameter handle",
     )
+}
+
+pub(crate) fn next_scope() -> Result<u64, Error> {
+    let mut next = NEXT_SCOPE.lock().map_err(|_| poisoned())?;
+    let scope = *next;
+    *next = scope.checked_add(1).ok_or_else(|| {
+        Error::new(
+            "ParameterScopeExhausted",
+            "could not allocate a preparation scope",
+        )
+    })?;
+    Ok(scope)
 }
 
 fn poisoned() -> Error {

@@ -65,3 +65,17 @@ pub fn prepare_geometry_edits<'a>(
         .map_err(PreparationError::Parameters)?;
     prepare_geometry(accepted_recipe, &edited, expression_budget)
 }
+
+/// Execute a command against one admitted Part and return its isolated overlay.
+pub fn prepare_command(
+    bundle: &host::SourceBundle,
+    part: String,
+    inherited: &ParameterSnapshot,
+    expression_budget: usize,
+) -> Result<ParameterSnapshot, PreparationError> {
+    let session = luma_cad_engine::CommandHost::new(part, inherited.clone())
+        .map_err(PreparationError::Parameters)?;
+    host::run_with_host(bundle, host::Mode::Command, &session, expression_budget)
+        .map_err(PreparationError::Execution)?;
+    session.finish().map_err(PreparationError::Parameters)
+}
