@@ -1,0 +1,189 @@
+[
+  {
+    "name": "unicode-and-controls",
+    "domain": "luma.cad.fixture",
+    "typed": {
+      "é": "precomposed /",
+      "é": "decomposed",
+      "😀": "\n\\r\t\u0000"
+    },
+    "canonical_utf8": "{\"é\":\"decomposed\",\"é\":\"precomposed /\",\"😀\":\"\\u000a\\\\r\\u0009\\u0000\"}",
+    "digest": "sha256:326919cf21a984cdbf454b5fb7f129286453caefffaec9eb67863fdca2f3a607"
+  },
+  {
+    "name": "f64-bits",
+    "domain": "luma.cad.fixture",
+    "typed": {
+      "$f64": "0.125"
+    },
+    "canonical_utf8": "{\"$f64\":\"3fc0000000000000\"}",
+    "digest": "sha256:5065afc78a7ccd5521246fafb7d268f964815e86ccf70271cca386b945887869",
+    "equivalent": {
+      "$f64": "125e-3"
+    }
+  },
+  {
+    "name": "negative-zero",
+    "domain": "luma.cad.fixture",
+    "typed": {
+      "$f64": "-0.00"
+    },
+    "canonical_utf8": "{\"$f64\":\"0000000000000000\"}",
+    "digest": "sha256:86b410901b430cfe5c74aea791a8c871445f261d18735115b0b37c7a6f1c3a14",
+    "equivalent": {
+      "$f64": "0"
+    }
+  },
+  {
+    "name": "integer-bounds",
+    "domain": "luma.cad.fixture",
+    "typed": [
+      {
+        "$u64": "18446744073709551615"
+      },
+      {
+        "$i64": "-9223372036854775808"
+      }
+    ],
+    "canonical_utf8": "[{\"$u64\":\"18446744073709551615\"},{\"$i64\":\"-9223372036854775808\"}]",
+    "digest": "sha256:4193080564278858ebc604dfdc3a0eb1fd8202cf2637f90d0aedc1fb3dd097c1"
+  },
+  {
+    "name": "rational",
+    "domain": "luma.cad.fixture",
+    "typed": {
+      "$rational": {
+        "numerator": "-6",
+        "denominator": "8"
+      }
+    },
+    "canonical_utf8": "{\"$rational\":{\"denominator\":\"4\",\"numerator\":\"-3\"}}",
+    "digest": "sha256:75a7efe2a6b84a6473f342c8fac118805ad3b643b7ce37657206b66c1e7bc160"
+  },
+  {
+    "name": "set-versus-command-order",
+    "domain": "luma.cad.plan",
+    "typed": {
+      "ordered": [
+        "z",
+        "a"
+      ],
+      "set": {
+        "$fixture_keyed_set": [
+          {
+            "key": "z"
+          },
+          {
+            "key": "a"
+          }
+        ]
+      }
+    },
+    "canonical_utf8": "{\"ordered\":[\"z\",\"a\"],\"set\":[{\"key\":\"a\"},{\"key\":\"z\"}]}",
+    "digest": "sha256:70ce7efba602f612927d6a7613a4f96857c44a69b2802d9a9be8c457842d41f7"
+  },
+  {
+    "name": "logical-plan-ref",
+    "domain": "luma.cad.plan",
+    "typed": {
+      "$fixture_plan_ref": {
+        "logical_key": "blank",
+        "producer_output": "solid",
+        "preparation_scope": "scratch-001"
+      }
+    },
+    "canonical_utf8": "{\"logical_key\":\"blank\",\"producer_output\":\"solid\"}",
+    "digest": "sha256:bf24b0464c4fd77d584f85d7296082c5f489545a4b0a3ac8d915685418851c4d",
+    "equivalent": {
+      "$fixture_plan_ref": {
+        "logical_key": "blank",
+        "producer_output": "solid",
+        "preparation_scope": "scratch-002"
+      }
+    }
+  },
+  {
+    "name": "recipe-arena-order",
+    "domain": "luma.cad.semantic",
+    "typed": {
+      "$fixture_recipe": [
+        {
+          "key": "c",
+          "dependencies": [
+            "a"
+          ]
+        },
+        {
+          "key": "b",
+          "dependencies": []
+        },
+        {
+          "key": "a",
+          "dependencies": []
+        }
+      ]
+    },
+    "canonical_utf8": "[{\"dependencies\":[],\"key\":\"a\"},{\"dependencies\":[],\"key\":\"b\"},{\"dependencies\":[\"a\"],\"key\":\"c\"}]",
+    "digest": "sha256:c74d798508900c27209e43c93cc9566b3b1fe48c8d466265fb16d4b891bcacf7",
+    "equivalent": {
+      "$fixture_recipe": [
+        {
+          "key": "b",
+          "dependencies": []
+        },
+        {
+          "key": "a",
+          "dependencies": []
+        },
+        {
+          "key": "c",
+          "dependencies": [
+            "a"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "source-exact-utf8",
+    "domain": "luma.cad.source",
+    "typed": {
+      "bundle_version": {
+        "$u64": "1"
+      },
+      "entry": "main.luma",
+      "files": {
+        "main.luma": "# a\nx = 1\n"
+      }
+    },
+    "canonical_utf8": "{\"bundle_version\":{\"$u64\":\"1\"},\"entry\":\"main.luma\",\"files\":{\"main.luma\":\"# a\\u000ax = 1\\u000a\"}}",
+    "digest": "sha256:692aa0e3b9d781daaf14bfb98128007ce4cba1d51b6607c5f065e9fe1bddc81a"
+  },
+  {
+    "name": "source-comment-change",
+    "domain": "luma.cad.source",
+    "typed": {
+      "bundle_version": {
+        "$u64": "1"
+      },
+      "entry": "main.luma",
+      "files": {
+        "main.luma": "# b\nx = 1\n"
+      }
+    },
+    "canonical_utf8": "{\"bundle_version\":{\"$u64\":\"1\"},\"entry\":\"main.luma\",\"files\":{\"main.luma\":\"# b\\u000ax = 1\\u000a\"}}",
+    "digest": "sha256:0ef07c97be6a32e3d616e33441f38caf9bf5cdd9edf5fd9b2b603874b255862c"
+  },
+  {
+    "name": "semantic-without-comment",
+    "domain": "luma.cad.semantic",
+    "typed": {
+      "assign": "x",
+      "value": {
+        "$f64": "1"
+      }
+    },
+    "canonical_utf8": "{\"assign\":\"x\",\"value\":{\"$f64\":\"3ff0000000000000\"}}",
+    "digest": "sha256:bbf7154ff7f7b34f9534f2778728845c3dd6604ae0c3576776cfc70f527494eb"
+  }
+]

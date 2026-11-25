@@ -1,4 +1,4 @@
-# Luma 0.1.2
+# Luma 0.1.3
 
 A bounded Rust interpreter with static inference, functions, arrays, structural objects, sibling modules, match, pipelines, and map/filter/reduce/sum/repeat/isolated CPU parallel.
 
@@ -21,3 +21,8 @@ Windows CI tests installation, repeated installation, CLI/graph export, isolated
 ## Structural Core S0/S1
 
 Read-only typed export: `luma ir main.luma`. Rust API: `luma::structural::analyze(path)`. [S0 audit](docs/structural-core-s0.md), [S1 contract](docs/structural-core-s1.md), [JSON Schema](schema/structural-v1.json). Existing checker, runtime, Graph Explorer and VSIX remain supported. Build current source for this additive API; no new installer release is implied.
+
+## Luma CAD
+
+[Проект спецификации Luma CAD v1.0](spec/cad/Luma-CAD-Development-Specification-v1.0-RU.md) ·
+[Границы CAD-0 и статус интеграции](docs/cad/README.md)
