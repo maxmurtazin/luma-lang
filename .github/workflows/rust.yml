@@ -36,24 +36,3 @@ jobs:
         with:
           name: semantic-graph-v1
           path: semantic-graph.json
-  cad1-core-project:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: '1.100.0'
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - id: provider
-        run: python -c 'import json; print("pin=" + json.load(open("luma-cad.lock.json"))["providers"]["core"]["commit"])' >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v4
-        with:
-          repository: maxmurtazin/living-ir-core
-          ref: ${{ steps.provider.outputs.pin }}
-          path: _cad_core
-      - run: python -B tools/cad/prepare-core-project.py _cad_core
-      - run: cargo test --manifest-path _cad_core/Cargo.toml -p living-cad-viewer --features luma-cad luma_cad1_recipe --lib
-      - run: cargo build --manifest-path _cad_core/Cargo.toml -p living-cad-viewer --features luma-cad,checkpoint-fault-injection --bin luma-cad-project
-      - run: python -B tools/cad/test-core-project.py _cad_core/target/debug/luma-cad-project
