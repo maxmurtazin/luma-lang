@@ -215,13 +215,10 @@ impl ParameterHost {
     }
 
     fn wrap<T: Serialize>(&self, kind: Kind, family: &str, value: T) -> Result<Value, Error> {
-        kind.wrap(
-            family,
-            Scoped {
-                scope: self.scope,
-                value,
-            },
-        )
+        let Type::Opaque(type_name) = kind.opaque_type(family) else {
+            unreachable!()
+        };
+        self.wrap_handle(&type_name, value)
     }
 
     fn unwrap<T: for<'de> Deserialize<'de>>(
@@ -230,10 +227,33 @@ impl ParameterHost {
         kind: Kind,
         family: &str,
     ) -> Result<T, Error> {
+        let Type::Opaque(type_name) = kind.opaque_type(family) else {
+            unreachable!()
+        };
+        self.unwrap_handle(value, &type_name)
+    }
+
+    pub(crate) fn wrap_handle<T: Serialize>(&self, name: &str, value: T) -> Result<Value, Error> {
+        let payload = serde_json::to_value(Scoped {
+            scope: self.scope,
+            value,
+        })
+        .map_err(|error| Error::new("ParameterEncoding", error.to_string()))?;
+        Ok(Value::Opaque {
+            type_name: name.into(),
+            payload,
+        })
+    }
+
+    pub(crate) fn unwrap_handle<T: for<'de> Deserialize<'de>>(
+        &self,
+        value: &Value,
+        name: &str,
+    ) -> Result<T, Error> {
         let Value::Opaque { type_name, payload } = value else {
             return Err(bad_handle());
         };
-        if kind.opaque_type(family) != Type::Opaque(type_name.clone()) {
+        if name != type_name {
             return Err(bad_handle());
         }
         let handle: Scoped<T> =
@@ -241,7 +261,7 @@ impl ParameterHost {
         if handle.scope != self.scope {
             return Err(Error::new(
                 "ForeignParameterHandle",
-                "parameter handle belongs to another preparation",
+                "host handle belongs to another preparation",
             ));
         }
         Ok(handle.value)
@@ -295,7 +315,7 @@ impl ParameterHost {
         update(entry, kind)
     }
 
-    fn expression(
+    pub(crate) fn expression(
         &self,
         argument: &Value,
         kind: Kind,

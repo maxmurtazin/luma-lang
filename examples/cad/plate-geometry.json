@@ -1,0 +1,8 @@
+{
+  "bundle_version": 1,
+  "entry": "plate.luma",
+  "files": {
+    "plate.luma": "use units\nuse param\nuse cad\nuse view\n\nwidth = param.length(\"width\", units.mm(100))\nheight = param.length(\"height\", units.mm(60))\nthickness = param.length(\"thickness\", units.mm(8))\ndiameter = param.length(\"diameter\", units.mm(6))\n\nhole_x = param.subtract(param.scale(width, 0.5), units.mm(10))\n\nblank = cad.plate(\"blank\", width, height, thickness)\nleft = cad.through_hole(\n    \"left_hole\",\n    blank,\n    diameter,\n    param.negate(hole_x),\n    units.mm(0)\n)\npart = cad.through_hole(\n    \"right_hole\",\n    left,\n    diameter,\n    hole_x,\n    units.mm(0)\n)\n\ncad.output(\"solid\", part)\nscene = view.from_body(part)\nview.show(scene)\n"
+  },
+  "source_digest": "sha256:8a60c3236eda4525150442bb19cca3b38a075a290f82dde6c1e49330494fe7d6"
+}
