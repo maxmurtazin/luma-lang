@@ -41,8 +41,17 @@ pub struct Report {
     pub diagnostics: Vec<(String, Diagnostic)>,
     pub graph: Value,
 }
+struct HostMapping {
+    file: String,
+    span: Span,
+    input: Ty,
+    output: Ty,
+    types: BTreeMap<HostType, HostType>,
+}
+
 #[derive(Default)]
 struct Checker<'a> {
+    host_mappings: Vec<HostMapping>,
     host: Option<(&'a SourceBundle, &'a Registry, Mode)>,
     host_variables: Vec<(String, Span, Ty, BTreeSet<HostType>)>,
     structural: bool,
@@ -352,25 +361,56 @@ impl Checker<'_> {
         for (parameter, arg) in descriptor.parameters.iter().zip(args) {
             let expected = match parameter {
                 Parameter::Exact(ty) => from_host_type(ty),
-                Parameter::Variable { slot, accepts } => slots
-                    .entry(*slot)
-                    .or_insert_with(|| {
-                        let t = self.fresh();
-                        self.host_variables.push((
-                            self.file.clone(),
-                            span,
-                            t.clone(),
-                            accepts.clone(),
-                        ));
-                        t
-                    })
-                    .clone(),
+                Parameter::Variable { slot, accepts } => {
+                    let t = slots.entry(*slot).or_insert_with(|| self.fresh()).clone();
+                    self.host_variables
+                        .push((self.file.clone(), span, t.clone(), accepts.clone()));
+                    t
+                }
+                Parameter::Mapped { slot, types } => {
+                    let output = slots.entry(*slot).or_insert_with(|| self.fresh()).clone();
+                    self.host_mappings.push(HostMapping {
+                        file: self.file.clone(),
+                        span,
+                        input: arg,
+                        output,
+                        types: types.clone(),
+                    });
+                    continue;
+                }
             };
             self.unify(expected, arg, span);
         }
         match &descriptor.result {
             ResultType::Exact(ty) => from_host_type(ty),
             ResultType::Variable(slot) => slots[slot].clone(),
+        }
+    }
+    fn solve_host_mappings(&mut self) {
+        let mut pending = std::mem::take(&mut self.host_mappings);
+        while !pending.is_empty() {
+            let before = pending.len();
+            pending.retain(|mapping| {
+                let input = self.resolve(&mapping.input);
+                if matches!(input, Ty::Var(_)) {
+                    return true;
+                }
+                self.file.clone_from(&mapping.file);
+                if let Some(output) = to_host_type(&input).and_then(|ty| mapping.types.get(&ty)) {
+                    self.unify(mapping.output.clone(), from_host_type(output), mapping.span);
+                } else {
+                    self.fail(
+                        "HostTypeMismatch",
+                        mapping.span,
+                        format!("type {input:?} is outside the host signature"),
+                    );
+                }
+                false
+            });
+            if before == pending.len() {
+                // The regular inference obligations report unresolved arguments.
+                break;
+            }
         }
     }
     fn invoke_inner(&mut self, scope: usize, callee: &Node, args: Vec<Ty>, span: Span) -> Ty {
@@ -968,6 +1008,7 @@ fn check_impl(
         ..Checker::default()
     };
     c.load(path);
+    c.solve_host_mappings();
     loop {
         let before = (c.effects.len(), c.captures.len());
         for (a, b) in &c.calls {

@@ -7,7 +7,7 @@ use luma_host_api::{
 pub use source::source_digest;
 use std::collections::BTreeSet;
 
-const SEALED_MODULES: &[&str] = &[
+pub const SEALED_MODULES: &[&str] = &[
     "cad", "units", "param", "project", "sketch", "draft", "drawing", "implicit", "brep",
     "lattice", "assembly", "elements", "voxel", "sim", "view", "studio", "render", "jobs",
     "artifact",

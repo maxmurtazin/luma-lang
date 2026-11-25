@@ -1,0 +1,11 @@
+[package]
+name = "luma-cad-engine"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+luma-cad-contract = { path = "../luma-cad-contract" }
+luma-host-api = { path = "../luma-host-api" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

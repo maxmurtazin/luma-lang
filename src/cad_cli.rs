@@ -58,9 +58,19 @@ pub fn run(args: &[String]) -> ExitCode {
             )
         };
         let bundle = wire.admit().map_err(describe_failure)?;
-        let units = luma_cad_contract::UnitsHost::new();
-        host::check_with_host(&bundle, mode, units.registry()).map_err(describe_failure)?;
-        Ok(json!({ "valid": true, "mode": mode, "profile": "units-v1" }))
+        let session =
+            luma::cad_engine::ParameterHost::new(Default::default()).map_err(|problem| {
+                (
+                    5,
+                    json!({ "code": problem.code, "message": problem.message }),
+                )
+            })?;
+        host::check_with_host(&bundle, mode, session.registry()).map_err(describe_failure)?;
+        let profile = match mode {
+            host::Mode::Recipe => "recipe-parameters-v1",
+            host::Mode::Command => "units-v1",
+        };
+        Ok(json!({ "valid": true, "mode": mode, "profile": profile }))
     };
     let mut envelope = json!({ "protocol": "luma.cad.host-check/1", "schema_version": 1 });
     let (code, field, value) = match report() {
