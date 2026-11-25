@@ -1,0 +1,8 @@
+{
+  "bundle_version": 1,
+  "entry": "plate.luma",
+  "files": {
+    "plate.luma": "use units\nuse param\n\nwidth = param.length(\"width\", units.mm(100))\nbounded = param.bounds(width, units.mm(10), units.mm(150))\nhole_x = param.subtract(param.scale(bounded, 0.5), units.mm(10))\nopposite = param.negate(hole_x)\n"
+  },
+  "source_digest": "sha256:4fbbdf8080102b2a64a9de49ced48327c8b5c3f67e995b76009a00ffc7a49410"
+}

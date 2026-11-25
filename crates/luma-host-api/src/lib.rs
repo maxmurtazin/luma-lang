@@ -32,7 +32,16 @@ pub enum Type {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum Parameter {
     Exact(Type),
-    Variable { slot: u8, accepts: BTreeSet<Type> },
+    Variable {
+        slot: u8,
+        accepts: BTreeSet<Type>,
+    },
+    /// Map distinct admitted argument types into one finite signature variable.
+    Mapped {
+        slot: u8,
+        #[serde(with = "type_pairs")]
+        types: BTreeMap<Type, Type>,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -171,17 +180,17 @@ impl Descriptor {
         }
         let mut slots = BTreeMap::new();
         for parameter in &self.parameters {
-            if let Parameter::Variable { slot, accepts } = parameter {
-                if accepts.is_empty()
-                    || slots
-                        .insert(*slot, accepts)
-                        .is_some_and(|earlier| earlier != accepts)
-                {
-                    return invalid(
-                        "every occurrence of a type variable must have the same finite domain",
-                    );
-                }
+            let (slot, domain) = match parameter {
+                Parameter::Exact(_) => continue,
+                Parameter::Variable { slot, accepts } => (*slot, accepts.clone()),
+                Parameter::Mapped { slot, types } => (*slot, types.values().cloned().collect()),
+            };
+            if domain.is_empty() || slots.get(&slot).is_some_and(|earlier| earlier != &domain) {
+                return invalid(
+                    "every occurrence of a type variable must have the same finite domain",
+                );
             }
+            slots.insert(slot, domain);
         }
         if matches!(self.result, ResultType::Variable(slot) if !slots.contains_key(&slot)) {
             return invalid("result refers to an unbound type variable");
@@ -219,6 +228,9 @@ impl Descriptor {
                 Parameter::Variable { slot, accepts } => {
                     accepts.contains(actual) && *slots.entry(*slot).or_insert(actual) == actual
                 }
+                Parameter::Mapped { slot, types } => types
+                    .get(actual)
+                    .is_some_and(|mapped| *slots.entry(*slot).or_insert(mapped) == mapped),
             };
             if !matches {
                 return Err(Error::new(
@@ -245,7 +257,8 @@ impl Descriptor {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct CallSite {
     pub file: String,
     pub start: usize,
@@ -264,4 +277,30 @@ pub trait Dispatch: Sync {
         site: &CallSite,
         arguments: &[Value],
     ) -> Result<Value, Error>;
+}
+
+mod type_pairs {
+    use super::Type;
+    use serde::{Deserialize, Serialize};
+    use std::collections::BTreeMap;
+
+    pub fn serialize<S: serde::Serializer>(
+        types: &BTreeMap<Type, Type>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        types.iter().collect::<Vec<_>>().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<BTreeMap<Type, Type>, D::Error> {
+        use serde::de::Error;
+        let pairs = Vec::<(Type, Type)>::deserialize(deserializer)?;
+        let length = pairs.len();
+        let types: BTreeMap<_, _> = pairs.into_iter().collect();
+        if types.len() != length {
+            return Err(D::Error::custom("duplicate type mapping"));
+        }
+        Ok(types)
+    }
 }

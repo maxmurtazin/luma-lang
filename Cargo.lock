@@ -73,6 +73,7 @@ name = "luma"
 version = "0.1.3"
 dependencies = [
  "luma-cad-contract",
+ "luma-cad-engine",
  "luma-host-api",
  "serde",
  "serde_json",
@@ -85,6 +86,16 @@ dependencies = [
  "luma-host-api",
  "serde_json",
  "sha2",
+]
+
+[[package]]
+name = "luma-cad-engine"
+version = "0.1.0"
+dependencies = [
+ "luma-cad-contract",
+ "luma-host-api",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
