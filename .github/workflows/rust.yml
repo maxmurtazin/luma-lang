@@ -20,6 +20,9 @@ jobs:
       - run: node tools/test-examples.cjs
       - run: node tools/test-doc-examples.cjs
       - run: cargo test --locked
+      - run: cargo fmt --manifest-path crates/luma-cad-jobs/Cargo.toml --check
+      - run: cargo clippy --locked --manifest-path crates/luma-cad-jobs/Cargo.toml --all-targets -- -D warnings
+      - run: cargo test --locked --manifest-path crates/luma-cad-jobs/Cargo.toml
       - run: cargo run --locked -- check --graph semantic-graph.json conformance/cases/module-public/main.luma
       - uses: actions/setup-python@v5
         with:
