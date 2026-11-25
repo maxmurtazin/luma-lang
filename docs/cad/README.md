@@ -2,7 +2,7 @@
 
 [Спецификация LCAD-SPEC-001 v1.0](../../spec/cad/Luma-CAD-Development-Specification-v1.0-RU.md) ·
 [Возможности (RU)](capabilities-ru.md) · [Capabilities (EN)](capabilities-en.md) ·
-[Lock](../../luma-cad.lock.json)
+[Lock](../../luma-cad.lock.json) · [CAD-1 · host API](host-api.md)
 
 - [ADR 001 · Компоненты и authority](../../spec/cad/adr-001-authority.md)
 - [ADR 002 · Каноническая граница Sketch/Profile](../../spec/cad/adr-002-sketch-profile.md)

@@ -1,4 +1,6 @@
 //! Syntax frontend. Spans are half-open UTF-8 byte offsets in one source file.
+pub mod host;
+pub use luma_host_api as host_api;
 pub mod runtime;
 pub mod semantic;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -6,5 +6,7 @@ license = "MIT"
 description = "Luma bounded checker and execution core"
 
 [dependencies]
+luma-cad-contract = { path = "crates/luma-cad-contract" }
+luma-host-api = { path = "crates/luma-host-api" }
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }

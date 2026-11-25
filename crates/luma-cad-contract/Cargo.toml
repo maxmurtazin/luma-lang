@@ -1,0 +1,10 @@
+[package]
+name = "luma-cad-contract"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+sha2 = "0.10"
+luma-host-api = { path = "../luma-host-api" }
+serde_json = "1"
