@@ -285,7 +285,7 @@ fn cli_checks_the_parameter_bundle_in_recipe_mode() {
     let result = run("recipe");
     assert!(result.status.success(), "{:?}", result);
     let json: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
-    assert_eq!(json["result"]["profile"], "recipe-parameters-v1");
+    assert_eq!(json["result"]["profile"], "recipe-geometry-v1");
     let rejected = run("command");
     assert_eq!(rejected.status.code(), Some(3));
     let json: serde_json::Value = serde_json::from_slice(&rejected.stdout).unwrap();
