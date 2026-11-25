@@ -1,0 +1,115 @@
+{
+  "status": "PASS",
+  "core_revision": "e8d5a465dbc943b746ce9f3607fe526f1b3a93df",
+  "chromium": "156.0.8078.79",
+  "platform": "linux",
+  "adapter": "SwiftShader",
+  "legacy": {
+    "pin": {
+      "definition_hash": "5085c27c9297edd7c030a0066f95aec9e5946dda70003b32f5a4223773e90cdf",
+      "document_id": "10000000-0000-4000-8000-000000000020",
+      "native_revision": 2,
+      "output_ref": {
+        "entityId": "10000000-0000-4000-8000-000000000070",
+        "port": "solid"
+      },
+      "project_id": "10000000-0000-4000-8000-000000000010"
+    },
+    "mesh": {
+      "positions": [
+        {
+          "index": 0,
+          "metres": [
+            -0.023869821548461914,
+            -0.01288597297668457,
+            -0.004433222770690918
+          ]
+        },
+        {
+          "index": 2140,
+          "metres": [
+            -0.0031485323905944824,
+            -0.00312515926361084,
+            -0.0045
+          ]
+        },
+        {
+          "index": 7491,
+          "metres": [
+            -0.012262999534606933,
+            0.013,
+            0.0001120000034570694
+          ]
+        },
+        {
+          "index": 14981,
+          "metres": [
+            0.0238159236907959,
+            0.012834067344665528,
+            0.004387144088745117
+          ]
+        }
+      ],
+      "indices_sha256": "cbd03d19098c1460b086f4eba6bd3aeb7a77603063f38e80f165e2414435ec3a",
+      "magic": "LIRVIEW1",
+      "revision": "2",
+      "vertices": 14982,
+      "triangles": 29960,
+      "artifact": "b33ed0e8f0a11e55740253e946acb95514abcc68d20bbaedc158447880e76c5d"
+    },
+    "sampled_max_error_m": 8.121132846067303e-10
+  },
+  "paths": [
+    [
+      "10000000-0000-4000-8000-000000000040"
+    ],
+    [
+      "10000000-0000-4000-8000-000000000060",
+      "10000000-0000-4000-8000-000000000050"
+    ]
+  ],
+  "shared_geometry": {
+    "cpu_resource_bytes": 539304,
+    "curve_gpu_bytes": 393216,
+    "extent": [
+      620,
+      548
+    ],
+    "geometry_resources": 1,
+    "geometry_uploads": 2,
+    "gpu_geometry_bytes": 734952,
+    "sampled_field_instances": 0,
+    "submitted_mesh_triangles": 59920,
+    "target_bytes": 13590432,
+    "unresolved_field_instances": 0,
+    "visible_instances": 2
+  },
+  "after_repin": {
+    "cpu_resource_bytes": 1287264,
+    "curve_gpu_bytes": 393216,
+    "extent": [
+      620,
+      548
+    ],
+    "geometry_resources": 2,
+    "geometry_uploads": 5,
+    "gpu_geometry_bytes": 1752144,
+    "sampled_field_instances": 0,
+    "submitted_mesh_triangles": 71512,
+    "target_bytes": 13590432,
+    "unresolved_field_instances": 0,
+    "visible_instances": 2
+  },
+  "updated_pin": {
+    "definition_hash": "81e7c7c6142db7817bca4d66665423b02f664bce4b9fea8e038511493250cc87",
+    "document_id": "10000000-0000-4000-8000-000000000020",
+    "native_revision": 3,
+    "output_ref": {
+      "entityId": "10000000-0000-4000-8000-000000000070",
+      "port": "solid"
+    },
+    "project_id": "10000000-0000-4000-8000-000000000010"
+  },
+  "restart": "identical scene and mesh packet",
+  "camera_and_quality_model_commits": 0
+}

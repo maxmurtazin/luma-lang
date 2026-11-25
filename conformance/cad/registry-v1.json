@@ -1,0 +1,1354 @@
+{
+  "schema_version": 1,
+  "sealed_modules": [
+    "cad",
+    "units",
+    "param",
+    "project",
+    "sketch",
+    "draft",
+    "drawing",
+    "implicit",
+    "brep",
+    "lattice",
+    "assembly",
+    "elements",
+    "voxel",
+    "sim",
+    "view",
+    "studio",
+    "render",
+    "jobs",
+    "artifact"
+  ],
+  "capabilities": {
+    "brep.extrude": {
+      "descriptor": {
+        "qualified_name": "brep.extrude",
+        "operation_id": "brep.extrude",
+        "operation_version": {
+          "major": 1,
+          "minor": 0
+        },
+        "parameters": [
+          {
+            "name": "key",
+            "type": "StableKey"
+          },
+          {
+            "name": "profile",
+            "type": "ProfileRef"
+          },
+          {
+            "name": "height",
+            "type": "LengthInput"
+          }
+        ],
+        "result_type": "BodyRef",
+        "type_scheme": {
+          "kind": "monomorphic"
+        },
+        "effects": [
+          "BuildPlan"
+        ],
+        "modes": [
+          "recipe",
+          "command"
+        ],
+        "phases": [
+          "prepare"
+        ],
+        "capability_predicates": [
+          "brep.extrude"
+        ],
+        "diagnostic_codes": [
+          "UnsupportedCapability",
+          "UnsupportedSchemaVersion"
+        ],
+        "provider_contract": "brep@e1c266a18d77259b50f9269279e6a48559e5db08"
+      },
+      "provider": "brep",
+      "backend_operation": "normal profile extrusion",
+      "backend_version": "0.6.0",
+      "adapter_version": "living-ir-preview@1",
+      "stage": "CAD-2",
+      "backend": "implemented",
+      "adapter": "implemented",
+      "binding": "planned",
+      "availability": "unavailable",
+      "input_support": "requires_preflight",
+      "target_verification": {
+        "t0": "not_run",
+        "t1": "not_run"
+      },
+      "evidence": [
+        "crates/brep-core/src/lib.rs",
+        "integrations/living-ir-preview/src/lib.rs",
+        "experimental/rectangle-union/README.md"
+      ],
+      "required_grants": [
+        "model-write"
+      ],
+      "limits": "L3K1Solid: planar profile, one material region, normal signed extrusion",
+      "numerical_profile": "si-f64-v1",
+      "reason": {
+        "en": "The Luma host binding is planned.",
+        "ru": "Binding в Luma запланирован."
+      }
+    },
+    "brep.planar_union": {
+      "descriptor": {
+        "qualified_name": "brep.planar_union",
+        "operation_id": "brep.planar_union",
+        "operation_version": {
+          "major": 1,
+          "minor": 0
+        },
+        "parameters": [
+          {
+            "name": "key",
+            "type": "StableKey"
+          },
+          {
+            "name": "a",
+            "type": "BodyRef"
+          },
+          {
+            "name": "b",
+            "type": "BodyRef"
+          }
+        ],
+        "result_type": "BodyRef",
+        "type_scheme": {
+          "kind": "monomorphic"
+        },
+        "effects": [
+          "BuildPlan"
+        ],
+        "modes": [
+          "recipe",
+          "command"
+        ],
+        "phases": [
+          "prepare"
+        ],
+        "capability_predicates": [
+          "brep.planar_union"
+        ],
+        "diagnostic_codes": [
+          "UnsupportedCapability",
+          "UnsupportedSchemaVersion"
+        ],
+        "provider_contract": "brep@e1c266a18d77259b50f9269279e6a48559e5db08"
+      },
+      "provider": "brep",
+      "backend_operation": "M7 planar Boolean",
+      "backend_version": "0.6.0",
+      "adapter_version": "absent",
+      "stage": "CAD-2",
+      "backend": "experimental",
+      "adapter": "absent",
+      "binding": "planned",
+      "availability": "unavailable",
+      "input_support": "requires_preflight",
+      "target_verification": {
+        "t0": "not_run",
+        "t1": "not_run"
+      },
+      "evidence": [
+        "crates/brep-core/src/lib.rs",
+        "integrations/living-ir-preview/src/lib.rs",
+        "experimental/rectangle-union/README.md"
+      ],
+      "required_grants": [
+        "model-write"
+      ],
+      "limits": "Restricted coplanar M7 profile, no general solid Boolean",
+      "numerical_profile": "si-f64-v1",
+      "reason": {
+        "en": "The Luma host binding is planned.",
+        "ru": "Binding в Luma запланирован."
+      }
+    },
+    "cad.output": {
+      "descriptor": {
+        "qualified_name": "cad.output",
+        "operation_id": "cad.output",
+        "operation_version": {
+          "major": 1,
+          "minor": 0
+        },
+        "parameters": [
+          {
+            "name": "key",
+            "type": "StableKey"
+          },
+          {
+            "name": "body",
+            "type": "BodyRef"
+          }
+        ],
+        "result_type": "Unit",
+        "type_scheme": {
+          "kind": "monomorphic"
+        },
+        "effects": [
+          "BuildPlan"
+        ],
+        "modes": [
+          "recipe"
+        ],
+        "phases": [
+          "prepare"
+        ],
+        "capability_predicates": [
+          "cad.output"
+        ],
+        "diagnostic_codes": [
+          "UnsupportedCapability",
+          "UnsupportedSchemaVersion"
+        ],
+        "provider_contract": "core@e8d5a465dbc943b746ce9f3607fe526f1b3a93df"
+      },
+      "provider": "core",
+      "backend_operation": "planned stable output declaration",
+      "backend_version": "0.1.0",
+      "adapter_version": "absent",
+      "stage": "CAD-1",
+      "backend": "absent",
+      "adapter": "absent",
+      "binding": "planned",
+      "availability": "unavailable",
+      "input_support": "requires_preflight",
+      "target_verification": {
+        "t0": "not_run",
+        "t1": "not_run"
+      },
+      "evidence": [
+        "crates/hir-transaction/src/lib.rs",
+        "crates/hir-domain-registry/src/lib.rs",
+        "crates/living-cad-features/src/lib.rs",
+        "crates/living-cad-features/src/rebuild.rs",
+        "crates/living-sketch/src/profile.rs",
+        "crates/living-cad-viewer/src/capabilities.rs",
+        "docs/cad-d1.md"
+      ],
+      "required_grants": [
+        "model-write"
+      ],
+      "limits": "provider preflight",
+      "numerical_profile": "si-f64-v1",
+      "reason": {
+        "en": "The Luma host binding is planned.",
+        "ru": "Binding в Luma запланирован."
+      }
+    },
+    "cad.plate": {
+      "descriptor": {
+        "qualified_name": "cad.plate",
+        "operation_id": "cad.plate",
+        "operation_version": {
+          "major": 1,
+          "minor": 0
+        },
+        "parameters": [
+          {
+            "name": "key",
+            "type": "StableKey"
+          },
+          {
+            "name": "width",
+            "type": "LengthInput"
+          },
+          {
+            "name": "height",
+            "type": "LengthInput"
+          },
+          {
+            "name": "thickness",
+            "type": "LengthInput"
+          }
+        ],
+        "result_type": "BodyRef",
+        "type_scheme": {
+          "kind": "monomorphic"
+        },
+        "effects": [
+          "BuildPlan"
+        ],
+        "modes": [
+          "recipe",
+          "command"
+        ],
+        "phases": [
+          "prepare"
+        ],
+        "capability_predicates": [
+          "cad.plate"
+        ],
+        "diagnostic_codes": [
+          "UnsupportedCapability",
+          "UnsupportedSchemaVersion"
+        ],
+        "provider_contract": "core@e8d5a465dbc943b746ce9f3607fe526f1b3a93df"
+      },
+      "provider": "core",
+      "backend_operation": "FeatureSpec::plate",
+      "backend_version": "0.1.0",
+      "adapter_version": "absent",
+      "stage": "CAD-1",
+      "backend": "implemented",
+      "adapter": "absent",
+      "binding": "planned",
+      "availability": "unavailable",
+      "input_support": "requires_preflight",
+      "target_verification": {
+        "t0": "not_run",
+        "t1": "not_run"
+      },
+      "evidence": [
+        "crates/hir-transaction/src/lib.rs",
+        "crates/hir-domain-registry/src/lib.rs",
+        "crates/living-cad-features/src/lib.rs",
+        "crates/living-cad-features/src/rebuild.rs",
+        "crates/living-sketch/src/profile.rs",
+        "crates/living-cad-viewer/src/capabilities.rs",
+        "docs/cad-d1.md"
+      ],
+      "required_grants": [
+        "model-write"
+      ],
+      "limits": "Centered full dimensions along local XYZ",
+      "numerical_profile": "si-f64-v1",
+      "reason": {
+        "en": "The Luma host binding is planned.",
+        "ru": "Binding в Luma запланирован."
+      }
+    },
+    "cad.through_hole": {
+      "descriptor": {
+        "qualified_name": "cad.through_hole",
+        "operation_id": "cad.through_hole",
+        "operation_version": {
+          "major": 1,
+          "minor": 0
+        },
+        "parameters": [
+          {
+            "name": "key",
+            "type": "StableKey"
+          },
+          {
+            "name": "base",
+            "type": "BodyRef"
+          },
+          {
+            "name": "diameter",
+            "type": "LengthInput"
+          },
+          {
+            "name": "x",
+            "type": "LengthInput"
+          },
+          {
+            "name": "y",
+            "type": "LengthInput"
+          }
+        ],
+        "result_type": "BodyRef",
+        "type_scheme": {
+          "kind": "monomorphic"
+        },
+        "effects": [
+          "BuildPlan"
+        ],
+        "modes": [
+          "recipe",
+          "command"
+        ],
+        "phases": [
+          "prepare"
+        ],
+        "capability_predicates": [
+          "cad.through_hole"
+        ],
+        "diagnostic_codes": [
+          "UnsupportedCapability",
+          "UnsupportedSchemaVersion"
+        ],
+        "provider_contract": "core@e8d5a465dbc943b746ce9f3607fe526f1b3a93df"
+      },
+      "provider": "core",
+      "backend_operation": "FeatureSpec::hole",
+      "backend_version": "0.1.0",
+      "adapter_version": "absent",
+      "stage": "CAD-1",
+      "backend": "implemented",
+      "adapter": "absent",
+      "binding": "planned",
+      "availability": "unavailable",
+      "input_support": "requires_preflight",
+      "target_verification": {
+        "t0": "not_run",
+        "t1": "not_run"
+      },
+      "evidence": [
+        "crates/hir-transaction/src/lib.rs",
+        "crates/hir-domain-registry/src/lib.rs",
+        "crates/living-cad-features/src/lib.rs",
+        "crates/living-cad-features/src/rebuild.rs",
+        "crates/living-sketch/src/profile.rs",
+        "crates/living-cad-viewer/src/capabilities.rs",
+        "docs/cad-d1.md"
+      ],
+      "required_grants": [
+        "model-write"
+      ],
+      "limits": "Plate-normal; positive diameter, edge margin and inter-hole clearance",
+      "numerical_profile": "si-f64-v1",
+      "reason": {
+        "en": "The Luma host binding is planned.",
+        "ru": "Binding в Luma запланирован."
+      }
+    },
+    "draft.create": {
+      "descriptor": {
+        "qualified_name": "draft.create",
+        "operation_id": "draft.create",
+        "operation_version": {
+          "major": 1,
+          "minor": 0
+        },
+        "parameters": [
+          {
+            "name": "key",
+            "type": "StableKey"
+          }
+        ],
+        "result_type": "DraftRef",
+        "type_scheme": {
+          "kind": "monomorphic"
+        },
+        "effects": [
+          "BuildPlan"
+        ],
+        "modes": [
+          "recipe",
+          "command"
+        ],
+        "phases": [
+          "prepare"
+        ],
+        "capability_predicates": [
+          "draft.create"
+        ],
+        "diagnostic_codes": [
+          "UnsupportedCapability",
+          "UnsupportedSchemaVersion"
+        ],
+        "provider_contract": "ir-2d@1a39445c84c3585dd39c3992f256ce86f1da62c6"
+      },
+      "provider": "ir-2d",
+      "backend_operation": "lir2d runtime document commands",
+      "backend_version": "0.1.0",
+      "adapter_version": "absent",
+      "stage": "CAD-2",
+      "backend": "implemented",
+      "adapter": "absent",
+      "binding": "planned",
+      "availability": "unavailable",
+      "input_support": "requires_preflight",
+      "target_verification": {
+        "t0": "not_run",
+        "t1": "not_run"
+      },
+      "evidence": [
+        "crates/lir2d-runtime/src/commands.rs",
+        "docs/compatibility/g3-g5-acceptance.md"
+      ],
+      "required_grants": [
+        "model-write"
+      ],
+      "limits": "Standalone; embedded Core writes unavailable",
+      "numerical_profile": "si-f64-v1",
+      "reason": {
+        "en": "The Luma host binding is planned.",
+        "ru": "Binding в Luma запланирован."
+      }
+    },
+    "elements.place": {
+      "descriptor": {
+        "qualified_name": "elements.place",
+        "operation_id": "elements.place",
+        "operation_version": {
+          "major": 1,
+          "minor": 0
+        },
+        "parameters": [
+          {
+            "name": "package",
+            "type": "PackageRef"
+          },
+          {
+            "name": "key",
+            "type": "StableKey"
+          },
+          {
+            "name": "configuration",
+            "type": "ElementConfigRef"
+          }
+        ],
+        "result_type": "ElementInstanceRef",
+        "type_scheme": {
+          "kind": "monomorphic"
+        },
+        "effects": [
+          "BuildPlan"
+        ],
+        "modes": [
+          "recipe",
+          "command"
+        ],
+        "phases": [
+          "prepare"
+        ],
+        "capability_predicates": [
+          "elements.place"
+        ],
+        "diagnostic_codes": [
+          "UnsupportedCapability",
+          "UnsupportedSchemaVersion"
+        ],
+        "provider_contract": "elements@13b06f7ad2885385e27b81d5ee0f118e89217cb0"
+      },
+      "provider": "elements",
+      "backend_operation": "standalone placement",
+      "backend_version": "0.1.0",
+      "adapter_version": "absent",
+      "stage": "CAD-5",
+      "backend": "implemented",
+      "adapter": "absent",
+      "binding": "planned",
+      "availability": "unavailable",
+      "input_support": "requires_preflight",
+      "target_verification": {
+        "t0": "not_run",
+        "t1": "not_run"
+      },
+      "evidence": [
+        "docs/ADAPTER-CONTRACT.md",
+        "src/capabilities.rs"
+      ],
+      "required_grants": [
+        "model-write"
+      ],
+      "limits": "Embedded Core write requires registered state",
+      "numerical_profile": "si-f64-v1",
+      "reason": {
+        "en": "The Luma host binding is planned.",
+        "ru": "Binding в Luma запланирован."
+      }
+    },
+    "param.length": {
+      "descriptor": {
+        "qualified_name": "param.length",
+        "operation_id": "param.length",
+        "operation_version": {
+          "major": 1,
+          "minor": 0
+        },
+        "parameters": [
+          {
+            "name": "key",
+            "type": "StableKey"
+          },
+          {
+            "name": "default",
+            "type": "Quantity<Length>"
+          }
+        ],
+        "result_type": "ParamRef<Length>",
+        "type_scheme": {
+          "kind": "monomorphic"
+        },
+        "effects": [
+          "BuildPlan"
+        ],
+        "modes": [
+          "recipe"
+        ],
+        "phases": [
+          "prepare"
+        ],
+        "capability_predicates": [
+          "param.length"
+        ],
+        "diagnostic_codes": [
+          "UnsupportedCapability",
+          "UnsupportedSchemaVersion"
+        ],
+        "provider_contract": "core@e8d5a465dbc943b746ce9f3607fe526f1b3a93df"
+      },
+      "provider": "core",
+      "backend_operation": "symbolic length slot",
+      "backend_version": "0.1.0",
+      "adapter_version": "absent",
+      "stage": "CAD-1",
+      "backend": "implemented",
+      "adapter": "absent",
+      "binding": "planned",
+      "availability": "unavailable",
+      "input_support": "requires_preflight",
+      "target_verification": {
+        "t0": "not_run",
+        "t1": "not_run"
+      },
+      "evidence": [
+        "crates/hir-transaction/src/lib.rs",
+        "crates/hir-domain-registry/src/lib.rs",
+        "crates/living-cad-features/src/lib.rs",
+        "crates/living-cad-features/src/rebuild.rs",
+        "crates/living-sketch/src/profile.rs",
+        "crates/living-cad-viewer/src/capabilities.rs",
+        "docs/cad-d1.md"
+      ],
+      "required_grants": [
+        "model-write"
+      ],
+      "limits": "provider preflight",
+      "numerical_profile": "si-f64-v1",
+      "reason": {
+        "en": "The Luma host binding is planned.",
+        "ru": "Binding в Luma запланирован."
+      }
+    },
+    "param.set": {
+      "descriptor": {
+        "qualified_name": "param.set",
+        "operation_id": "param.set",
+        "operation_version": {
+          "major": 1,
+          "minor": 0
+        },
+        "parameters": [
+          {
+            "name": "ref",
+            "type": "ParamRef<T>"
+          },
+          {
+            "name": "value",
+            "type": "T"
+          }
+        ],
+        "result_type": "Unit",
+        "type_scheme": {
+          "kind": "monomorphic"
+        },
+        "effects": [
+          "BuildPlan"
+        ],
+        "modes": [
+          "command"
+        ],
+        "phases": [
+          "prepare"
+        ],
+        "capability_predicates": [
+          "param.set"
+        ],
+        "diagnostic_codes": [
+          "UnsupportedCapability",
+          "UnsupportedSchemaVersion"
+        ],
+        "provider_contract": "core@e8d5a465dbc943b746ce9f3607fe526f1b3a93df"
+      },
+      "provider": "core",
+      "backend_operation": "parameter edit + typed rebuild",
+      "backend_version": "0.1.0",
+      "adapter_version": "absent",
+      "stage": "CAD-1",
+      "backend": "implemented",
+      "adapter": "absent",
+      "binding": "planned",
+      "availability": "unavailable",
+      "input_support": "requires_preflight",
+      "target_verification": {
+        "t0": "not_run",
+        "t1": "not_run"
+      },
+      "evidence": [
+        "crates/hir-transaction/src/lib.rs",
+        "crates/hir-domain-registry/src/lib.rs",
+        "crates/living-cad-features/src/lib.rs",
+        "crates/living-cad-features/src/rebuild.rs",
+        "crates/living-sketch/src/profile.rs",
+        "crates/living-cad-viewer/src/capabilities.rs",
+        "docs/cad-d1.md"
+      ],
+      "required_grants": [
+        "model-write"
+      ],
+      "limits": "Typed override and affected recipe closure required",
+      "numerical_profile": "si-f64-v1",
+      "reason": {
+        "en": "The Luma host binding is planned.",
+        "ru": "Binding в Luma запланирован."
+      }
+    },
+    "project.parameter": {
+      "descriptor": {
+        "qualified_name": "project.parameter",
+        "operation_id": "project.parameter",
+        "operation_version": {
+          "major": 1,
+          "minor": 0
+        },
+        "parameters": [
+          {
+            "name": "part",
+            "type": "PartRef"
+          },
+          {
+            "name": "key",
+            "type": "StableKey"
+          }
+        ],
+        "result_type": "ParamRef<T>",
+        "type_scheme": {
+          "kind": "monomorphic"
+        },
+        "effects": [
+          "ReadPinned"
+        ],
+        "modes": [
+          "recipe",
+          "command"
+        ],
+        "phases": [
+          "prepare"
+        ],
+        "capability_predicates": [
+          "project.parameter"
+        ],
+        "diagnostic_codes": [
+          "UnsupportedCapability",
+          "UnsupportedSchemaVersion"
+        ],
+        "provider_contract": "core@e8d5a465dbc943b746ce9f3607fe526f1b3a93df"
+      },
+      "provider": "core",
+      "backend_operation": "canonical symbolic parameter projection",
+      "backend_version": "0.1.0",
+      "adapter_version": "absent",
+      "stage": "CAD-1",
+      "backend": "implemented",
+      "adapter": "absent",
+      "binding": "planned",
+      "availability": "unavailable",
+      "input_support": "requires_preflight",
+      "target_verification": {
+        "t0": "not_run",
+        "t1": "not_run"
+      },
+      "evidence": [
+        "crates/hir-transaction/src/lib.rs",
+        "crates/hir-domain-registry/src/lib.rs",
+        "crates/living-cad-features/src/lib.rs",
+        "crates/living-cad-features/src/rebuild.rs",
+        "crates/living-sketch/src/profile.rs",
+        "crates/living-cad-viewer/src/capabilities.rs",
+        "docs/cad-d1.md"
+      ],
+      "required_grants": [
+        "model-read"
+      ],
+      "limits": "provider preflight",
+      "numerical_profile": "si-f64-v1",
+      "reason": {
+        "en": "The Luma host binding is planned.",
+        "ru": "Binding в Luma запланирован."
+      }
+    },
+    "render.still": {
+      "descriptor": {
+        "qualified_name": "render.still",
+        "operation_id": "render.still",
+        "operation_version": {
+          "major": 1,
+          "minor": 0
+        },
+        "parameters": [
+          {
+            "name": "presentation",
+            "type": "PresentationRef"
+          },
+          {
+            "name": "time",
+            "type": "Time"
+          },
+          {
+            "name": "options",
+            "type": "RenderOptionsRef"
+          }
+        ],
+        "result_type": "TaskSpecRef<PNGMaster>",
+        "type_scheme": {
+          "kind": "monomorphic"
+        },
+        "effects": [
+          "DeclareTask"
+        ],
+        "modes": [
+          "recipe",
+          "command"
+        ],
+        "phases": [
+          "prepare"
+        ],
+        "capability_predicates": [
+          "render.still"
+        ],
+        "diagnostic_codes": [
+          "UnsupportedCapability",
+          "UnsupportedSchemaVersion"
+        ],
+        "provider_contract": "studio@938eafee7a6b1f0c2a9a00d98814a33b457dd33d"
+      },
+      "provider": "studio",
+      "backend_operation": "Blender Cycles CPU export",
+      "backend_version": "0.1.0",
+      "adapter_version": "absent",
+      "stage": "CAD-6",
+      "backend": "implemented",
+      "adapter": "absent",
+      "binding": "planned",
+      "availability": "unavailable",
+      "input_support": "requires_preflight",
+      "target_verification": {
+        "t0": "not_run",
+        "t1": "not_run"
+      },
+      "evidence": [
+        "docs/S5-RASTER-EXPORT.md",
+        "docs/S6-LIVING-IR-PREVIEW.md"
+      ],
+      "required_grants": [
+        "job-submit"
+      ],
+      "limits": "Pinned presentation and source; standalone queue ownership",
+      "numerical_profile": "si-f64-v1",
+      "reason": {
+        "en": "The Luma host binding is planned.",
+        "ru": "Binding в Luma запланирован."
+      }
+    },
+    "sim.solve": {
+      "descriptor": {
+        "qualified_name": "sim.solve",
+        "operation_id": "sim.solve",
+        "operation_version": {
+          "major": 1,
+          "minor": 0
+        },
+        "parameters": [
+          {
+            "name": "study",
+            "type": "StudyRef"
+          },
+          {
+            "name": "options",
+            "type": "SolveOptionsRef"
+          }
+        ],
+        "result_type": "TaskSpecRef<SimulationResult>",
+        "type_scheme": {
+          "kind": "monomorphic"
+        },
+        "effects": [
+          "DeclareTask"
+        ],
+        "modes": [
+          "recipe",
+          "command"
+        ],
+        "phases": [
+          "prepare"
+        ],
+        "capability_predicates": [
+          "sim.solve"
+        ],
+        "diagnostic_codes": [
+          "UnsupportedCapability",
+          "UnsupportedSchemaVersion"
+        ],
+        "provider_contract": "simulation@c906f43a052fd918f33b94965045f449d3468544"
+      },
+      "provider": "simulation",
+      "backend_operation": "stationary heat/diffusion/DC",
+      "backend_version": "0.1.0",
+      "adapter_version": "living-ir-adapter@0.1.0",
+      "stage": "CAD-4",
+      "backend": "experimental",
+      "adapter": "implemented",
+      "binding": "planned",
+      "availability": "unavailable",
+      "input_support": "requires_preflight",
+      "target_verification": {
+        "t0": "not_run",
+        "t1": "not_run"
+      },
+      "evidence": [
+        "docs/SUPPORT.md",
+        "integration/living-ir/Cargo.toml",
+        "integration/living-ir/README.md"
+      ],
+      "required_grants": [
+        "job-submit"
+      ],
+      "limits": "Pinned simulation-to-Core adapter uses a different Core commit; integrated geometry is Box",
+      "numerical_profile": "si-f64-v1",
+      "reason": {
+        "en": "The Luma host binding is planned.",
+        "ru": "Binding в Luma запланирован."
+      }
+    },
+    "sketch.profile": {
+      "descriptor": {
+        "qualified_name": "sketch.profile",
+        "operation_id": "sketch.profile",
+        "operation_version": {
+          "major": 1,
+          "minor": 0
+        },
+        "parameters": [
+          {
+            "name": "sketch",
+            "type": "SketchRef"
+          }
+        ],
+        "result_type": "ProfileRef",
+        "type_scheme": {
+          "kind": "monomorphic"
+        },
+        "effects": [
+          "BuildPlan"
+        ],
+        "modes": [
+          "recipe",
+          "command"
+        ],
+        "phases": [
+          "prepare"
+        ],
+        "capability_predicates": [
+          "sketch.profile"
+        ],
+        "diagnostic_codes": [
+          "UnsupportedCapability",
+          "UnsupportedSchemaVersion"
+        ],
+        "provider_contract": "core@e8d5a465dbc943b746ce9f3607fe526f1b3a93df"
+      },
+      "provider": "core",
+      "backend_operation": "living_sketch::build_profiles",
+      "backend_version": "0.1.0",
+      "adapter_version": "absent",
+      "stage": "CAD-2",
+      "backend": "implemented",
+      "adapter": "absent",
+      "binding": "planned",
+      "availability": "unavailable",
+      "input_support": "requires_preflight",
+      "target_verification": {
+        "t0": "not_run",
+        "t1": "not_run"
+      },
+      "evidence": [
+        "crates/hir-transaction/src/lib.rs",
+        "crates/hir-domain-registry/src/lib.rs",
+        "crates/living-cad-features/src/lib.rs",
+        "crates/living-cad-features/src/rebuild.rs",
+        "crates/living-sketch/src/profile.rs",
+        "crates/living-cad-viewer/src/capabilities.rs",
+        "docs/cad-d1.md"
+      ],
+      "required_grants": [
+        "model-write"
+      ],
+      "limits": "Closed nonintersecting loops, holes and minimum web",
+      "numerical_profile": "si-f64-v1",
+      "reason": {
+        "en": "The Luma host binding is planned.",
+        "ru": "Binding в Luma запланирован."
+      }
+    },
+    "units.add": {
+      "descriptor": {
+        "qualified_name": "units.add",
+        "operation_id": "units.add",
+        "operation_version": {
+          "major": 1,
+          "minor": 0
+        },
+        "parameters": [
+          {
+            "name": "a",
+            "type": "Quantity<D,KA>"
+          },
+          {
+            "name": "b",
+            "type": "Quantity<D,KB>"
+          }
+        ],
+        "result_type": "Quantity<D,KOut>",
+        "type_scheme": {
+          "kind": "native",
+          "variables": [
+            {
+              "name": "D",
+              "sort": "dimension"
+            },
+            {
+              "name": "KA",
+              "sort": "kind"
+            },
+            {
+              "name": "KB",
+              "sort": "kind"
+            }
+          ],
+          "constraints": [
+            {
+              "rule": "same_dimension",
+              "operands": [
+                "a",
+                "b"
+              ]
+            },
+            {
+              "rule": "quantity_kind_rule",
+              "operands": [
+                "add",
+                "KA",
+                "KB",
+                "KOut"
+              ]
+            }
+          ],
+          "result_dimension": "D",
+          "result_kind": "KOut: add(KA, KB)",
+          "lifts": []
+        },
+        "effects": [
+          "Pure"
+        ],
+        "modes": [
+          "recipe",
+          "command"
+        ],
+        "phases": [
+          "prepare"
+        ],
+        "capability_predicates": [
+          "units.add"
+        ],
+        "diagnostic_codes": [
+          "UnsupportedCapability",
+          "UnsupportedSchemaVersion"
+        ],
+        "provider_contract": "luma-cad-contract/1"
+      },
+      "provider": "luma",
+      "backend_operation": "planned native quantity addition",
+      "backend_version": "0.1.3",
+      "adapter_version": "absent",
+      "stage": "CAD-1",
+      "backend": "absent",
+      "adapter": "absent",
+      "binding": "planned",
+      "availability": "unavailable",
+      "input_support": "requires_preflight",
+      "target_verification": {
+        "t0": "not_run",
+        "t1": "not_run"
+      },
+      "evidence": [
+        "Cargo.toml",
+        "src/runtime.rs"
+      ],
+      "required_grants": [],
+      "limits": "provider preflight",
+      "numerical_profile": "si-f64-v1",
+      "reason": {
+        "en": "The Luma host binding is planned.",
+        "ru": "Binding в Luma запланирован."
+      }
+    },
+    "units.mm": {
+      "descriptor": {
+        "qualified_name": "units.mm",
+        "operation_id": "units.mm",
+        "operation_version": {
+          "major": 1,
+          "minor": 0
+        },
+        "parameters": [
+          {
+            "name": "x",
+            "type": "Number"
+          }
+        ],
+        "result_type": "Quantity<Length>",
+        "type_scheme": {
+          "kind": "monomorphic"
+        },
+        "effects": [
+          "Pure"
+        ],
+        "modes": [
+          "recipe",
+          "command"
+        ],
+        "phases": [
+          "prepare"
+        ],
+        "capability_predicates": [
+          "units.mm"
+        ],
+        "diagnostic_codes": [
+          "UnsupportedCapability",
+          "UnsupportedSchemaVersion"
+        ],
+        "provider_contract": "luma-cad-contract/1"
+      },
+      "provider": "luma",
+      "backend_operation": "planned quantity constructor",
+      "backend_version": "0.1.3",
+      "adapter_version": "absent",
+      "stage": "CAD-1",
+      "backend": "absent",
+      "adapter": "absent",
+      "binding": "planned",
+      "availability": "unavailable",
+      "input_support": "requires_preflight",
+      "target_verification": {
+        "t0": "not_run",
+        "t1": "not_run"
+      },
+      "evidence": [
+        "Cargo.toml",
+        "src/runtime.rs"
+      ],
+      "required_grants": [],
+      "limits": "provider preflight",
+      "numerical_profile": "si-f64-v1",
+      "reason": {
+        "en": "The Luma host binding is planned.",
+        "ru": "Binding в Luma запланирован."
+      }
+    },
+    "view.from_body": {
+      "descriptor": {
+        "qualified_name": "view.from_body",
+        "operation_id": "view.from_body",
+        "operation_version": {
+          "major": 1,
+          "minor": 0
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "type": "BodyRef"
+          }
+        ],
+        "result_type": "ViewSpecRef",
+        "type_scheme": {
+          "kind": "monomorphic"
+        },
+        "effects": [
+          "Pure"
+        ],
+        "modes": [
+          "recipe",
+          "command"
+        ],
+        "phases": [
+          "prepare"
+        ],
+        "capability_predicates": [
+          "view.from_body"
+        ],
+        "diagnostic_codes": [
+          "UnsupportedCapability",
+          "UnsupportedSchemaVersion"
+        ],
+        "provider_contract": "view@a94fe6cca6f1d2982bb85e4cd4170422ba77f7b4"
+      },
+      "provider": "view",
+      "backend_operation": "Core V2 render scene mesh bridge",
+      "backend_version": "V2",
+      "adapter_version": "core-view-v2",
+      "stage": "CAD-1",
+      "backend": "implemented",
+      "adapter": "implemented",
+      "binding": "planned",
+      "availability": "unavailable",
+      "input_support": "requires_preflight",
+      "target_verification": {
+        "t0": "not_run",
+        "t1": "not_run"
+      },
+      "evidence": [
+        "docs/core-v2.md",
+        "docs/fields-v3.md",
+        "docs/brep-v5.md",
+        "integrations/core/render.rs"
+      ],
+      "required_grants": [],
+      "limits": "Pinned mesh scene and independent V2 publication; no voxel volume rendering",
+      "numerical_profile": "si-f64-v1",
+      "reason": {
+        "en": "The Luma host binding is planned.",
+        "ru": "Binding в Luma запланирован."
+      }
+    },
+    "view.show": {
+      "descriptor": {
+        "qualified_name": "view.show",
+        "operation_id": "view.show",
+        "operation_version": {
+          "major": 1,
+          "minor": 0
+        },
+        "parameters": [
+          {
+            "name": "spec",
+            "type": "ViewSpecRef"
+          }
+        ],
+        "result_type": "Unit",
+        "type_scheme": {
+          "kind": "monomorphic"
+        },
+        "effects": [
+          "ViewIntent"
+        ],
+        "modes": [
+          "recipe",
+          "command"
+        ],
+        "phases": [
+          "prepare"
+        ],
+        "capability_predicates": [
+          "view.show"
+        ],
+        "diagnostic_codes": [
+          "UnsupportedCapability",
+          "UnsupportedSchemaVersion"
+        ],
+        "provider_contract": "view@a94fe6cca6f1d2982bb85e4cd4170422ba77f7b4"
+      },
+      "provider": "view",
+      "backend_operation": "Core V2 WebGPU workspace",
+      "backend_version": "V2",
+      "adapter_version": "core-view-v2",
+      "stage": "CAD-1",
+      "backend": "implemented",
+      "adapter": "implemented",
+      "binding": "planned",
+      "availability": "unavailable",
+      "input_support": "requires_preflight",
+      "target_verification": {
+        "t0": "not_run",
+        "t1": "not_run"
+      },
+      "evidence": [
+        "docs/core-v2.md",
+        "docs/fields-v3.md",
+        "docs/brep-v5.md",
+        "integrations/core/render.rs"
+      ],
+      "required_grants": [],
+      "limits": "Passive display intent",
+      "numerical_profile": "si-f64-v1",
+      "reason": {
+        "en": "The Luma host binding is planned.",
+        "ru": "Binding в Luma запланирован."
+      }
+    },
+    "voxel.sample": {
+      "descriptor": {
+        "qualified_name": "voxel.sample",
+        "operation_id": "voxel.sample",
+        "operation_version": {
+          "major": 1,
+          "minor": 0
+        },
+        "parameters": [
+          {
+            "name": "source",
+            "type": "FieldRef"
+          },
+          {
+            "name": "grid",
+            "type": "GridSpecRef"
+          },
+          {
+            "name": "options",
+            "type": "SampleOptionsRef"
+          }
+        ],
+        "result_type": "TaskSpecRef<Volume>",
+        "type_scheme": {
+          "kind": "monomorphic"
+        },
+        "effects": [
+          "DeclareTask"
+        ],
+        "modes": [
+          "recipe",
+          "command"
+        ],
+        "phases": [
+          "prepare"
+        ],
+        "capability_predicates": [
+          "voxel.sample"
+        ],
+        "diagnostic_codes": [
+          "UnsupportedCapability",
+          "UnsupportedSchemaVersion"
+        ],
+        "provider_contract": "voxel@c17511db9258c1d06100c21b34ff0c03bb469b41"
+      },
+      "provider": "voxel",
+      "backend_operation": "bounded FieldEvaluator sampling",
+      "backend_version": "0.1.0",
+      "adapter_version": "absent",
+      "stage": "CAD-3",
+      "backend": "implemented",
+      "adapter": "absent",
+      "binding": "planned",
+      "availability": "unavailable",
+      "input_support": "requires_preflight",
+      "target_verification": {
+        "t0": "not_run",
+        "t1": "not_run"
+      },
+      "evidence": [
+        "schemas/capabilities-v1.json",
+        "crates/voxel-core/src/sampling.rs"
+      ],
+      "required_grants": [
+        "job-submit"
+      ],
+      "limits": "Explicit metric, grid and missing-data policy",
+      "numerical_profile": "si-f64-v1",
+      "reason": {
+        "en": "The Luma host binding is planned.",
+        "ru": "Binding в Luma запланирован."
+      }
+    }
+  }
+}

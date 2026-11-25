@@ -1,0 +1,430 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://luma-lang/spec/cad/sketch-profile-v1.json",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/Sketch"
+    },
+    {
+      "$ref": "#/$defs/Profile"
+    }
+  ],
+  "$defs": {
+    "Sketch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "frame",
+        "length_unit",
+        "angular_unit",
+        "kind",
+        "id",
+        "curves",
+        "constraints"
+      ],
+      "properties": {
+        "schema_version": {
+          "enum": [
+            1
+          ]
+        },
+        "frame": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "origin_m",
+            "x",
+            "y",
+            "z"
+          ],
+          "properties": {
+            "origin_m": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "items": {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+              }
+            },
+            "x": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "items": {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+              }
+            },
+            "y": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "items": {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+              }
+            },
+            "z": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "items": {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+              }
+            }
+          }
+        },
+        "length_unit": {
+          "enum": [
+            "m"
+          ]
+        },
+        "angular_unit": {
+          "enum": [
+            "rad"
+          ]
+        },
+        "kind": {
+          "enum": [
+            "Sketch"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+        },
+        "curves": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "kind",
+                  "start",
+                  "end"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+                  },
+                  "kind": {
+                    "enum": [
+                      "segment"
+                    ]
+                  },
+                  "start": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "items": {
+                      "type": "string",
+                      "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                    }
+                  },
+                  "end": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "items": {
+                      "type": "string",
+                      "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                    }
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "kind",
+                  "center",
+                  "radius"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+                  },
+                  "kind": {
+                    "enum": [
+                      "circle"
+                    ]
+                  },
+                  "center": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "items": {
+                      "type": "string",
+                      "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                    }
+                  },
+                  "radius": {
+                    "type": "string",
+                    "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "kind",
+                  "center",
+                  "radius",
+                  "start_rad",
+                  "sweep_rad"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+                  },
+                  "kind": {
+                    "enum": [
+                      "arc"
+                    ]
+                  },
+                  "center": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "items": {
+                      "type": "string",
+                      "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                    }
+                  },
+                  "radius": {
+                    "type": "string",
+                    "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                  },
+                  "start_rad": {
+                    "type": "string",
+                    "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                  },
+                  "sweep_rad": {
+                    "type": "string",
+                    "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "kind",
+              "curve_ids"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+              },
+              "kind": {
+                "enum": [
+                  "coincident",
+                  "horizontal",
+                  "vertical",
+                  "distance",
+                  "radius"
+                ]
+              },
+              "curve_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+                }
+              },
+              "value": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "value_si",
+                  "dimension",
+                  "quantity_kind"
+                ],
+                "properties": {
+                  "value_si": {
+                    "type": "string",
+                    "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                  },
+                  "dimension": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "quantity_kind": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "frame",
+        "length_unit",
+        "angular_unit",
+        "kind",
+        "source",
+        "tolerance_m",
+        "minimum_web_m",
+        "loops"
+      ],
+      "properties": {
+        "schema_version": {
+          "enum": [
+            1
+          ]
+        },
+        "frame": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "origin_m",
+            "x",
+            "y",
+            "z"
+          ],
+          "properties": {
+            "origin_m": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "items": {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+              }
+            },
+            "x": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "items": {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+              }
+            },
+            "y": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "items": {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+              }
+            },
+            "z": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "items": {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+              }
+            }
+          }
+        },
+        "length_unit": {
+          "enum": [
+            "m"
+          ]
+        },
+        "angular_unit": {
+          "enum": [
+            "rad"
+          ]
+        },
+        "kind": {
+          "enum": [
+            "Profile"
+          ]
+        },
+        "source": {
+          "$ref": "https://luma-lang/spec/cad/wire-v1.json#/$defs/PinnedRef"
+        },
+        "tolerance_m": {
+          "type": "string",
+          "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+        },
+        "minimum_web_m": {
+          "type": "string",
+          "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+        },
+        "loops": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "role",
+              "edges"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+              },
+              "role": {
+                "enum": [
+                  "outer",
+                  "hole"
+                ]
+              },
+              "edges": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "curve_id",
+                    "direction"
+                  ],
+                  "properties": {
+                    "curve_id": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+                    },
+                    "direction": {
+                      "enum": [
+                        "forward",
+                        "reverse"
+                      ]
+                    }
+                  }
+                }
+              },
+              "parent_id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,2016 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://luma-lang/spec/cad/wire-v1.json",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/ExecutionRequest"
+    },
+    {
+      "$ref": "#/$defs/CommitRequest"
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "schema_version",
+        "result"
+      ],
+      "properties": {
+        "protocol": {
+          "enum": [
+            "luma.cad.execution/1"
+          ]
+        },
+        "schema_version": {
+          "enum": [
+            1
+          ]
+        },
+        "result": {
+          "$ref": "#/$defs/CommitReceipt"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "schema_version",
+        "error"
+      ],
+      "properties": {
+        "protocol": {
+          "enum": [
+            "luma.cad.execution/1"
+          ]
+        },
+        "schema_version": {
+          "enum": [
+            1
+          ]
+        },
+        "error": {
+          "$ref": "#/$defs/ProtocolError"
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "U64": {
+      "type": "string",
+      "pattern": "^(?:[1-9][0-9]{0,18}|0|18446744073709551615|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|1844674407370955[0-0][0-9]{3}|18446744073709551[0-5][0-9]{2}|184467440737095516[0-0][0-9]{1}|1844674407370955161[0-4][0-9]{0})(?![\\s\\S])"
+    },
+    "SourceBundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bundle_version",
+        "entry",
+        "files",
+        "source_digest"
+      ],
+      "properties": {
+        "bundle_version": {
+          "enum": [
+            1
+          ]
+        },
+        "entry": {
+          "$ref": "#/$defs/SourcePath"
+        },
+        "files": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "$ref": "#/$defs/SourcePath"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "source_digest": {
+          "$ref": "#/$defs/Digest"
+        }
+      }
+    },
+    "ExecutionRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "schema_version",
+        "action",
+        "mode",
+        "target",
+        "source_bundle",
+        "context",
+        "lock_digest",
+        "requested_limits"
+      ],
+      "properties": {
+        "protocol": {
+          "enum": [
+            "luma.cad.execution/1"
+          ]
+        },
+        "schema_version": {
+          "enum": [
+            1
+          ]
+        },
+        "action": {
+          "enum": [
+            "prepare"
+          ]
+        },
+        "mode": {
+          "enum": [
+            "recipe",
+            "command"
+          ]
+        },
+        "target": {
+          "$ref": "#/$defs/AuthorityTarget"
+        },
+        "source_bundle": {
+          "$ref": "#/$defs/SourceBundle"
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "context_id",
+            "base_revision",
+            "external_pins",
+            "captured_selection",
+            "grant_refs"
+          ],
+          "properties": {
+            "context_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "base_revision": {
+              "$ref": "#/$defs/U64"
+            },
+            "external_pins": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/PinnedRef"
+              }
+            },
+            "captured_selection": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/PinnedRef"
+              }
+            },
+            "grant_refs": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "recipe_instance_id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "writable_targets": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/PinnedRef"
+              }
+            }
+          }
+        },
+        "lock_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "requested_limits": {
+          "$ref": "#/$defs/ResourceLimits"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "enum": [
+                  "recipe"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "context": {
+                "required": [
+                  "recipe_instance_id"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "enum": [
+                  "command"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "context": {
+                "required": [
+                  "writable_targets"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "ExecutionContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "context_id",
+        "target",
+        "mode",
+        "admitted_revisions",
+        "effective_overrides",
+        "external_pins",
+        "captured_selection",
+        "captured_resources",
+        "grant_refs"
+      ],
+      "properties": {
+        "context_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
+          "$ref": "#/$defs/AuthorityTarget"
+        },
+        "mode": {
+          "enum": [
+            "recipe",
+            "command"
+          ]
+        },
+        "admitted_revisions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Guard"
+          }
+        },
+        "effective_overrides": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ParameterBinding"
+          }
+        },
+        "external_pins": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PinnedRef"
+          }
+        },
+        "captured_selection": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PinnedRef"
+          }
+        },
+        "captured_resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Guard"
+          }
+        },
+        "grant_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "recipe_instance_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "writable_targets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PinnedRef"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "enum": [
+                  "recipe"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "recipe_instance_id"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "enum": [
+                  "command"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "writable_targets"
+            ]
+          }
+        }
+      ]
+    },
+    "CommitRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "schema_version",
+        "action",
+        "context_id",
+        "prepared_plan_id",
+        "candidate_digest",
+        "expected_revision",
+        "operation_id",
+        "request_digest"
+      ],
+      "properties": {
+        "protocol": {
+          "enum": [
+            "luma.cad.execution/1"
+          ]
+        },
+        "schema_version": {
+          "enum": [
+            1
+          ]
+        },
+        "action": {
+          "enum": [
+            "commit"
+          ]
+        },
+        "context_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "prepared_plan_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "candidate_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "expected_revision": {
+          "$ref": "#/$defs/U64"
+        },
+        "operation_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "request_digest": {
+          "$ref": "#/$defs/Digest"
+        }
+      }
+    },
+    "CommitReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "effect",
+        "authority_id",
+        "project_id",
+        "document_id",
+        "operation_id",
+        "request_digest",
+        "before_revision",
+        "after_revision",
+        "accepted_source_digest",
+        "changed_ids",
+        "reference_mapping",
+        "outputs",
+        "intent_mappings",
+        "delivery_outcomes",
+        "receipt_digest"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "accepted"
+          ]
+        },
+        "effect": {
+          "enum": [
+            "changed",
+            "source_only",
+            "no_op"
+          ]
+        },
+        "authority_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "project_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "document_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "operation_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "request_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "before_revision": {
+          "$ref": "#/$defs/U64"
+        },
+        "after_revision": {
+          "$ref": "#/$defs/U64"
+        },
+        "accepted_source_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "changed_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Uuid"
+          }
+        },
+        "reference_mapping": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "plan_key",
+              "producer_output",
+              "type",
+              "entity_id",
+              "revision"
+            ],
+            "properties": {
+              "plan_key": {
+                "$ref": "#/$defs/StableKey"
+              },
+              "producer_output": {
+                "$ref": "#/$defs/StableKey"
+              },
+              "type": {
+                "type": "string",
+                "minLength": 1
+              },
+              "entity_id": {
+                "$ref": "#/$defs/Uuid"
+              },
+              "revision": {
+                "$ref": "#/$defs/U64"
+              }
+            }
+          }
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "output_key",
+              "entity_id",
+              "revision"
+            ],
+            "properties": {
+              "output_key": {
+                "$ref": "#/$defs/StableKey"
+              },
+              "entity_id": {
+                "$ref": "#/$defs/Uuid"
+              },
+              "revision": {
+                "$ref": "#/$defs/U64"
+              }
+            }
+          }
+        },
+        "intent_mappings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/IntentMapping"
+          }
+        },
+        "delivery_outcomes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "receipt_digest": {
+          "$ref": "#/$defs/Digest"
+        }
+      }
+    },
+    "ProtocolError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "category",
+        "severity",
+        "message",
+        "source",
+        "model_path",
+        "operation_key",
+        "details",
+        "recovery",
+        "retry_class",
+        "model_effect"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1
+        },
+        "severity": {
+          "enum": [
+            "error"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/SourceSpan"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "model_path": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "operation_key": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/StableKey"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "details": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [],
+          "properties": {
+            "expected_revision": {
+              "$ref": "#/$defs/U64"
+            },
+            "actual_revision": {
+              "$ref": "#/$defs/U64"
+            }
+          }
+        },
+        "recovery": {
+          "type": "string",
+          "minLength": 1
+        },
+        "retry_class": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model_effect": {
+          "enum": [
+            "none",
+            "uncertain"
+          ]
+        }
+      }
+    },
+    "HostDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "qualified_name",
+        "operation_id",
+        "operation_version",
+        "parameters",
+        "result_type",
+        "type_scheme",
+        "effects",
+        "modes",
+        "phases",
+        "capability_predicates",
+        "diagnostic_codes",
+        "provider_contract"
+      ],
+      "properties": {
+        "qualified_name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+        },
+        "operation_id": {
+          "$ref": "#/$defs/StableKey"
+        },
+        "operation_version": {
+          "$ref": "#/$defs/Version"
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "type"
+            ],
+            "properties": {
+              "name": {
+                "$ref": "#/$defs/StableKey"
+              },
+              "type": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "result_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type_scheme": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind"
+              ],
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "monomorphic"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "variables",
+                "constraints",
+                "result_dimension",
+                "result_kind",
+                "lifts"
+              ],
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "native"
+                  ]
+                },
+                "variables": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "name",
+                      "sort"
+                    ],
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "sort": {
+                        "enum": [
+                          "dimension",
+                          "kind"
+                        ]
+                      }
+                    }
+                  }
+                },
+                "constraints": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "rule",
+                      "operands"
+                    ],
+                    "properties": {
+                      "rule": {
+                        "enum": [
+                          "same_dimension",
+                          "quantity_kind_rule",
+                          "nonzero"
+                        ]
+                      },
+                      "operands": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      }
+                    }
+                  }
+                },
+                "result_dimension": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "result_kind": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "lifts": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "effects": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "Pure",
+              "ReadPinned",
+              "BuildPlan",
+              "DeclareTask",
+              "ViewIntent",
+              "ExternalRead"
+            ]
+          }
+        },
+        "modes": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "recipe",
+              "command"
+            ]
+          }
+        },
+        "phases": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "prepare",
+              "preview",
+              "read"
+            ]
+          }
+        },
+        "capability_predicates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StableKey"
+          }
+        },
+        "diagnostic_codes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "provider_contract": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "CadPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "mode",
+        "target",
+        "base_revision",
+        "source_digest",
+        "registry_digest",
+        "lock_digest",
+        "provider_fingerprints",
+        "operations",
+        "parameter_bindings",
+        "source_read_set",
+        "write_set",
+        "ownership_delta",
+        "source_map",
+        "task_intents",
+        "view_intents",
+        "limits",
+        "diagnostics",
+        "plan_digest"
+      ],
+      "properties": {
+        "schema_version": {
+          "enum": [
+            1
+          ]
+        },
+        "mode": {
+          "enum": [
+            "recipe",
+            "command"
+          ]
+        },
+        "target": {
+          "$ref": "#/$defs/AuthorityTarget"
+        },
+        "base_revision": {
+          "$ref": "#/$defs/U64"
+        },
+        "source_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "registry_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "lock_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "provider_fingerprints": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/StableKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/Digest"
+          }
+        },
+        "operations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Intent"
+          }
+        },
+        "parameter_bindings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ParameterBinding"
+          }
+        },
+        "source_read_set": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Guard"
+          }
+        },
+        "write_set": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StableKey"
+          }
+        },
+        "ownership_delta": {
+          "$ref": "#/$defs/OwnershipDelta"
+        },
+        "source_map": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "key",
+              "span"
+            ],
+            "properties": {
+              "key": {
+                "$ref": "#/$defs/StableKey"
+              },
+              "span": {
+                "$ref": "#/$defs/SourceSpan"
+              }
+            }
+          }
+        },
+        "task_intents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Intent"
+          }
+        },
+        "view_intents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Intent"
+          }
+        },
+        "limits": {
+          "$ref": "#/$defs/ResourceLimits"
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Diagnostic"
+          }
+        },
+        "plan_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "recipe_instance_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "context_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "enum": [
+                  "recipe"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "recipe_instance_id"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "enum": [
+                  "command"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "context_id"
+            ]
+          }
+        }
+      ]
+    },
+    "PreparedResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome",
+        "committable",
+        "read_guards",
+        "delta",
+        "outputs",
+        "identities",
+        "diagnostics",
+        "quality_reports",
+        "limits_report"
+      ],
+      "properties": {
+        "outcome": {
+          "enum": [
+            "validated",
+            "rejected",
+            "unresolved",
+            "cancelled",
+            "limit_exceeded"
+          ]
+        },
+        "committable": {
+          "type": "boolean"
+        },
+        "read_guards": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Guard"
+          }
+        },
+        "delta": {
+          "$ref": "#/$defs/OwnershipDelta"
+        },
+        "outputs": {
+          "$ref": "#/$defs/TypedOutputs"
+        },
+        "identities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TypedValue"
+          }
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Diagnostic"
+          }
+        },
+        "quality_reports": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "limits_report": {
+          "$ref": "#/$defs/ResourceLimits"
+        },
+        "prepared_plan_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "candidate_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "enum": [
+                  "validated"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "prepared_plan_id",
+              "candidate_digest",
+              "expires_at"
+            ],
+            "properties": {
+              "committable": {
+                "const": true
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "committable": {
+                "const": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "JobReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "job_id",
+        "intent_id",
+        "delivery_id",
+        "attempt_id",
+        "task_digest",
+        "source_pins",
+        "lifecycle",
+        "domain_outcome",
+        "publication_policy",
+        "generation",
+        "artifacts",
+        "can_retry",
+        "can_resume"
+      ],
+      "properties": {
+        "schema_version": {
+          "enum": [
+            1
+          ]
+        },
+        "job_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "intent_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "delivery_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "attempt_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "task_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "source_pins": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PinnedRef"
+          }
+        },
+        "lifecycle": {
+          "type": "string",
+          "minLength": 1
+        },
+        "domain_outcome": {
+          "type": "string",
+          "minLength": 1
+        },
+        "publication_policy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "generation": {
+          "$ref": "#/$defs/U64"
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "schema",
+              "digest"
+            ],
+            "properties": {
+              "schema": {
+                "type": "string",
+                "minLength": 1
+              },
+              "digest": {
+                "$ref": "#/$defs/Digest"
+              }
+            }
+          }
+        },
+        "can_retry": {
+          "type": "boolean"
+        },
+        "can_resume": {
+          "type": "boolean"
+        }
+      }
+    },
+    "ArtifactManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "artifact_schema",
+        "media_type",
+        "byte_size",
+        "blobs",
+        "logical_key",
+        "computation_key",
+        "producer",
+        "producer_version",
+        "profile",
+        "source_pins",
+        "units",
+        "frame",
+        "quality",
+        "coverage",
+        "losses",
+        "publication_receipt"
+      ],
+      "properties": {
+        "schema_version": {
+          "enum": [
+            1
+          ]
+        },
+        "artifact_schema": {
+          "type": "string",
+          "minLength": 1
+        },
+        "media_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "byte_size": {
+          "$ref": "#/$defs/U64"
+        },
+        "blobs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "digest",
+              "byte_size"
+            ],
+            "properties": {
+              "digest": {
+                "$ref": "#/$defs/Digest"
+              },
+              "byte_size": {
+                "$ref": "#/$defs/U64"
+              }
+            }
+          }
+        },
+        "logical_key": {
+          "$ref": "#/$defs/StableKey"
+        },
+        "computation_key": {
+          "$ref": "#/$defs/Digest"
+        },
+        "producer": {
+          "type": "string",
+          "minLength": 1
+        },
+        "producer_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "profile": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_pins": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PinnedRef"
+          }
+        },
+        "units": {
+          "type": "string",
+          "minLength": 1
+        },
+        "frame": {
+          "type": "string",
+          "minLength": 1
+        },
+        "quality": {
+          "type": "string",
+          "minLength": 1
+        },
+        "coverage": {
+          "type": "string",
+          "minLength": 1
+        },
+        "losses": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "publication_receipt": {
+          "$ref": "#/$defs/Digest"
+        }
+      }
+    },
+    "Diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "category",
+        "severity",
+        "message",
+        "retry"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1
+        },
+        "severity": {
+          "enum": [
+            "error",
+            "warning",
+            "info"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "retry": {
+          "enum": [
+            "never",
+            "refresh",
+            "transient",
+            "inspect_operation"
+          ]
+        },
+        "span": {
+          "$ref": "#/$defs/SourceSpan"
+        },
+        "model_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operation_key": {
+          "$ref": "#/$defs/StableKey"
+        },
+        "expected": {
+          "type": "string",
+          "minLength": 1
+        },
+        "actual": {
+          "type": "string",
+          "minLength": 1
+        },
+        "recovery_hint": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "ExecutionResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outputs",
+        "diagnostics",
+        "source_map",
+        "view_intents",
+        "task_intents",
+        "consumed_resources"
+      ],
+      "properties": {
+        "outputs": {
+          "$ref": "#/$defs/TypedOutputs"
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Diagnostic"
+          }
+        },
+        "source_map": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "key",
+              "span"
+            ],
+            "properties": {
+              "key": {
+                "$ref": "#/$defs/StableKey"
+              },
+              "span": {
+                "$ref": "#/$defs/SourceSpan"
+              }
+            }
+          }
+        },
+        "view_intents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Intent"
+          }
+        },
+        "task_intents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Intent"
+          }
+        },
+        "consumed_resources": {
+          "$ref": "#/$defs/ResourceLimits"
+        },
+        "plan": {
+          "$ref": "#/$defs/CadPlan"
+        },
+        "prepared_plan_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "Quantity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value_si",
+        "dimension",
+        "quantity_kind"
+      ],
+      "properties": {
+        "value_si": {
+          "$ref": "#/$defs/FiniteDecimalText"
+        },
+        "dimension": {
+          "type": "string",
+          "minLength": 1
+        },
+        "quantity_kind": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "PinnedRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target",
+        "revision",
+        "entity_id",
+        "type"
+      ],
+      "properties": {
+        "target": {
+          "$ref": "#/$defs/AuthorityTarget"
+        },
+        "revision": {
+          "$ref": "#/$defs/U64"
+        },
+        "entity_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "PlanRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "preparation_scope",
+        "logical_key",
+        "producer_output",
+        "type"
+      ],
+      "properties": {
+        "preparation_scope": {
+          "type": "string",
+          "minLength": 1
+        },
+        "logical_key": {
+          "$ref": "#/$defs/StableKey"
+        },
+        "producer_output": {
+          "$ref": "#/$defs/StableKey"
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "Guard": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "target",
+            "key",
+            "revision",
+            "definition_digest"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "DocumentHead"
+              ]
+            },
+            "target": {
+              "$ref": "#/$defs/AuthorityTarget"
+            },
+            "key": {
+              "type": "string",
+              "minLength": 1
+            },
+            "revision": {
+              "$ref": "#/$defs/U64"
+            },
+            "definition_digest": {
+              "$ref": "#/$defs/Digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "target",
+            "key",
+            "revision",
+            "digest",
+            "retention_token"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "PinnedDocument"
+              ]
+            },
+            "target": {
+              "$ref": "#/$defs/AuthorityTarget"
+            },
+            "key": {
+              "type": "string",
+              "minLength": 1
+            },
+            "revision": {
+              "$ref": "#/$defs/U64"
+            },
+            "digest": {
+              "$ref": "#/$defs/Digest"
+            },
+            "retention_token": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "target",
+            "key",
+            "digest",
+            "schema"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "Artifact"
+              ]
+            },
+            "target": {
+              "$ref": "#/$defs/AuthorityTarget"
+            },
+            "key": {
+              "type": "string",
+              "minLength": 1
+            },
+            "digest": {
+              "$ref": "#/$defs/Digest"
+            },
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "target",
+            "key",
+            "revision",
+            "digest"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "Package"
+              ]
+            },
+            "target": {
+              "$ref": "#/$defs/AuthorityTarget"
+            },
+            "key": {
+              "type": "string",
+              "minLength": 1
+            },
+            "revision": {
+              "$ref": "#/$defs/U64"
+            },
+            "digest": {
+              "$ref": "#/$defs/Digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "target",
+            "key",
+            "digest",
+            "generation"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "CapturedResource"
+              ]
+            },
+            "target": {
+              "$ref": "#/$defs/AuthorityTarget"
+            },
+            "key": {
+              "type": "string",
+              "minLength": 1
+            },
+            "digest": {
+              "$ref": "#/$defs/Digest"
+            },
+            "generation": {
+              "$ref": "#/$defs/U64"
+            }
+          }
+        }
+      ]
+    },
+    "AuthorityTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "authority_id",
+        "project_id",
+        "document_id"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "core_project",
+            "standalone_2d",
+            "standalone_elements",
+            "presentation"
+          ]
+        },
+        "authority_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "project_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "document_id": {
+          "$ref": "#/$defs/Uuid"
+        }
+      }
+    },
+    "Uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+    },
+    "Digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "StableKey": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.:/-]{0,127}$"
+    },
+    "FiniteDecimalText": {
+      "type": "string",
+      "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+    },
+    "Version": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "major",
+        "minor"
+      ],
+      "properties": {
+        "major": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "minor": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        }
+      }
+    },
+    "SourcePath": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/\\\\:\\x00-\\x1f]+(?:/[^/\\\\:\\x00-\\x1f]+)*$"
+    },
+    "SourceSpan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "start",
+        "end"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/SourcePath"
+        },
+        "start": {
+          "$ref": "#/$defs/U64"
+        },
+        "end": {
+          "$ref": "#/$defs/U64"
+        }
+      }
+    },
+    "ResourceLimits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expression_steps",
+        "planner_memory_bytes",
+        "prepare_deadline_ms"
+      ],
+      "properties": {
+        "expression_steps": {
+          "$ref": "#/$defs/U64"
+        },
+        "planner_memory_bytes": {
+          "$ref": "#/$defs/U64"
+        },
+        "prepare_deadline_ms": {
+          "$ref": "#/$defs/U64"
+        }
+      }
+    },
+    "TypedValue": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "Bool"
+              ]
+            },
+            "value": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "Text"
+              ]
+            },
+            "value": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "U64"
+              ]
+            },
+            "value": {
+              "$ref": "#/$defs/U64"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "Quantity"
+              ]
+            },
+            "value": {
+              "$ref": "#/$defs/Quantity"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "PinnedRef"
+              ]
+            },
+            "value": {
+              "$ref": "#/$defs/PinnedRef"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "PlanRef"
+              ]
+            },
+            "value": {
+              "$ref": "#/$defs/PlanRef"
+            }
+          }
+        }
+      ]
+    },
+    "TypedOutputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "value"
+        ],
+        "properties": {
+          "key": {
+            "$ref": "#/$defs/StableKey"
+          },
+          "value": {
+            "$ref": "#/$defs/TypedValue"
+          }
+        }
+      }
+    },
+    "ParameterBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "value"
+      ],
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/StableKey"
+        },
+        "value": {
+          "$ref": "#/$defs/TypedValue"
+        }
+      }
+    },
+    "Intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "operation_id",
+        "version",
+        "inputs",
+        "dependencies"
+      ],
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/StableKey"
+        },
+        "operation_id": {
+          "$ref": "#/$defs/StableKey"
+        },
+        "version": {
+          "$ref": "#/$defs/Version"
+        },
+        "inputs": {
+          "$ref": "#/$defs/TypedOutputs"
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StableKey"
+          }
+        }
+      }
+    },
+    "IntentMapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "job_id",
+        "generation"
+      ],
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/StableKey"
+        },
+        "job_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "generation": {
+          "$ref": "#/$defs/U64"
+        }
+      }
+    },
+    "OwnershipDelta": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "action",
+          "key",
+          "reference"
+        ],
+        "properties": {
+          "action": {
+            "enum": [
+              "create",
+              "update",
+              "reuse",
+              "remove"
+            ]
+          },
+          "key": {
+            "$ref": "#/$defs/StableKey"
+          },
+          "reference": {
+            "$ref": "#/$defs/TypedValue"
+          }
+        }
+      }
+    }
+  }
+}

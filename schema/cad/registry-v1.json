@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://luma-lang/spec/cad/registry-v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "sealed_modules",
+    "capabilities"
+  ],
+  "properties": {
+    "schema_version": {
+      "enum": [
+        1
+      ]
+    },
+    "sealed_modules": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_.:/-]{0,127}$"
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "descriptor",
+          "provider",
+          "backend_operation",
+          "backend_version",
+          "adapter_version",
+          "stage",
+          "backend",
+          "adapter",
+          "binding",
+          "availability",
+          "input_support",
+          "target_verification",
+          "evidence",
+          "required_grants",
+          "limits",
+          "numerical_profile",
+          "reason"
+        ],
+        "properties": {
+          "descriptor": {
+            "$ref": "https://luma-lang/spec/cad/wire-v1.json#/$defs/HostDescriptor"
+          },
+          "provider": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_.:/-]{0,127}$"
+          },
+          "backend_operation": {
+            "type": "string",
+            "minLength": 1
+          },
+          "backend_version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "adapter_version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "stage": {
+            "enum": [
+              "CAD-1",
+              "CAD-2",
+              "CAD-3",
+              "CAD-4",
+              "CAD-5",
+              "CAD-6"
+            ]
+          },
+          "backend": {
+            "enum": [
+              "absent",
+              "implemented",
+              "experimental",
+              "qualified_profile"
+            ]
+          },
+          "adapter": {
+            "enum": [
+              "absent",
+              "implemented",
+              "qualified_profile"
+            ]
+          },
+          "binding": {
+            "enum": [
+              "planned",
+              "implemented",
+              "qualified_profile"
+            ]
+          },
+          "availability": {
+            "enum": [
+              "available",
+              "unavailable",
+              "disabled",
+              "missing_dependency"
+            ]
+          },
+          "input_support": {
+            "enum": [
+              "supported",
+              "unsupported",
+              "requires_preflight"
+            ]
+          },
+          "target_verification": {
+            "type": "object",
+            "additionalProperties": {
+              "enum": [
+                "passed",
+                "failed",
+                "not_run"
+              ]
+            }
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/\\\\:\\x00-\\x1f]+(?:/[^/\\\\:\\x00-\\x1f]+)*$"
+            }
+          },
+          "required_grants": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "limits": {
+            "type": "string",
+            "minLength": 1
+          },
+          "numerical_profile": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reason": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "en",
+              "ru"
+            ],
+            "properties": {
+              "en": {
+                "type": "string",
+                "minLength": 1
+              },
+              "ru": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      },
+      "minProperties": 1
+    }
+  },
+  "$defs": {}
+}
