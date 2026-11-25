@@ -1,0 +1,8 @@
+{
+  "bundle_version": 1,
+  "entry": "width.luma",
+  "files": {
+    "width.luma": "use project\nuse param\nuse units\n\npart = project.part(\"00000000-0000-4000-8000-000000000002\")\nwidth = project.parameter(part, \"width\")\nparam.set(width, units.mm(120))\ncurrent = param.value(width)\n"
+  },
+  "source_digest": "sha256:2112ab2e00d3aa11bd45186a3623601483708347355b4cbb9be03c0bece3a8c4"
+}
