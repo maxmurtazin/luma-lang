@@ -1,6 +1,11 @@
+mod cad_cli;
+
 use std::{env, fs, process::ExitCode};
 fn main() -> ExitCode {
     let mut args: Vec<_> = env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some("cad") {
+        return cad_cli::run(&args[1..]);
+    }
     if args.first().map(String::as_str) == Some("ir") {
         if args.len() != 2 {
             eprintln!("Usage: luma ir <file.luma>");

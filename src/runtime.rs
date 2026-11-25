@@ -1,5 +1,10 @@
 //! Deterministic execution of the checker's validated source snapshot.
-use crate::{error, semantic, Diagnostic, Kind, Node};
+use crate::{
+    error,
+    host::{bundle_path, ExecutionResult, RecordedCall, MAX_STEPS},
+    semantic, Diagnostic, Kind, Node,
+};
+use luma_host_api::{CallSite, Dispatch, Effect, Mode, Registry, Value as HostValue};
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
@@ -13,6 +18,8 @@ enum Value {
     Array(Vec<Value>),
     Unit,
     Scope(usize),
+    HostModule(String),
+    Host(HostValue),
     Function(usize, PathBuf, Vec<Node>, Vec<Node>),
 }
 #[derive(Clone, Default)]
@@ -25,8 +32,17 @@ pub struct Failure {
     pub diagnostics: Vec<(String, Diagnostic)>,
     pub runtime: bool,
 }
-#[derive(Clone)]
-struct Engine {
+#[derive(Clone, Copy)]
+struct HostProfile<'a> {
+    dispatch: &'a dyn Dispatch,
+    registry: &'a Registry,
+    mode: Mode,
+}
+
+struct Engine<'a> {
+    host: Option<HostProfile<'a>>,
+    calls: Vec<RecordedCall>,
+    parallel_worker: bool,
     programs: BTreeMap<PathBuf, Vec<Node>>,
     modules: BTreeMap<PathBuf, usize>,
     scopes: Vec<Scope>,
@@ -50,7 +66,21 @@ fn inner(n: &Node) -> &Node {
         n
     }
 }
-impl Engine {
+impl Engine<'_> {
+    fn parallel_snapshot(&self, fuel: usize) -> Self {
+        Self {
+            host: self.host,
+            calls: Vec::new(),
+            parallel_worker: true,
+            programs: self.programs.clone(),
+            modules: self.modules.clone(),
+            scopes: self.scopes.clone(),
+            output: String::new(),
+            fuel,
+            depth: self.depth,
+            error_file: None,
+        }
+    }
     fn scope(&mut self, parent: Option<usize>) -> usize {
         let id = self.scopes.len();
         self.scopes.push(Scope {
@@ -101,14 +131,19 @@ impl Engine {
         self.modules.insert(path.into(), s);
         for n in &body {
             if let Kind::Use(m) = &n.kind {
-                let p = path
-                    .with_file_name(format!("{}.luma", name(m)))
-                    .canonicalize()
-                    .map_err(|e| self.fail(n, &e.to_string()))?;
-                let child = self.load(&p)?;
-                self.scopes[s]
-                    .values
-                    .insert(name(m).into(), Value::Scope(child));
+                let module = name(m);
+                let import = if self.host.is_some_and(|host| host.registry.seals(module)) {
+                    Value::HostModule(module.into())
+                } else {
+                    let mut path = path.with_file_name(format!("{module}.luma"));
+                    if self.host.is_none() {
+                        path = path
+                            .canonicalize()
+                            .map_err(|e| self.fail(n, &e.to_string()))?;
+                    }
+                    Value::Scope(self.load(&path)?)
+                };
+                self.scopes[s].values.insert(module.into(), import);
             }
         }
         self.prepare(&body, s, path);
@@ -217,6 +252,11 @@ impl Engine {
         for a in args {
             values.push(self.eval(a, s, path)?);
         }
+        if let Kind::Member(base, member) = &c.kind {
+            if let Some(Value::HostModule(module)) = self.lookup(s, name(base)) {
+                return self.call_host(&module, name(member), values, path, n);
+            }
+        }
         if name(c) == "print" && callee.is_none() {
             fn format_value(value: &Value, nested: bool) -> Option<String> {
                 Some(match value {
@@ -250,6 +290,90 @@ impl Engine {
         }
         let f = self.eval(c, s, path)?;
         self.apply(f, values, n)
+    }
+    fn call_host(
+        &mut self,
+        module: &str,
+        member: &str,
+        values: Vec<Value>,
+        path: &Path,
+        n: &Node,
+    ) -> Result<Value> {
+        let host = self.host.expect("host namespace requires a host");
+        let descriptor = host.registry.get(module, member).ok_or_else(|| {
+            error(
+                "UnsupportedCapability",
+                n.span,
+                format!("no binding for {module}.{member}"),
+            )
+        })?;
+        let host_error =
+            |failure: luma_host_api::Error| error(failure.code, n.span, failure.message);
+        descriptor.check_mode(host.mode).map_err(host_error)?;
+        if self.parallel_worker && descriptor.effect != Effect::Pure {
+            return Err(error(
+                "E_EFFECT",
+                n.span,
+                "parallel workers can only invoke pure host operations",
+            ));
+        }
+        if descriptor.effect != Effect::Pure && self.calls.len() >= 2048 {
+            return Err(error(
+                "HostPlanLimit",
+                n.span,
+                "host plan exceeds 2048 operations",
+            ));
+        }
+        let arguments: Vec<_> = values
+            .into_iter()
+            .map(|value| {
+                to_host_value(value).ok_or_else(|| {
+                    error("HostTypeMismatch", n.span, "expected a host argument value")
+                })
+            })
+            .collect::<Result<_>>()?;
+        let types: Vec<_> = arguments
+            .iter()
+            .map(|argument| {
+                argument
+                    .value_type()
+                    .ok_or_else(|| error("NonFiniteNumber", n.span, "host argument must be finite"))
+            })
+            .collect::<Result<_>>()?;
+        let expected = descriptor.specialize(&types).map_err(host_error)?;
+        let site = CallSite {
+            file: bundle_path(path).expect("validated bundle path"),
+            start: n.span.start,
+            end: n.span.end,
+        };
+        let result = host
+            .dispatch
+            .call(descriptor, host.mode, &site, &arguments)
+            .map_err(host_error)?;
+        if result.value_type().as_ref() != Some(&expected) {
+            return Err(error(
+                "HostResultMismatch",
+                n.span,
+                format!("{} must return {expected:?}", descriptor.operation),
+            ));
+        }
+        if descriptor.effect != Effect::Pure {
+            self.calls.push(RecordedCall {
+                operation: descriptor.operation.clone(),
+                major: descriptor.major,
+                effect: descriptor.effect,
+                site,
+                arguments,
+                result: result.clone(),
+            });
+        }
+        Ok(match result {
+            HostValue::Number(value) => Value::Number(value),
+            HostValue::Text(value) => Value::String(value),
+            HostValue::Bool(value) => Value::Bool(value),
+            HostValue::Unit => Value::Unit,
+            value @ HostValue::Opaque { .. } => Value::Host(value),
+        })
     }
     fn apply(&mut self, f: Value, values: Vec<Value>, n: &Node) -> Result<Value> {
         if let Value::Function(parent, file, params, body) = f {
@@ -310,8 +434,10 @@ impl Engine {
             // Fixed indexed chunks and ordered joins make failures deterministic.
             let workers = xs.len().clamp(1, 8);
             let size = xs.len().div_ceil(workers).max(1);
+            let host_budget = self.host.map(|_| self.fuel / xs.len().max(1));
+            let worker_budget = host_budget.unwrap_or(MAX_STEPS);
             let snapshot = &*self;
-            let result = std::thread::scope(|scope| {
+            let (result, consumed) = std::thread::scope(|scope| {
                 let mut handles = Vec::new();
                 for chunk in xs.chunks(size) {
                     let f = &f;
@@ -319,23 +445,29 @@ impl Engine {
                         chunk
                             .iter()
                             .map(|x| {
-                                let mut worker = snapshot.clone();
+                                let mut worker = snapshot.parallel_snapshot(worker_budget);
                                 #[cfg(test)]
                                 WORKER_THREADS
                                     .lock()
                                     .unwrap()
                                     .push(std::thread::current().id());
-                                worker.fuel = 100000;
-                                worker.apply(f.clone(), vec![x.clone()], n)
+                                let value = worker.apply(f.clone(), vec![x.clone()], n)?;
+                                Ok((value, worker_budget - worker.fuel))
                             })
                             .collect::<Result<Vec<_>>>()
                     }));
                 }
                 let mut out = Vec::new();
                 let mut failure = None;
+                let mut consumed = 0;
                 for handle in handles {
                     match handle.join() {
-                        Ok(Ok(xs)) => out.extend(xs),
+                        Ok(Ok(xs)) => {
+                            for (value, steps) in xs {
+                                out.push(value);
+                                consumed += steps;
+                            }
+                        }
                         Ok(Err(e)) => {
                             if failure.is_none() {
                                 failure = Some(e);
@@ -348,8 +480,11 @@ impl Engine {
                         }
                     }
                 }
-                failure.map_or(Ok(out), Err)
+                (failure.map_or(Ok(out), Err), consumed)
             });
+            if host_budget.is_some() {
+                self.fuel -= consumed;
+            }
             return result.map(Value::Array);
         }
         let mut out = Vec::new();
@@ -406,7 +541,15 @@ impl Engine {
     }
     fn eval(&mut self, n: &Node, s: usize, path: &Path) -> Result<Value> {
         if self.fuel == 0 {
-            return Err(self.fail(n, "evaluation budget (100000 steps) exhausted"));
+            return Err(if self.host.is_some() {
+                error(
+                    "HostExpressionLimit",
+                    n.span,
+                    "host expression budget exhausted",
+                )
+            } else {
+                self.fail(n, "evaluation budget (100000 steps) exhausted")
+            });
         }
         self.fuel -= 1;
         match &n.kind {
@@ -517,6 +660,9 @@ static WORKER_THREADS: std::sync::Mutex<Vec<std::thread::ThreadId>> =
 fn parallel_uses_distinct_native_threads() {
     let nodes = crate::parse("fn square(x)\nreturn x*x\nend").unwrap();
     let mut engine = Engine {
+        host: None,
+        calls: Vec::new(),
+        parallel_worker: false,
         programs: BTreeMap::new(),
         modules: BTreeMap::new(),
         scopes: vec![Scope::default()],
@@ -564,6 +710,9 @@ pub fn run(path: impl AsRef<Path>) -> std::result::Result<String, Failure> {
     }
     let path = path.as_ref().canonicalize().unwrap();
     let mut e = Engine {
+        host: None,
+        calls: Vec::new(),
+        parallel_worker: false,
         programs: report.programs,
         modules: BTreeMap::new(),
         scopes: Vec::new(),
@@ -582,4 +731,60 @@ pub fn run(path: impl AsRef<Path>) -> std::result::Result<String, Failure> {
             runtime: true,
         }),
     }
+}
+
+fn to_host_value(value: Value) -> Option<HostValue> {
+    Some(match value {
+        Value::Number(value) => HostValue::Number(value),
+        Value::String(value) => HostValue::Text(value),
+        Value::Bool(value) => HostValue::Bool(value),
+        Value::Unit => HostValue::Unit,
+        Value::Host(value) => value,
+        _ => return None,
+    })
+}
+
+pub(crate) fn run_bundle(
+    report: semantic::Report,
+    entry: &Path,
+    mode: Mode,
+    registry: &Registry,
+    dispatch: &dyn Dispatch,
+    expression_budget: usize,
+) -> std::result::Result<ExecutionResult, Failure> {
+    let fuel = expression_budget.min(MAX_STEPS);
+    let mut engine = Engine {
+        host: Some(HostProfile {
+            dispatch,
+            registry,
+            mode,
+        }),
+        calls: Vec::new(),
+        parallel_worker: false,
+        programs: report.programs,
+        modules: BTreeMap::new(),
+        scopes: Vec::new(),
+        output: String::new(),
+        fuel,
+        depth: 0,
+        error_file: None,
+    };
+    let scope = engine.load(entry).map_err(|diagnostic| Failure {
+        diagnostics: vec![(
+            bundle_path(engine.error_file.as_deref().unwrap_or(entry))
+                .expect("validated bundle path"),
+            diagnostic,
+        )],
+        runtime: true,
+    })?;
+    let outputs = std::mem::take(&mut engine.scopes[scope].values)
+        .into_iter()
+        .filter_map(|(name, value)| to_host_value(value).map(|value| (name, value)))
+        .collect();
+    Ok(ExecutionResult {
+        outputs,
+        calls: engine.calls,
+        diagnostic_output: engine.output,
+        expression_steps: fuel - engine.fuel,
+    })
 }

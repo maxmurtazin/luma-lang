@@ -1,5 +1,7 @@
 //! Bounded, whole-import-graph monomorphic constraint checker. No execution.
+use crate::host::{bundle_path, SourceBundle};
 use crate::{error, parse, position, Diagnostic, Kind, Node, Span};
+use luma_host_api::{Descriptor, Effect, Mode, Parameter, Registry, ResultType, Type as HostType};
 use serde_json::{json, Value};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -16,6 +18,8 @@ enum Ty {
     Array(Box<Ty>),
     Function(Vec<Ty>, Box<Ty>),
     Scope(usize),
+    HostModule(String),
+    Host(HostType),
 }
 #[derive(Clone)]
 struct Binding {
@@ -38,7 +42,9 @@ pub struct Report {
     pub graph: Value,
 }
 #[derive(Default)]
-struct Checker {
+struct Checker<'a> {
+    host: Option<(&'a SourceBundle, &'a Registry, Mode)>,
+    host_variables: Vec<(String, Span, Ty, BTreeSet<HostType>)>,
     structural: bool,
     root: PathBuf,
     sources: BTreeMap<String, String>,
@@ -82,7 +88,7 @@ fn inner(n: &Node) -> &Node {
         n
     }
 }
-impl Checker {
+impl Checker<'_> {
     fn fresh(&mut self) -> Ty {
         let i = self.types.len();
         self.types.push(None);
@@ -229,35 +235,38 @@ impl Checker {
             }
         }
     }
-    fn lookup(&mut self, scope: usize, n: &Node) -> Option<(usize, Binding)> {
+    fn find(&self, scope: usize, name: &str) -> Option<(usize, &Binding)> {
         let mut at = Some(scope);
         while let Some(s) = at {
-            if let Some(b) = self.scopes[s].names.get(name(n)).cloned() {
-                // Captures are conservatively effectful; initialization through forward calls is bounded out.
-                if !b.ready {
-                    self.fail(
-                        "E_INITIALIZATION",
-                        n.span,
-                        "binding read before initialization (forward captures are unsupported)",
-                    )
-                }
-                if self.function.is_some()
-                    && s != scope
-                    && !b.function
-                    && !matches!(b.ty, Ty::Scope(_))
-                {
-                    self.effects.insert(self.owner.clone());
-                    self.captures.insert((self.owner.clone(), b.id.clone()));
-                }
-                let id = self.id(n, "reference");
-                if self.structural {
-                    self.observed.insert(id.clone(), b.ty.clone());
-                }
-                self.edge(self.owner.clone(), id.clone(), "reads");
-                self.edge(id, b.id.clone(), "resolves_to");
-                return Some((s, b));
+            if let Some(binding) = self.scopes[s].names.get(name) {
+                return Some((s, binding));
             }
             at = self.scopes[s].parent;
+        }
+        None
+    }
+    fn lookup(&mut self, scope: usize, n: &Node) -> Option<(usize, Binding)> {
+        if let Some((s, b)) = self.find(scope, name(n)).map(|(s, b)| (s, b.clone())) {
+            // Captures are conservatively effectful; initialization through forward calls is bounded out.
+            if !b.ready {
+                self.fail(
+                    "E_INITIALIZATION",
+                    n.span,
+                    "binding read before initialization (forward captures are unsupported)",
+                )
+            }
+            if self.function.is_some() && s != scope && !b.function && !matches!(b.ty, Ty::Scope(_))
+            {
+                self.effects.insert(self.owner.clone());
+                self.captures.insert((self.owner.clone(), b.id.clone()));
+            }
+            let id = self.id(n, "reference");
+            if self.structural {
+                self.observed.insert(id.clone(), b.ty.clone());
+            }
+            self.edge(self.owner.clone(), id.clone(), "reads");
+            self.edge(id, b.id.clone(), "resolves_to");
+            return Some((s, b));
         }
         self.fail("E_NAME", n.span, format!("unknown name {}", name(n)));
         None
@@ -313,7 +322,80 @@ impl Checker {
         }
         result
     }
+    fn invoke_host(
+        &mut self,
+        descriptor: &Descriptor,
+        mode: Mode,
+        args: Vec<Ty>,
+        span: Span,
+    ) -> Ty {
+        if let Err(problem) = descriptor.check_mode(mode) {
+            self.fail(problem.code, span, problem.message);
+            return Ty::Unit;
+        }
+        if descriptor.parameters.len() != args.len() {
+            self.fail(
+                "E_ARITY",
+                span,
+                format!(
+                    "{} expects {} arguments",
+                    descriptor.operation,
+                    descriptor.parameters.len()
+                ),
+            );
+            return Ty::Unit;
+        }
+        if descriptor.effect != Effect::Pure {
+            self.effects.insert(self.owner.clone());
+        }
+        let mut slots = BTreeMap::new();
+        for (parameter, arg) in descriptor.parameters.iter().zip(args) {
+            let expected = match parameter {
+                Parameter::Exact(ty) => from_host_type(ty),
+                Parameter::Variable { slot, accepts } => slots
+                    .entry(*slot)
+                    .or_insert_with(|| {
+                        let t = self.fresh();
+                        self.host_variables.push((
+                            self.file.clone(),
+                            span,
+                            t.clone(),
+                            accepts.clone(),
+                        ));
+                        t
+                    })
+                    .clone(),
+            };
+            self.unify(expected, arg, span);
+        }
+        match &descriptor.result {
+            ResultType::Exact(ty) => from_host_type(ty),
+            ResultType::Variable(slot) => slots[slot].clone(),
+        }
+    }
     fn invoke_inner(&mut self, scope: usize, callee: &Node, args: Vec<Ty>, span: Span) -> Ty {
+        if let (Some((_, registry, mode)), Kind::Member(base, member)) = (self.host, &callee.kind) {
+            if let Some((
+                _,
+                Binding {
+                    ty: Ty::HostModule(module),
+                    ..
+                },
+            )) = self.find(scope, name(base))
+            {
+                return match registry.get(module, name(member)) {
+                    Some(descriptor) => self.invoke_host(descriptor, mode, args, span),
+                    None => {
+                        self.fail(
+                            "UnsupportedCapability",
+                            member.span,
+                            format!("no binding for {module}.{}", name(member)),
+                        );
+                        Ty::Unit
+                    }
+                };
+            }
+        }
         // Library contracts exist only at direct calls; library values are deliberately unsupported.
         if let Kind::Name(s) = &callee.kind {
             let mut at = Some(scope);
@@ -612,6 +694,13 @@ impl Checker {
         } else {
             self.expr_nonbinding(scope, n)
         };
+        if matches!(t, Ty::HostModule(_)) {
+            self.fail(
+                "E_UNSUPPORTED",
+                n.span,
+                "host namespaces require a direct qualified call",
+            );
+        }
         if self.structural {
             self.observed.insert(id, t.clone());
         }
@@ -732,7 +821,11 @@ impl Checker {
         }
     }
     fn load(&mut self, path: &Path) -> Option<usize> {
-        let path = match path.canonicalize() {
+        let path = match self.host {
+            Some(_) => Ok(path.to_path_buf()),
+            None => path.canonicalize(),
+        };
+        let path = match path {
             Ok(p) => p,
             Err(e) => {
                 self.fail("E_IMPORT", Span { start: 0, end: 0 }, e.to_string());
@@ -750,7 +843,16 @@ impl Checker {
         if let Some(s) = self.modules.get(&path) {
             return Some(*s);
         }
-        let source = match std::fs::read_to_string(&path) {
+        let source = match self.host {
+            Some((bundle, _, _)) => bundle.source(&path).map(str::to_owned).ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("missing source bundle file {}", path.display()),
+                )
+            }),
+            None => std::fs::read_to_string(&path),
+        };
+        let source = match source {
             Ok(s) => s,
             Err(e) => {
                 self.fail("E_IMPORT", Span { start: 0, end: 0 }, e.to_string());
@@ -758,7 +860,9 @@ impl Checker {
             }
         };
         let previous = (self.file.clone(), self.source.clone(), self.owner.clone());
-        self.file = if self.structural {
+        self.file = if self.host.is_some() {
+            bundle_path(&path).expect("validated bundle path")
+        } else if self.structural {
             path.strip_prefix(&self.root)
                 .unwrap_or(&path)
                 .to_string_lossy()
@@ -796,6 +900,27 @@ impl Checker {
         for n in &body {
             if let Kind::Use(module) = &n.kind {
                 let import = path.with_file_name(format!("{}.luma", name(module)));
+                if let Some((bundle, registry, _)) = self.host {
+                    if registry.seals(name(module)) {
+                        if bundle.source(&import).is_some() {
+                            self.fail(
+                                "ModuleNameCollision",
+                                module.span,
+                                format!("{} is both a host module and a bundle file", name(module)),
+                            );
+                        } else {
+                            self.declare(
+                                scope,
+                                module,
+                                Ty::HostModule(name(module).into()),
+                                true,
+                                false,
+                                false,
+                            );
+                        }
+                        continue;
+                    }
+                }
                 if let Some(s) = self.load(&import) {
                     self.declare(scope, module, Ty::Scope(s), true, false, false);
                     self.edge(self.owner.clone(), self.scope_ids[&s].clone(), "imports")
@@ -815,19 +940,30 @@ fn crate_name(n: &Node) -> &str {
     name(n)
 }
 pub fn check(path: impl AsRef<Path>) -> Report {
-    check_impl(path.as_ref(), false).0
+    check_impl(path.as_ref(), false, None).0
 }
 pub(crate) fn check_structural(path: &Path) -> crate::structural::Document {
-    check_impl(path, true).1.unwrap()
+    check_impl(path, true, None).1.unwrap()
 }
-fn check_impl(path: &Path, structural: bool) -> (Report, Option<crate::structural::Document>) {
+pub(crate) fn check_bundle(bundle: &SourceBundle, registry: &Registry, mode: Mode) -> Report {
+    check_impl(bundle.entry(), false, Some((bundle, registry, mode))).0
+}
+fn check_impl(
+    path: &Path,
+    structural: bool,
+    host: Option<(&SourceBundle, &Registry, Mode)>,
+) -> (Report, Option<crate::structural::Document>) {
     let mut c = Checker {
+        host,
         structural,
-        root: path
-            .canonicalize()
-            .ok()
-            .and_then(|p| p.parent().map(Path::to_path_buf))
-            .unwrap_or_default(),
+        root: if structural {
+            path.canonicalize()
+                .ok()
+                .and_then(|p| p.parent().map(Path::to_path_buf))
+                .unwrap_or_default()
+        } else {
+            PathBuf::new()
+        },
         file: path.to_string_lossy().into(),
         ..Checker::default()
     };
@@ -899,6 +1035,17 @@ fn check_impl(path: &Path, structural: bool) -> (Report, Option<crate::structura
             c.fail("E_TYPE", span, "only scalar equality is supported")
         }
     }
+    for (file, span, t, accepts) in std::mem::take(&mut c.host_variables) {
+        let t = c.resolve(&t);
+        if !matches!(t, Ty::Var(_)) && !to_host_type(&t).is_some_and(|ty| accepts.contains(&ty)) {
+            c.file = file;
+            c.fail(
+                "HostTypeMismatch",
+                span,
+                format!("type {t:?} is outside the host scheme"),
+            );
+        }
+    }
     for (file, span, t) in c.obligations.clone() {
         let t = c.resolve(&t);
         if unresolved(&t) {
@@ -957,7 +1104,7 @@ fn check_impl(path: &Path, structural: bool) -> (Report, Option<crate::structura
             }
         }
     }
-    let graph = json!({"schemaVersion":1,"producer":"luma-0.1C","valid":c.diagnostics.is_empty(),"nodes":c.nodes.values().collect::<Vec<_>>(),"edges":edges});
+    let graph = json!({"schemaVersion":if host.is_some() { 2 } else { 1 },"producer":"luma-0.1C","valid":c.diagnostics.is_empty(),"nodes":c.nodes.values().collect::<Vec<_>>(),"edges":edges});
     let document = structural
         .then(|| crate::structural::build(&c.sources, &c.source_programs, &graph, &c.diagnostics));
     (
@@ -996,7 +1143,7 @@ fn unresolved(t: &Ty) -> bool {
 fn structural_type(t: &Ty, scopes: &BTreeMap<usize, String>) -> crate::structural::Type {
     use crate::structural::Type;
     match t {
-        Ty::Var(_) => Type::Unresolved,
+        Ty::Var(_) | Ty::HostModule(_) | Ty::Host(_) => Type::Unresolved,
         Ty::Number => Type::Number,
         Ty::String => Type::String,
         Ty::Bool => Type::Bool,
@@ -1012,4 +1159,25 @@ fn structural_type(t: &Ty, scopes: &BTreeMap<usize, String>) -> crate::structura
             target: scopes[s].clone(),
         },
     }
+}
+
+fn from_host_type(ty: &HostType) -> Ty {
+    match ty {
+        HostType::Number => Ty::Number,
+        HostType::Text => Ty::String,
+        HostType::Bool => Ty::Bool,
+        HostType::Unit => Ty::Unit,
+        ty @ HostType::Opaque(_) => Ty::Host(ty.clone()),
+    }
+}
+
+fn to_host_type(ty: &Ty) -> Option<HostType> {
+    Some(match ty {
+        Ty::Number => HostType::Number,
+        Ty::String => HostType::Text,
+        Ty::Bool => HostType::Bool,
+        Ty::Unit => HostType::Unit,
+        Ty::Host(ty) => ty.clone(),
+        _ => return None,
+    })
 }

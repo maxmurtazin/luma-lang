@@ -1,0 +1,8 @@
+{
+  "bundle_version": 1,
+  "entry": "main.luma",
+  "files": {
+    "main.luma": "use units\nspan = units.add(units.mm(100), units.cm(2))\nangle = units.deg(90)\n"
+  },
+  "source_digest": "sha256:738d94d2378bd754f71d7dea2dbca30002a1a991e2228e25d62f94664daeb54a"
+}
