@@ -109,7 +109,7 @@ fn execute(args: &[String]) -> Result<Value> {
             let artifacts = store
                 .recover(operation, OUTPUT_BYTES)
                 .map_err(publication_error)?
-                .ok_or_else(|| Failure("MissingPublication", Value::Null))?;
+                .ok_or(Failure("MissingPublication", Value::Null))?;
             let shape = decode_native(&artifacts.geometry, artifacts.receipt.geometry, &context)
                 .map_err(|code| Failure("InvalidBrep", json!(format!("{code:?}"))))?;
             let outcome = StandaloneKernel.accept(shape, K1_SOLID, &mut context);
