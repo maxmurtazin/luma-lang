@@ -116,5 +116,5 @@ python -B "$M7/fixtures/qualify_m7.py" \
 
 Проверки относятся к выбранным CLI-профилям CAD-2. Для полной
 приёмки нужны зарегистрированное 2D-состояние и запись через Core CAS,
-интеграция ассоциативных чертежей Core и bindings операций в Luma host.
+выпуск ассоциативных чертежей из ProjectStore и bindings операций в Luma host.
 [Критерии CAD-2](../../spec/cad/Luma-CAD-Development-Specification-v1.0-RU.md#sec-32)

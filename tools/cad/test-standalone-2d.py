@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PROFILE = "54000000-0000-4000-8000-000000000003"
 DRAFT = "50000000-0000-4000-8000-000000000001"
 SHEET = "56000000-0000-4000-8000-000000000001"
+CORE_PLATE = "00000000-0000-0000-0000-00000000006e"
 
 
 def read(path):
@@ -150,22 +151,62 @@ def drawings(lir2d, fixtures, out, font, profile):
     return {"sheets": cases, "profile_dxf_sha256": report["artifact_body_sha256"]}
 
 
+def core_drawing(lir2d, checkout, core, out, font):
+    fixtures = checkout / "fixtures"
+    sheet = out / "core-sheet.lir2d"
+    run(lir2d, "apply", fixtures / "plate/parameters-100mm.json", "--commands",
+        fixtures / "sheet/create-core-plate-a4.json", "--output", sheet)
+    source = run("bash", checkout / "tools/core/read-parameter.sh", core, "--drawing-plate",
+                 core / "fixtures/hir-s1/positive/12-cad.json", CORE_PLATE)
+    unique, ambiguous, head = (out / f"core-{name}.json" for name in ("geometry", "ambiguous", "head"))
+    write(unique, [source])
+    write(ambiguous, [source, source])
+    write(head, {**{key: source[key] for key in ("document_id", "definition_hash", "native_revision")},
+                 "parameters": []})
+
+    base = (lir2d, "sheet.export-svg", sheet, "--sheet", SHEET)
+    review = run(*base, "--policy", "review", "--core-head", head, "--core-geometry", unique,
+                 "--font", font, "--output", out / "core-review.svg")
+    assert len(review["views"]) == 4
+    assert {view["projection"]["source_definition_hash"] for view in review["views"]} == {source["definition_hash"]}
+
+    for geometry, reason in ((unique, "projection.quality_unproven"),
+                             (ambiguous, "projection.core_source_ambiguous")):
+        result = out / (geometry.stem + ".svg")
+        rejection = run(*base, "--policy", "manufacturing", "--core-head", head, "--core-geometry", geometry,
+                        "--font", font, "--output", result, error="EXPORT_NOT_READY")
+        assert reason in rejection["details"]["reason"] and not result.exists()
+        if geometry == ambiguous:
+            assert CORE_PLATE in rejection["object_refs"]
+    return {"source_revision": source["native_revision"], "definition_hash": source["definition_hash"],
+            "review_sha256": review["artifact_body_sha256"],
+            "manufacturing_rejections": ["projection.quality_unproven", "projection.core_source_ambiguous"]}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("checkout", type=Path)
     parser.add_argument("lir2d", type=lambda value: Path(value).resolve())
     parser.add_argument("font", type=Path, help="TrueType font covering dimension labels")
     parser.add_argument("output", type=Path, help="new directory for qualification artifacts")
+    parser.add_argument("--core", type=Path, help="pinned Core checkout for the analytical plate release guard")
     args = parser.parse_args()
-    commit = read(ROOT / "luma-cad.lock.json")["providers"]["ir-2d"]["commit"]
-    head = subprocess.check_output(["git", "-C", args.checkout, "rev-parse", "HEAD"], text=True).strip()
-    if head != commit:
-        parser.error(f"expected Living IR 2D at {commit}")
+    providers = read(ROOT / "luma-cad.lock.json")["providers"]
+    for name, checkout in (("ir-2d", args.checkout), ("core", args.core)):
+        if checkout:
+            commit = providers[name]["commit"]
+            head = subprocess.check_output(["git", "-C", checkout, "rev-parse", "HEAD"], text=True).strip()
+            changes = subprocess.check_output(["git", "-C", checkout, "status", "--porcelain",
+                                               "--untracked-files=no"], text=True)
+            if head != commit or changes:
+                parser.error(f"expected a clean {name} checkout at {commit}")
     args.output.mkdir()
     fixtures = args.checkout / "fixtures"
     initial = profiles(args.lir2d, fixtures, args.output)
     drawing_report = drawings(args.lir2d, fixtures, args.output, args.font, initial)
-    write(args.output / "report.json", {"provider_revision": head, **drawing_report})
+    if args.core:
+        drawing_report["core_analytic_review"] = core_drawing(args.lir2d, args.checkout, args.core, args.output, args.font)
+    write(args.output / "report.json", {"provider_revision": providers["ir-2d"]["commit"], **drawing_report})
     print("PASS standalone 2D profile, ownership guard and A4/A3 PDF/SVG/DXF qualification")
 
 
