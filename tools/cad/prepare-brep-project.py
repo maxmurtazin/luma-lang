@@ -35,6 +35,15 @@ def main():
                         source, checkout], check=True)
         git(checkout, "checkout", "--quiet", "--detach", commit)
 
+    integration = ROOT / "integrations/living-brep-core"
+    project = directory / "living-ir-core/crates/living-cad-viewer/src/checkpoint/project.rs"
+    text = project.read_text(encoding="utf-8")
+    anchor = "    /// Resolve a supported authored extrusion without holding the writer lock.\n"
+    if text.count(anchor) != 1:
+        parser.error("unexpected ProjectStore source in the pinned Core checkout")
+    method = (integration / "project-drawing.rs").read_text(encoding="utf-8")
+    project.write_text(text.replace(anchor, method + "\n" + anchor), encoding="utf-8")
+
     bridge = directory / "native"
     bridge.mkdir()
     (bridge / "Cargo.toml").write_text("""[package]
@@ -60,9 +69,11 @@ living-sketch = { path = "../living-ir-core/crates/living-sketch" }
 living-cad-viewer = { path = "../living-ir-core/crates/living-cad-viewer", features = ["trusted-checkpoint"] }
 living-ir-brep-preview = { path = "../living-brep-core/integrations/living-ir-preview", features = ["project"] }
 serde_json = "=1.0.145"
+sha2 = "=0.10.9"
+tempfile = "=3.27.0"
 """, encoding="utf-8")
-    for filename in ("cli.rs", "cli_test.rs", "profile.rs", "artifact.rs"):
-        shutil.copyfile(ROOT / "integrations/living-brep-core" / filename, bridge / filename)
+    for filename in ("cli.rs", "cli_test.rs", "profile.rs", "artifact.rs", "drawing.rs"):
+        shutil.copyfile(integration / filename, bridge / filename)
     shutil.copyfile(directory / "living-brep-core/integrations/living-ir-preview/Cargo.lock",
                     bridge / "Cargo.lock")
     (bridge / "brep-pin.txt").write_text(lock["brep"]["commit"] + "\n", encoding="utf-8")

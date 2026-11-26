@@ -48,6 +48,7 @@ cargo build --locked --manifest-path "$BUILD/native/Cargo.toml"
 | `latest PART FEATURE` | Показывает последнюю публикацию и её актуальность относительно Core. |
 | `measure OPERATION_UUID` | Проверяет опубликованный артефакт и возвращает интервал объёма в м³, исходные контуры, отчёт и provenance. |
 | `view OPERATION_UUID` | Тесселирует проверенный артефакт и возвращает пакет для `pack-publication` в `result`. |
+| `sheet-publish PART LIR2D INPUT SHEET POLICY OUTPUT [--font FONT]` | Выпускает чертёж аналитической пластины из принятой ревизии Part. |
 | `distance OPERATION_UUID GEOMETRY_SHA solid\|face:N X Y Z` | Возвращает интервал расстояния до границы в метрах и признак возможных нескольких минимумов. Координаты заданы в локальной системе тела. |
 | `section OPERATION_UUID GEOMETRY_SHA FRAME_JSON` | Возвращает аналитическое сечение нормальной экструзии плоскостью, параллельной её основанию. |
 
@@ -116,5 +117,5 @@ python -B "$M7/fixtures/qualify_m7.py" \
 
 Проверки относятся к выбранным CLI-профилям CAD-2. Для полной
 приёмки нужны зарегистрированное 2D-состояние и запись через Core CAS,
-выпуск ассоциативных чертежей из ProjectStore и bindings операций в Luma host.
+а также привязки операций в Luma host.
 [Критерии CAD-2](../../spec/cad/Luma-CAD-Development-Specification-v1.0-RU.md#sec-32)
