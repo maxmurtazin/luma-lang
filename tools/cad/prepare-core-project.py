@@ -199,6 +199,35 @@ def main():
                 let _ = stage;
             },
             context,""")
+    # Core bounds a checkpoint to 129 authenticated snapshots. Account for
+    # their validation separately from the operation being prepared.
+    text = replace(text,
+        "    let mut store = facade.restore_checkpoint_history(&part.snapshots, context)?;",
+        """    #[cfg(feature = "luma-cad")]
+    let replay = context.for_checkpoint_replay(part.snapshots.len().min(129));
+    #[cfg(feature = "luma-cad")]
+    let context = &replay;
+    let mut store = facade.restore_checkpoint_history(&part.snapshots, context)?;""")
+    overlay = core / "crates/hir-transaction/src/overlay.rs"
+    patches[overlay] = replace(overlay.read_text(),
+        "    pub fn with_observer(mut self, observer: Observer) -> Self {",
+        """    /// Account for retained checkpoint replay without charging the incoming operation.
+    /// Keep its deadline, cancellation, and per-definition size limits.
+    pub fn for_checkpoint_replay(&self, retained: usize) -> Self {
+        let mut limits = self.limits;
+        limits.max_work = limits.max_work
+            .min(PreparationLimits::default().max_work)
+            .saturating_mul(retained);
+        Self {
+            limits,
+            flag: self.flag.clone(),
+            work: AtomicUsize::new(0),
+            started: self.started,
+            observer: self.observer.clone(),
+        }
+    }
+
+    pub fn with_observer(mut self, observer: Observer) -> Self {""")
     patches[project], patches[sqlite] = compose_job_commit(text, sqlite.read_text())
 
     adapter = (INTEGRATION / "project.rs").read_text()
