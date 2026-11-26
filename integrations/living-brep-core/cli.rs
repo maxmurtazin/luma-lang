@@ -1,0 +1,205 @@
+//! Owner-only bridge from an accepted Core extrusion to a derived B-rep.
+use brep_core::{
+    decode_native, BrepKernel, KernelContext, KernelOutcome, StandaloneKernel, K1_SOLID,
+};
+use hir_transaction::PreparationContext;
+use hir_types::EntityId;
+use living_cad_viewer::checkpoint::project::ProjectStore;
+use living_ir_brep_preview::publication::{project::ProjectPublicationStore, PublicationError};
+use serde_json::{json, Value};
+use std::{
+    path::Path,
+    process::ExitCode,
+    time::{Duration, Instant},
+};
+
+const OUTPUT_BYTES: usize = 8 * 1024 * 1024;
+const MEMORY_BYTES: usize = 64 * 1024 * 1024;
+
+struct Failure(&'static str, Value);
+type Result<T> = std::result::Result<T, Failure>;
+
+fn main() -> ExitCode {
+    let args: Vec<_> = std::env::args().skip(1).collect();
+    let mut envelope = json!({"protocol": "luma.cad.brep-project/1", "schema_version": 1});
+    let code = match execute(&args) {
+        Ok(result) => {
+            envelope["result"] = result;
+            0
+        }
+        Err(Failure(code, details)) => {
+            envelope["error"] = json!({"code": code, "details": details});
+            match code {
+                "Usage" | "ProjectKey" => 2,
+                "Conflict" | "RequestIdReuse" => 4,
+                "ResourceLimit" | "Cancelled" => 6,
+                _ => 3,
+            }
+        }
+    };
+    println!("{envelope}");
+    ExitCode::from(code)
+}
+
+fn execute(args: &[String]) -> Result<Value> {
+    let [database, project, derived, action, args @ ..] = args else {
+        return Err(usage());
+    };
+    let mut project =
+        ProjectStore::open(Path::new(database), project, project_key()?).map_err(core_error)?;
+    let derived = Path::new(derived);
+    match (action.as_str(), args) {
+        ("source", [document, feature]) => {
+            let source = project
+                .extrusion_source(document, id(feature)?, &PreparationContext::default())
+                .map_err(core_error)?;
+            let (_, sketch, height) = source.input();
+            let head = source.head();
+            Ok(json!({"project":head.project_id, "part":head.document_id,
+                "revision":head.native_revision.to_string(), "definition_hash":head.definition_hash,
+                "feature":source.feature(), "sketch":sketch, "signed_height_m":height}))
+        }
+        ("publish", [document, feature, revision, digest, operation]) => {
+            let revision: u64 = revision.parse().map_err(|_| usage())?;
+            if !lower_hex(digest, 64) {
+                return Err(usage());
+            }
+            let mut context = kernel_context();
+            let preparation =
+                PreparationContext::new(Default::default(), context.cancellation.shared_flag());
+            let source = project
+                .extrusion_source(document, id(feature)?, &preparation)
+                .map_err(core_error)?;
+            if source.head().native_revision != revision || source.head().definition_hash != *digest
+            {
+                return Err(Failure("Conflict", json!({"reason":"Part pin changed"})));
+            }
+            let operation = id(operation)?;
+            let mut store =
+                ProjectPublicationStore::open(derived, &project).map_err(publication_error)?;
+            let outcome = store
+                .run(&mut project, &source, operation, OUTPUT_BYTES, &mut context)
+                .map_err(publication_error)?;
+            serde_json::to_value(outcome).map_err(encoding_error)
+        }
+        ("latest", [document, feature]) => {
+            let document = document.parse().map_err(|_| usage())?;
+            let feature = id(feature)?;
+            if !derived.exists() {
+                return Ok(Value::Null);
+            }
+            let store =
+                ProjectPublicationStore::open(derived, &project).map_err(publication_error)?;
+            let latest = store
+                .latest(&mut project, document, feature)
+                .map_err(publication_error)?;
+            Ok(latest.map_or(
+                Value::Null,
+                |(receipt, current)| json!({"receipt":receipt,"current":current}),
+            ))
+        }
+        ("measure", [operation]) => {
+            let operation = id(operation)?;
+            if !derived.exists() {
+                return Err(Failure("MissingPublication", Value::Null));
+            }
+            let mut context = kernel_context();
+            let store =
+                ProjectPublicationStore::open(derived, &project).map_err(publication_error)?;
+            let artifacts = store
+                .recover(operation, OUTPUT_BYTES)
+                .map_err(publication_error)?
+                .ok_or_else(|| Failure("MissingPublication", Value::Null))?;
+            let shape = decode_native(&artifacts.geometry, artifacts.receipt.geometry, &context)
+                .map_err(|code| Failure("InvalidBrep", json!(format!("{code:?}"))))?;
+            let outcome = StandaloneKernel.accept(shape, K1_SOLID, &mut context);
+            let value = match outcome {
+                KernelOutcome::Success { value, .. } => value,
+                KernelOutcome::Cancelled(_) => return Err(Failure("Cancelled", Value::Null)),
+                KernelOutcome::LimitExceeded(_) => {
+                    return Err(Failure("ResourceLimit", Value::Null))
+                }
+                _ => return Err(Failure("InvalidBrep", Value::Null)),
+            };
+            let volume = value.volume_m3();
+            let profile = value.profile();
+            let report: Value =
+                serde_json::from_slice(&artifacts.report).map_err(encoding_error)?;
+            let provenance: Value =
+                serde_json::from_slice(&artifacts.provenance).map_err(encoding_error)?;
+            Ok(json!({
+                "receipt":artifacts.receipt, "volume_m3":[volume.lower(),volume.upper()],
+                "outer_loop":profile.outer_loop, "hole_loops":profile.hole_loops,
+                "report":report, "provenance":provenance,
+            }))
+        }
+        _ => Err(usage()),
+    }
+}
+
+fn kernel_context() -> KernelContext {
+    let mut context = KernelContext::default();
+    context.budget.max_memory_bytes = MEMORY_BYTES;
+    context.budget.deadline = Some(Instant::now() + Duration::from_secs(30));
+    context
+}
+
+fn publication_error(problem: PublicationError) -> Failure {
+    match problem {
+        PublicationError::Project(error) => core_error(error),
+        PublicationError::Superseded => Failure("Conflict", Value::Null),
+        PublicationError::RequestIdReuse => Failure("RequestIdReuse", Value::Null),
+        PublicationError::LimitExceeded => Failure("ResourceLimit", Value::Null),
+        PublicationError::Cancelled => Failure("Cancelled", Value::Null),
+        PublicationError::InvalidStore => Failure("InvalidDerivedStore", Value::Null),
+        other => Failure("BrepPublication", json!(format!("{other:?}"))),
+    }
+}
+
+fn core_error(problem: living_cad_viewer::Error) -> Failure {
+    let code = match problem.code.as_ref() {
+        "ResourceLimit" => "ResourceLimit",
+        "Cancelled" => "Cancelled",
+        "Conflict" => "Conflict",
+        "UnsupportedGeometry" => "UnsupportedGeometry",
+        _ => "CoreProject",
+    };
+    Failure(code, json!(problem))
+}
+
+fn encoding_error(problem: serde_json::Error) -> Failure {
+    Failure("Encoding", json!(problem.to_string()))
+}
+
+fn lower_hex(value: &str, size: usize) -> bool {
+    value.len() == size
+        && value
+            .bytes()
+            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+fn project_key() -> Result<[u8; 32]> {
+    let failure = || {
+        Failure(
+            "ProjectKey",
+            json!("Set LUMA_CAD_PROJECT_KEY to the owner key"),
+        )
+    };
+    let value = std::env::var("LUMA_CAD_PROJECT_KEY").map_err(|_| failure())?;
+    if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(failure());
+    }
+    let mut key = [0; 32];
+    for (index, byte) in key.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&value[index * 2..index * 2 + 2], 16).map_err(|_| failure())?;
+    }
+    Ok(key)
+}
+
+fn id(value: &str) -> Result<EntityId> {
+    living_cad_viewer::uuid(value).map_err(|_| usage())
+}
+
+fn usage() -> Failure {
+    Failure("Usage", json!("luma-cad-brep DB PROJECT DERIVED source PART FEATURE | publish PART FEATURE REVISION DIGEST OPERATION_UUID | latest PART FEATURE | measure OPERATION_UUID"))
+}
