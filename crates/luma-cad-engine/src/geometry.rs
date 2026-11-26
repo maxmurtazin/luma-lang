@@ -1,10 +1,13 @@
-use crate::{Kind, ParamExpr, ParamValue, ParameterHost, ParameterPlan, ParameterSnapshot};
+use crate::{
+    Definition, ExprOp, Kind, OwnedKey, OwnedRegion, ParamExpr, ParamValue, ParameterHost,
+    ParameterPlan, ParameterSnapshot, Provenance, ReconciledRegion,
+};
 use luma_cad_contract::SEALED_MODULES;
 use luma_host_api::{
     CallSite, Descriptor, Dispatch, Effect, Error, Mode, Parameter, Registry, ResultType, Type,
     Value,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Mutex,
@@ -93,7 +96,7 @@ fn length() -> Parameter {
 
 /// Feature positions and dimensions are SI and local to an axis-aligned,
 /// centered plate. Body names refer to the `solid` port of earlier features.
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Geometry {
     Plate {
@@ -131,6 +134,105 @@ pub struct RecipeGeometryPlan {
     pub features: Vec<Feature>,
     pub outputs: BTreeMap<String, String>,
     pub view_intents: Vec<ViewIntent>,
+}
+
+/// Stable definitions for the geometry profile. Expression locations stay
+/// in the diagnostic plan so source formatting cannot change these values.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub enum GeometryDefinition {
+    Feature {
+        geometry: Geometry,
+        inputs: BTreeMap<String, Vec<ExprOp>>,
+    },
+    Parameter(crate::Parameter),
+    Output {
+        body: String,
+    },
+}
+
+impl GeometryDefinition {
+    /// Retain evaluated geometry and internal body links when authoring
+    /// expressions are released by a full-region detach.
+    pub fn freeze(&self) -> Self {
+        match self {
+            Self::Feature { geometry, .. } => Self::Feature {
+                geometry: geometry.clone(),
+                inputs: BTreeMap::new(),
+            },
+            Self::Parameter(parameter) => {
+                let mut parameter = parameter.clone();
+                parameter.declaration.default = parameter.effective();
+                parameter.override_value = None;
+                Self::Parameter(parameter)
+            }
+            Self::Output { .. } => self.clone(),
+        }
+    }
+}
+
+impl RecipeGeometryPlan {
+    /// Reconcile all keys of a successfully evaluated geometry recipe.
+    pub fn reconcile(
+        &self,
+        previous: &OwnedRegion<GeometryDefinition>,
+        next_revision: u64,
+        inbound: &BTreeMap<String, BTreeSet<String>>,
+        reserve_id: impl FnMut(&OwnedKey) -> Result<String, Error>,
+    ) -> Result<ReconciledRegion<GeometryDefinition>, Error> {
+        let features = self.features.iter().map(|feature| {
+            let kind = match feature.geometry {
+                Geometry::Plate { .. } => "Plate",
+                Geometry::ThroughHole { .. } => "ThroughHole",
+            };
+            let inputs = feature.inputs.iter().map(|(name, expression)| {
+                let operations = expression.nodes.iter().map(|node| node.operation.clone());
+                ((*name).into(), operations.collect())
+            });
+            (
+                OwnedKey::Entity(feature.key.clone()),
+                Definition {
+                    kind: kind.into(),
+                    value: GeometryDefinition::Feature {
+                        geometry: feature.geometry.clone(),
+                        inputs: inputs.collect(),
+                    },
+                },
+            )
+        });
+        let parameters = self
+            .parameters
+            .parameters
+            .entries()
+            .iter()
+            .map(|(key, parameter)| {
+                (
+                    OwnedKey::Entity(key.clone()),
+                    Definition {
+                        kind: format!("Parameter<{}>", parameter.declaration.default.kind().name()),
+                        value: GeometryDefinition::Parameter(parameter.clone()),
+                    },
+                )
+            });
+        let outputs = self.outputs.iter().map(|(key, body)| {
+            (
+                OwnedKey::Output(key.clone()),
+                Definition {
+                    kind: BODY.into(),
+                    value: GeometryDefinition::Output { body: body.clone() },
+                },
+            )
+        });
+        previous.reconcile(
+            Provenance {
+                recipe: previous.provenance().recipe.clone(),
+                accepted_revision: next_revision,
+                source_digest: self.source_digest.clone(),
+            },
+            features.chain(parameters).chain(outputs),
+            inbound,
+            reserve_id,
+        )
+    }
 }
 
 enum FeatureDraft {

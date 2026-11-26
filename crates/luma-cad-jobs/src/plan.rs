@@ -2,7 +2,7 @@ use crate::{digest, scope_id, stable_key, Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-const MAX_TASKS: usize = 128;
+pub(crate) const MAX_TASKS: usize = 128;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]

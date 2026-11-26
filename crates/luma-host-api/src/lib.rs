@@ -149,6 +149,17 @@ impl Registry {
         Ok(Self { modules })
     }
 
+    /// Add native functions to modules already sealed by this profile.
+    pub fn with_descriptors(
+        &self,
+        descriptors: impl IntoIterator<Item = Descriptor>,
+    ) -> Result<Self, Error> {
+        Self::new(
+            self.modules.keys().cloned(),
+            self.descriptors().cloned().chain(descriptors),
+        )
+    }
+
     pub fn seals(&self, module: &str) -> bool {
         self.modules.contains_key(module)
     }
