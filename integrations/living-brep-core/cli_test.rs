@@ -37,25 +37,18 @@ impl Fixture {
     }
 
     fn call(&self, args: &[&str], code: i32) -> Value {
+        response(self.command().args(args).output().unwrap(), code)
+    }
+
+    fn command(&self) -> Command {
         let key: String = KEY.into_iter().map(|byte| format!("{byte:02x}")).collect();
-        let process = Command::new(env!("CARGO_BIN_EXE_luma-cad-brep"))
+        let mut process = Command::new(env!("CARGO_BIN_EXE_luma-cad-brep"));
+        process
             .arg(self.model())
             .arg(PROJECT)
             .arg(self.output())
-            .args(args)
-            .env("LUMA_CAD_PROJECT_KEY", key)
-            .output()
-            .unwrap();
-        assert_eq!(
-            process.status.code(),
-            Some(code),
-            "{args:?}\n{}\n{}",
-            String::from_utf8_lossy(&process.stdout),
-            String::from_utf8_lossy(&process.stderr)
-        );
-        let response: Value = serde_json::from_slice(&process.stdout).unwrap();
-        assert_eq!(response["protocol"], "luma.cad.brep-project/1");
-        response[if code == 0 { "result" } else { "error" }].clone()
+            .env("LUMA_CAD_PROJECT_KEY", key);
+        process
     }
 
     fn apply(&self, store: &mut ProjectStore, action: DocumentAction) {
@@ -88,6 +81,19 @@ impl Fixture {
             code,
         )
     }
+}
+
+fn response(process: std::process::Output, code: i32) -> Value {
+    assert_eq!(
+        process.status.code(),
+        Some(code),
+        "{}\n{}",
+        String::from_utf8_lossy(&process.stdout),
+        String::from_utf8_lossy(&process.stderr)
+    );
+    let response: Value = serde_json::from_slice(&process.stdout).unwrap();
+    assert_eq!(response["protocol"], "luma.cad.brep-project/1");
+    response[if code == 0 { "result" } else { "error" }].clone()
 }
 
 impl Drop for Fixture {
@@ -275,4 +281,210 @@ fn publishes_pinned_normal_extrusion_and_measures_historical_brep() {
             serde_json::to_writer(file, &value).unwrap();
         }
     }
+}
+
+#[cfg(unix)]
+#[test]
+#[ignore = "requires pinned Living IR 2D checkout, renderer and font"]
+fn publishes_associative_sheet_only_at_current_part_revision() {
+    use std::{
+        fs,
+        os::unix::fs::PermissionsExt,
+        path::Path,
+        process::Stdio,
+        thread,
+        time::{Duration, Instant},
+    };
+
+    const SHEET: &str = "56000000-0000-4000-8000-000000000001";
+    const OTHER: &str = "00000000-0000-4000-8000-000000000099";
+    let env_path =
+        |name| PathBuf::from(std::env::var_os(name).unwrap_or_else(|| panic!("set {name}")));
+    let renderer = env_path("LUMA_CAD2_LIR2D");
+    let font = env_path("LUMA_CAD2_DRAWING_FONT");
+    let fixtures = env_path("LUMA_CAD2_IR2D").join("fixtures");
+
+    let fixture = Fixture::new();
+    let context = PreparationContext::default();
+    let mut store = ProjectStore::create(&fixture.model(), PROJECT, KEY).unwrap();
+    for (revision, document, kind) in [
+        (0, PART, DocumentKind::Part),
+        (1, OTHER, DocumentKind::Assembly),
+    ] {
+        store
+            .create_document(
+                &CreateDocument {
+                    request_id: format!("{:032x}", revision + 1),
+                    document_id: document.into(),
+                    expected_project_revision: revision,
+                    kind,
+                    name: "Drawing fixture".into(),
+                },
+                &context,
+            )
+            .unwrap();
+    }
+    let plate = |width| {
+        serde_json::from_value(json!({
+            "document_id":PART,"feature_id":FEATURE,
+            "geometry":{"kind":"create_plate","width":width,"height":60.0,"thickness":8.0}
+        }))
+        .unwrap()
+    };
+    fixture.apply(&mut store, DocumentAction::Primitive(plate(100.0)));
+    let outline =
+        living_cad_features::derived_id(FEATURE.parse().unwrap(), "drawing/v1/top/bottom");
+    let prepare_layout = |part: &str, output: &Path| {
+        let mut batch: Value = serde_json::from_slice(
+            &fs::read(fixtures.join("sheet/create-core-plate-a4.json")).unwrap(),
+        )
+        .unwrap();
+        let views = batch["commands"][0]["sheet"]["views"]
+            .as_array_mut()
+            .unwrap();
+        for view in views.iter_mut() {
+            view["core_projection"]["document_id"] = json!(part);
+            view["core_projection"]["feature_id"] = json!(FEATURE);
+        }
+        views[0]["projection_dimensions"] = json!([{"source_entity_id":outline.to_string()}]);
+        let batch_path = output.with_extension("json");
+        fs::write(&batch_path, serde_json::to_vec(&batch).unwrap()).unwrap();
+        let applied = Command::new(&renderer)
+            .arg("apply")
+            .arg(fixtures.join("plate/parameters-100mm.json"))
+            .arg("--commands")
+            .arg(batch_path)
+            .arg("--output")
+            .arg(output)
+            .output()
+            .unwrap();
+        assert!(
+            applied.status.success(),
+            "{}",
+            String::from_utf8_lossy(&applied.stderr)
+        );
+    };
+    let layout = fixture.0.join("layout.lir2d");
+    prepare_layout(PART, &layout);
+    let run = |layout: &Path, policy: &str, output: &Path, code| {
+        fixture.call(
+            &[
+                "sheet-publish",
+                PART,
+                renderer.to_str().unwrap(),
+                layout.to_str().unwrap(),
+                SHEET,
+                policy,
+                output.to_str().unwrap(),
+                "--font",
+                font.to_str().unwrap(),
+            ],
+            code,
+        )
+    };
+    let first = fixture.0.join("first.svg");
+    let before = run(&layout, "review", &first, 0);
+    assert_eq!(before["core_source_status"], "verified_current");
+    assert_eq!(before["revision_policy"], "require_current_at_publish");
+    assert_eq!(
+        before["views"][0]["projection_dimensions"][0]["label"],
+        "100 mm"
+    );
+    let first_bytes = fs::read(&first).unwrap();
+    assert_eq!(
+        run(&layout, "review", &first, 3)["code"],
+        "DrawingOutputExists"
+    );
+
+    let wrapped = fixture.0.join("renderer");
+    let mark = fixture.0.join("rendered");
+    let resume = fixture.0.join("resume");
+    fs::write(
+        &wrapped,
+        r#"#!/bin/sh
+set -eu
+test -z "${LUMA_CAD_PROJECT_KEY+x}"
+"$LUMA_TEST_RENDERER" "$@"
+if [ "$1" = sheet.export-svg ]; then
+    touch "$LUMA_TEST_MARK"
+    for step in $(seq 300); do
+        test ! -e "$LUMA_TEST_RESUME" || exit 0
+        sleep .05
+    done
+    exit 1
+fi
+"#,
+    )
+    .unwrap();
+    fs::set_permissions(&wrapped, fs::Permissions::from_mode(0o700)).unwrap();
+    let stale = fixture.0.join("stale.svg");
+    let mut rendering = fixture
+        .command()
+        .args(["sheet-publish", PART])
+        .arg(&wrapped)
+        .arg(&layout)
+        .args([SHEET, "review"])
+        .arg(&stale)
+        .arg("--font")
+        .arg(&font)
+        .env("LUMA_TEST_RENDERER", &renderer)
+        .env("LUMA_TEST_MARK", &mark)
+        .env("LUMA_TEST_RESUME", &resume)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !mark.exists() {
+        if rendering.try_wait().unwrap().is_some() || Instant::now() >= deadline {
+            let _ = rendering.kill();
+            let output = rendering.wait_with_output().unwrap();
+            panic!(
+                "renderer did not stage the sheet: {}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    fixture.apply(&mut store, DocumentAction::UpdatePrimitive(plate(120.0)));
+    fs::write(&resume, []).unwrap();
+    assert_eq!(
+        response(rendering.wait_with_output().unwrap(), 4)["code"],
+        "Conflict"
+    );
+    assert!(!stale.exists());
+    assert_eq!(fs::read(&first).unwrap(), first_bytes);
+    drop(store);
+
+    let updated = fixture.0.join("updated.pdf");
+    let after = run(&layout, "review", &updated, 0);
+    assert!(fs::read(updated).unwrap().starts_with(b"%PDF-"));
+    assert_eq!(after["core_project_id"], PROJECT);
+    let before_view = &before["views"][0];
+    let after_view = &after["views"][0];
+    assert_ne!(
+        before_view["projection"]["source_revision"],
+        after_view["projection"]["source_revision"]
+    );
+    assert_eq!(
+        after_view["projection_dimensions"][0]["source_entity_id"],
+        outline.to_string()
+    );
+    assert_eq!(after_view["projection_dimensions"][0]["label"], "120 mm");
+
+    let blocked = fixture.0.join("manufacturing.svg");
+    let denied = run(&layout, "manufacturing", &blocked, 3);
+    assert_eq!(denied["code"], "DrawingRenderer");
+    assert!(denied["details"]["details"]["reason"]
+        .as_str()
+        .unwrap()
+        .contains("projection.quality_unproven"));
+    assert!(!blocked.exists());
+    let foreign = fixture.0.join("foreign.lir2d");
+    prepare_layout(OTHER, &foreign);
+    assert_eq!(
+        run(&foreign, "review", &blocked, 3)["code"],
+        "UnsupportedDrawingSource"
+    );
+    assert!(!blocked.exists());
 }

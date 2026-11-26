@@ -1,5 +1,6 @@
-//! Owner-only bridge from an accepted Core extrusion to a derived B-rep.
+//! Owner-only bridge for derived artifacts from an accepted Core Part.
 mod artifact;
+mod drawing;
 mod profile;
 
 use brep_core::{
@@ -54,6 +55,7 @@ fn execute(args: &[String]) -> Result<Value> {
         ProjectStore::open(Path::new(database), project, project_key()?).map_err(core_error)?;
     let derived = Path::new(derived);
     match (action.as_str(), args) {
+        ("sheet-publish", args) => drawing::run(&mut project, args),
         ("source", [document, feature]) => {
             let source = project
                 .extrusion_source(document, id(feature)?, &PreparationContext::default())
@@ -236,5 +238,5 @@ fn id(value: &str) -> Result<EntityId> {
 }
 
 fn usage() -> Failure {
-    Failure("Usage", json!("luma-cad-brep DB PROJECT DERIVED source PART FEATURE | sketch-profile PART FEATURE | publish PART FEATURE REVISION DIGEST OPERATION_UUID | latest PART FEATURE | measure OPERATION_UUID | view OPERATION_UUID | distance OPERATION_UUID GEOMETRY_SHA solid|face:N X Y Z | section OPERATION_UUID GEOMETRY_SHA FRAME_JSON"))
+    Failure("Usage", json!("luma-cad-brep DB PROJECT DERIVED source PART FEATURE | sketch-profile PART FEATURE | publish PART FEATURE REVISION DIGEST OPERATION_UUID | latest PART FEATURE | measure OPERATION_UUID | view OPERATION_UUID | distance OPERATION_UUID GEOMETRY_SHA solid|face:N X Y Z | section OPERATION_UUID GEOMETRY_SHA FRAME_JSON | sheet-publish PART LIR2D INPUT SHEET review|manufacturing OUTPUT [--font FONT]"))
 }

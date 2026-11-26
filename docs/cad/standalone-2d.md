@@ -66,5 +66,37 @@ bash "$IR2D/tools/core/read-parameter.sh" "$CORE" --test-hosted "$LIR2D"
 
 Тесты провайдера проверяют выпуск под блокировкой `DefinitionStore`,
 конфликт при изменении Core между подготовкой и выпуском и
-воспроизведение исторического SVG. Многодокументный Core ProjectStore
-пока не предоставляет этот выпуск как собственную операцию.
+воспроизведение исторического SVG.
+
+### Выпуск из ProjectStore
+
+`sheet-publish` получает геометрию всех проекций листа из одной принятой
+ревизии выбранного Part. Команда использует нативный источник
+`CreatePlate` для осевой пластины. Поддерживаются несколько таких
+источников в пределах Part и ассоциативные размеры по ID опор.
+Core-привязки параметров и проекции из других Part отклоняются.
+
+Рендеринг выполняет доверенный `lir2d` из [CAD lock](../../luma-cad.lock.json).
+Ему передаётся снимок листа и манифест геометрии. Ключ владельца остаётся
+у команды Core. После проверки SHA‑256 файла команда коротко берёт
+блокировку писателя ProjectStore, сверяет ревизию и хеш Part и публикует
+файл через жёсткую ссылку без перезаписи. Изменение Part во время
+рендеринга возвращает `Conflict`. Каталог назначения должен поддерживать
+жёсткие ссылки.
+
+```sh
+"$BUILD/native/target/debug/luma-cad-brep" "$DB" "$PROJECT" "$DERIVED" \
+  sheet-publish "$PART" "$LIR2D" "$DOCUMENT" "$SHEET_UUID" review "$OUTPUT" --font "$FONT"
+```
+
+`OUTPUT` оканчивается на `.svg` или `.pdf`. Политика `review` допускает
+аналитические проекции с неизвестной границей погрешности. Политика
+`manufacturing` отклоняет такие проекции. Для команды нужен ключ
+`LUMA_CAD_PROJECT_KEY`. Сборка добавляет API чтения в изолированную
+копию закреплённого Core по инструкции. [Сборка `luma-cad-brep`](brep-project.md)
+
+```sh
+LUMA_CAD2_IR2D="$IR2D" LUMA_CAD2_LIR2D="$LIR2D" LUMA_CAD2_DRAWING_FONT="$FONT" \
+  cargo test --locked --manifest-path "$BUILD/native/Cargo.toml" --test project \
+  publishes_associative_sheet_only_at_current_part_revision -- --ignored
+```
