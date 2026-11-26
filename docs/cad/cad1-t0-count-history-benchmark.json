@@ -1,0 +1,54 @@
+{
+  "profile": "cad-1/t0-native-cli-plate-definition",
+  "benchmark": "cold subprocess per phase against independent copies of the same accepted project",
+  "timestamp_utc": "2026-11-26T13:39:29Z",
+  "build": "Luma 37615b69a73e0e2d40cf8789bea12590a0ecceb1; Rust 1.100.0; release; luma-cad,checkpoint-fault-injection",
+  "cli_sha256": "aae48218636f0e39f7aae367b465212f447d47b36acb289c7390467714263b06",
+  "lock_sha256": "33d6f6329c49d144ad9d1c041d164c7383e39d2a5b12cbc6741fd277deabeb8c",
+  "core_pin": "e8d5a465dbc943b746ce9f3607fe526f1b3a93df",
+  "host": {
+    "os": "Linux-6.18.57-x86_64-with-glibc2.41",
+    "arch": "x86_64",
+    "cpu": "AMD EPYC 9V74 80-Core Processor",
+    "logical_cores": 5,
+    "gpu": null,
+    "cgroup_cpu_max": "400000 100000",
+    "cgroup_memory_max_bytes": "17179869184"
+  },
+  "warmup_iterations": 5,
+  "child_peak_rss_bytes": 17678336,
+  "timings": {
+    "prepare": {
+      "p50_ms": 27.819747,
+      "p95_ms": 43.619411,
+      "samples": 30
+    },
+    "apply": {
+      "p50_ms": 17.229246,
+      "p95_ms": 43.151702,
+      "samples": 30
+    },
+    "cancel_job": {
+      "p50_ms": 16.552013000000002,
+      "p95_ms": 22.717867,
+      "samples": 30
+    },
+    "publish_job": {
+      "p50_ms": 18.4402565,
+      "p95_ms": 32.676646,
+      "samples": 30
+    }
+  },
+  "max_stdout_bytes": {
+    "prepare": 524,
+    "apply": 222,
+    "cancel_job": 342,
+    "publish_job": 473
+  },
+  "max_prepared_token_bytes": 17041,
+  "growing_history": {
+    "requested_edits": 35,
+    "applied_edits": 35,
+    "refusal": null
+  }
+}
