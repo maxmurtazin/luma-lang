@@ -1,7 +1,9 @@
 //! Provider-independent preparation and SQLite job outbox for CAD.
+mod host;
 mod plan;
 mod queue;
 
+pub use host::JobsHost;
 pub use plan::{FutureOutput, Intent, Plan, Policy, SourcePin, TaskContract, TaskSpec};
 pub use queue::{
     admit, attempt_receipt, cancel, claim, complete, current, fail, install, intent, publish,

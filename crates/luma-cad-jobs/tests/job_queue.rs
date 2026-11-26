@@ -504,3 +504,138 @@ fn failed_admission_does_not_leak_a_partial_graph() {
     assert!(intent(&db, &scope(), "preview").unwrap().is_none());
     assert!(pick(&mut db, 'a').is_none());
 }
+
+#[test]
+fn luma_jobs_prepare_against_captured_receipts_and_share_the_authority_commit() {
+    use luma::{
+        host::{run_with_host, SourceBundle},
+        host_api::{
+            CallSite, Descriptor, Dispatch, Effect, Mode, Registry, ResultType, Type, Value,
+        },
+    };
+
+    struct Provider(Registry);
+    impl Dispatch for Provider {
+        fn registry(&self) -> &Registry {
+            &self.0
+        }
+
+        fn call(
+            &self,
+            descriptor: &Descriptor,
+            _mode: Mode,
+            _site: &CallSite,
+            _arguments: &[Value],
+        ) -> Result<Value, luma::host_api::Error> {
+            let (kind, admitted) = match descriptor.operation.as_str() {
+                "provider.task" => ("TaskSpecRef", "mesh"),
+                "provider.job" => ("JobRef", "old"),
+                _ => unreachable!(),
+            };
+            Ok(Value::Opaque {
+                type_name: kind.into(),
+                payload: serde_json::json!(admitted),
+            })
+        }
+    }
+
+    let provider = Provider(
+        Registry::new(
+            ["jobs".into(), "provider".into()],
+            [("task", "TaskSpecRef"), ("job", "JobRef")].map(|(name, result)| Descriptor {
+                module: "provider".into(),
+                name: name.into(),
+                operation: format!("provider.{name}"),
+                major: 1,
+                parameters: vec![],
+                result: ResultType::Exact(Type::Opaque(result.into())),
+                effect: Effect::ReadPinned,
+                modes: [Mode::Command].into(),
+            }),
+        )
+        .unwrap(),
+    );
+    let entry = "main.luma";
+    let program = |extra: &str| {
+        SourceBundle {
+        entry: entry.into(),
+        files: [(
+            entry.into(),
+            format!(
+                "use jobs\nuse provider\npin = provider.job()\n                 status = jobs.status(pin)\nresult = jobs.result(pin)\n                 submitted = jobs.submit(\"new\", provider.task())\n{extra}"
+            ),
+        )]
+        .into(),
+    }
+    };
+    let task = spec(Policy::HistoricalPinned);
+    let mut db = fixture();
+    db.execute("CREATE TABLE accepted(revision INTEGER NOT NULL)", [])
+        .unwrap();
+    let old = admit_plan(&mut db, &single(task.clone()))[0].job;
+    let captured = [("old".into(), receipt(&db, old).unwrap())].into();
+
+    let attempt = pick(&mut db, 'a').unwrap().attempt;
+    side_effect(&mut db, |tx| {
+        complete(tx, attempt, &mesh_artifact()).unwrap();
+        publish(tx, attempt).unwrap();
+    });
+    let mut changed = task;
+    changed.input_digest = hash('3');
+    let tasks = [("mesh".into(), changed)].into();
+    let host = JobsHost::new(&provider, &tasks, &captured).unwrap();
+    let run = run_with_host(&program(""), Mode::Command, &host, 1000).unwrap();
+    assert!(
+        matches!(&run.outputs["status"], Value::Opaque { payload, .. } if payload["state"] == "admitted")
+    );
+    assert!(
+        matches!(&run.outputs["result"], Value::Opaque { payload, .. } if payload["kind"] == "pending")
+    );
+    assert!(
+        matches!(&run.outputs["submitted"], Value::Opaque { type_name, .. } if type_name == "JobIntentRef")
+    );
+    let plan = host.finish(&contracts()).unwrap();
+    assert!(intent(&db, &scope(), "new").unwrap().is_none());
+
+    let current = [("old".into(), receipt(&db, old).unwrap())].into();
+    let host = JobsHost::new(&provider, &tasks, &current).unwrap();
+    let result = run_with_host(&program(""), Mode::Command, &host, 1000).unwrap();
+    assert!(
+        matches!(&result.outputs["result"], Value::Opaque { payload, .. } if payload["artifact"]["manifest_digest"] == hash('2'))
+    );
+    let rejected = JobsHost::new(&provider, &tasks, &current).unwrap();
+    let duplicate = run_with_host(
+        &program("again = jobs.submit(\"new\", provider.task())\n"),
+        Mode::Command,
+        &rejected,
+        1000,
+    )
+    .unwrap_err();
+    assert_eq!(duplicate.diagnostics[0].1.code, "InvalidJobIntentKey");
+    assert!(intent(&db, &scope(), "new").unwrap().is_none());
+
+    let admit_with_model = |tx: &mut rusqlite::Transaction<'_>| {
+        tx.execute("INSERT INTO accepted VALUES(2)", []).unwrap();
+        admit(tx, &scope(), &plan).unwrap()
+    };
+    {
+        let mut tx = db.transaction().unwrap();
+        admit_with_model(&mut tx);
+        tx.rollback().unwrap();
+    }
+    let revisions = |db: &Connection| {
+        db.query_row("SELECT count(*) FROM accepted", [], |r| r.get::<_, i64>(0))
+            .unwrap()
+    };
+    assert_eq!(revisions(&db), 0);
+    assert!(intent(&db, &scope(), "new").unwrap().is_none());
+    let mut tx = db.transaction().unwrap();
+    let delivery = admit_with_model(&mut tx);
+    tx.commit().unwrap();
+    assert_eq!(revisions(&db), 1);
+    assert_eq!(
+        intent(&db, &scope(), "new").unwrap(),
+        Some(delivery[0].clone())
+    );
+    assert_eq!(admit_plan(&mut db, &plan), delivery);
+}
