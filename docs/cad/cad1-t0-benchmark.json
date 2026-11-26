@@ -1,0 +1,69 @@
+{
+  "profile": "cad-1/t0-native-cli-plate-definition",
+  "benchmark": "cold subprocess per phase against independent copies of the same accepted project",
+  "timestamp_utc": "2026-11-26T10:49:42Z",
+  "build": "Luma 5b6d18aff03861fb7b449046072f446a9deb346d; Rust 1.100.0; release; luma-cad,checkpoint-fault-injection",
+  "cli_sha256": "b51dfe40417a1d1efc34d1c50f6621026e1b56241312c65cc0578e2839a7567c",
+  "lock_sha256": "33d6f6329c49d144ad9d1c041d164c7383e39d2a5b12cbc6741fd277deabeb8c",
+  "core_pin": "e8d5a465dbc943b746ce9f3607fe526f1b3a93df",
+  "host": {
+    "os": "Linux-6.18.57-x86_64-with-glibc2.41",
+    "arch": "x86_64",
+    "cpu": "AMD EPYC 9V74 80-Core Processor",
+    "logical_cores": 5,
+    "gpu": null,
+    "cgroup_cpu_max": "400000 100000",
+    "cgroup_memory_max_bytes": "17179869184"
+  },
+  "warmup_iterations": 5,
+  "child_peak_rss_bytes": 17575936,
+  "timings": {
+    "prepare": {
+      "p50_ms": 35.235029,
+      "p95_ms": 52.779446,
+      "samples": 30
+    },
+    "apply": {
+      "p50_ms": 21.177576000000002,
+      "p95_ms": 36.642807,
+      "samples": 30
+    },
+    "cancel_job": {
+      "p50_ms": 22.2144275,
+      "p95_ms": 34.531999,
+      "samples": 30
+    },
+    "publish_job": {
+      "p50_ms": 22.4976695,
+      "p95_ms": 29.338883,
+      "samples": 30
+    }
+  },
+  "max_stdout_bytes": {
+    "prepare": 524,
+    "apply": 222,
+    "cancel_job": 342,
+    "publish_job": 473
+  },
+  "max_prepared_token_bytes": 17045,
+  "growing_history": {
+    "requested_edits": 35,
+    "applied_edits": 6,
+    "refusal": {
+      "category": "resource",
+      "code": "ResourceLimit",
+      "details": {
+        "consumed": 1058084,
+        "definition_revision": 9,
+        "limit": 1000000,
+        "recipe_document": "00000000-0000-4000-8000-000000000002",
+        "resource": "preparation_work"
+      },
+      "diagnostics": [],
+      "domain": "gic01",
+      "node_id": null,
+      "retryable": false,
+      "schema_version": "error.gic01.v2"
+    }
+  }
+}

@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+import sqlite3
 import subprocess
 import tempfile
 
@@ -132,6 +133,33 @@ def jobs_and_closure(call, root):
     assert width(PART) == 0.125 and width(pinned) == 0.12
 
 
+def rejected_inputs(call, root, database):
+    before = call("inspect")["project_revision"]
+    operation_id = operation(99)
+    raw = root / "over-limit.json"
+    with raw.open("wb") as stream:
+        stream.truncate(256 * 1024 + 1)
+    assert call("preview", "recipe", PART, before, raw, root / "too-large.token", code=6)["code"] == "ResourceLimit"
+    with raw.open("wb") as stream:
+        stream.truncate(8 * 1024 * 1024 + 1)
+    assert call("apply", raw, operation_id, code=6)["code"] == "ResourceLimit"
+    assert call("receipt", PART, operation_id, code=3)["code"] == "UnknownOperation"
+
+    # Corrupt a result in the disposable fixture after its authority commit.
+    # Recovery recomputes the digest from the authenticated native definition.
+    with sqlite3.connect(database) as connection:
+        job, attempt, artifact = connection.execute(
+            "SELECT job, number, artifact FROM lcad_attempts WHERE state = 'published' ORDER BY job LIMIT 1"
+        ).fetchone()
+        invalid = json.loads(artifact)
+        invalid["manifest_digest"] = "sha256:" + "0" * 64
+        connection.execute(
+            "UPDATE lcad_attempts SET artifact = ? WHERE job = ? AND number = ?",
+            (json.dumps(invalid), job, attempt),
+        )
+    assert call("job-definition", job, code=5)["code"] == "CheckpointCorrupt"
+    assert call("inspect")["project_revision"] == before
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("cli", type=Path, help="binary built with checkpoint-fault-injection")
@@ -197,6 +225,7 @@ def main():
         assert reaccepted["project_revision"] == "4"
         assert reaccepted["document_revision"] == accepted["document_revision"]
         jobs_and_closure(call, root)
+        rejected_inputs(call, root, db)
     print("PASS Core CAD-1 CLI: model, job and receipt rollback, retry, closure and detach")
 
 
