@@ -32,7 +32,7 @@ impl<'a> JobsHost<'a> {
                 "submit",
                 vec![Parameter::Exact(Type::Text), exact(TASK)],
                 INTENT,
-                Effect::DeclareTask,
+                Effect::BuildPlan,
             ),
             descriptor("status", vec![exact(JOB)], OUTCOME, Effect::ReadPinned),
             descriptor("result", vec![exact(JOB)], OUTCOME, Effect::ReadPinned),
