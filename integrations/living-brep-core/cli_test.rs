@@ -157,6 +157,21 @@ fn publishes_pinned_normal_extrusion_and_measures_historical_brep() {
         })),
     );
     let first = fixture.call(&["source", PART, FEATURE], 0);
+    let wire = fixture.call(&["sketch-profile", PART, FEATURE], 0);
+    assert_eq!(wire["sketch"]["id"], first["sketch"]);
+    assert_eq!(wire["profile"]["source"]["revision"], first["revision"]);
+    assert_eq!(wire["source_definition_hash"], first["definition_hash"]);
+    assert_eq!(wire["sketch"]["curves"].as_array().unwrap().len(), 5);
+    let loops = wire["profile"]["loops"].as_array().unwrap();
+    assert_eq!(loops.len(), 2);
+    let outer = loops.iter().find(|item| item["role"] == "outer").unwrap();
+    let inner = loops.iter().find(|item| item["role"] == "hole").unwrap();
+    assert_eq!(inner["parent_id"], outer["id"]);
+    let edges: BTreeSet<_> = loops
+        .iter()
+        .flat_map(|item| item["edges"].as_array().unwrap())
+        .map(|edge| edge["curve_id"].as_str().unwrap().to_owned())
+        .collect();
     let published = fixture.publish(&first, FIRST, 0);
     assert_eq!(published["state"], "published");
     assert_eq!(fixture.publish(&first, FIRST, 0), published);
@@ -168,7 +183,41 @@ fn publishes_pinned_normal_extrusion_and_measures_historical_brep() {
         first["definition_hash"]
     );
     let ids = corners_and_holes(&artifact, 0.004);
-    assert_eq!(ids.len(), 5);
+    assert_eq!(ids, edges);
+    let preview = fixture.call(&["view", FIRST], 0);
+    let digest = preview["source"]["geometry_sha256"].as_str().unwrap();
+    assert_eq!(preview["source"]["source_volume_m3"], artifact["volume_m3"]);
+    assert_eq!(preview["source"]["source_revision"], first["revision"]);
+    assert_eq!(
+        preview["triangles"].as_array().unwrap().len(),
+        preview["face_ordinals"].as_array().unwrap().len()
+    );
+    let distance = fixture.call(&["distance", FIRST, digest, "solid", "0", "0", "0.002"], 0);
+    let limits = distance["distance_m"].as_array().unwrap();
+    assert!(limits[0].as_f64().unwrap() <= 0.005 && limits[1].as_f64().unwrap() >= 0.005);
+    let face = format!("face:{}", preview["face_ordinals"][0].as_u64().unwrap());
+    let face_distance = fixture.call(&["distance", FIRST, digest, &face, "0", "0", "0.002"], 0);
+    assert_eq!(face_distance["geometry_sha256"], digest);
+    let section = |height| {
+        json!({"origin_m":[0.,0.,height], "x_axis":[1.,0.,0.],
+        "y_axis":[0.,1.,0.], "z_axis":[0.,0.,1.]})
+        .to_string()
+    };
+    assert_eq!(
+        fixture.call(&["section", FIRST, digest, &section(0.002)], 0)["kind"],
+        "RegionContours"
+    );
+    assert_eq!(
+        fixture.call(&["section", FIRST, digest, &section(0.005)], 0)["kind"],
+        "Empty"
+    );
+    let oblique = json!({"origin_m":[0.,0.,0.002],"x_axis":[1.,0.,0.],
+        "y_axis":[0.,0.,1.],"z_axis":[0.,-1.,0.]})
+    .to_string();
+    assert_eq!(
+        fixture.call(&["section", FIRST, digest, &oblique], 3)["code"],
+        "UnsupportedBrepOperation"
+    );
     assert_eq!(fixture.call(&["latest", PART, FEATURE], 0)["current"], true);
 
     fixture.apply(
@@ -194,6 +243,13 @@ fn publishes_pinned_normal_extrusion_and_measures_historical_brep() {
     assert_eq!(fixture.publish(&second, SECOND, 0)["state"], "published");
     let next = fixture.call(&["measure", SECOND], 0);
     assert_eq!(corners_and_holes(&next, 0.008), ids);
+    let next_wire = fixture.call(&["sketch-profile", PART, FEATURE], 0);
+    assert_eq!(next_wire["sketch"], wire["sketch"]);
+    assert_eq!(next_wire["profile"]["loops"], wire["profile"]["loops"]);
+    assert_eq!(
+        fixture.call(&["distance", SECOND, digest, &face, "0", "0", "0.002"], 3)["code"],
+        "StaleTopologyRef"
+    );
     assert_eq!(fixture.call(&["measure", FIRST], 0), artifact);
     assert_eq!(
         fixture.call(&["latest", PART, FEATURE], 0)["receipt"],
@@ -205,4 +261,18 @@ fn publishes_pinned_normal_extrusion_and_measures_historical_brep() {
             .to_string(),
         second["revision"]
     );
+    if let Some(path) = std::env::var_os("LUMA_CAD2_EVIDENCE") {
+        let directory = PathBuf::from(path);
+        for (filename, value) in [
+            ("sketch-profile.json", wire),
+            ("brep-publication.json", preview),
+        ] {
+            let file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(directory.join(filename))
+                .unwrap();
+            serde_json::to_writer(file, &value).unwrap();
+        }
+    }
 }
