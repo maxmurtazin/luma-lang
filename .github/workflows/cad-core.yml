@@ -32,7 +32,9 @@ jobs:
           token: ${{ secrets.LUMA_CAD_CORE_READ_TOKEN }}
           persist-credentials: false
       - run: python -B tools/cad/prepare-core-project.py _cad_core
-      - run: cargo test --manifest-path _cad_core/Cargo.toml -p living-cad-viewer --features luma-cad --lib checkpoint::
+      - run: >-
+          cargo test --manifest-path _cad_core/Cargo.toml
+          -p living-cad-viewer --features luma-cad --lib 'checkpoint::'
       - run: cargo build --manifest-path _cad_core/Cargo.toml -p living-cad-viewer --features luma-cad,checkpoint-fault-injection --bin luma-cad-project
       - run: python -B tools/cad/test-core-project.py _cad_core/target/debug/luma-cad-project
       - run: npm ci && npm run build

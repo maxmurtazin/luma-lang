@@ -53,3 +53,7 @@ python -B tools/cad/validate.py --provider core=/path/to/core --provider view=/p
 ```
 
 [Матрица, команды воспроизведения и результаты](evidence.md)
+
+## CAD-2
+
+[Публикация и измерение нормальной B-rep экструзии](brep-project.md)
