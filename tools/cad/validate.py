@@ -262,6 +262,33 @@ def verify_domain_contracts(validator):
         expect_error(lambda: validator("sketch-profile-v1").validate({**value, "length_unit": "mm"}), ValidationError)
 
 
+def verify_sketch_profile(validator, path):
+    envelope = read(path)
+    pair = envelope.get("result", envelope)
+    sketch, profile = pair["sketch"], pair["profile"]
+    validator("sketch-profile-v1", "Sketch").validate(sketch)
+    validator("sketch-profile-v1", "Profile").validate(profile)
+    source = profile["source"]
+    require(source["type"] == "Sketch" and source["entity_id"] == sketch["id"], f"Sketch pin mismatch: {path}")
+    require(sketch["frame"] == profile["frame"], f"Profile frame mismatch: {path}")
+    curve_ids = {item["id"] for item in sketch["curves"]}
+    require(len(curve_ids) == len(sketch["curves"]), f"Duplicate curve ID: {path}")
+    loops = profile["loops"]
+    require(len({item["id"] for item in loops}) == len(loops), f"Duplicate loop ID: {path}")
+    outer = [item for item in loops if item["role"] == "outer"]
+    require(len(outer) == 1 and "parent_id" not in outer[0], f"Expected one root loop: {path}")
+    loop_edges = []
+    for loop in loops:
+        if loop["role"] == "hole":
+            require(loop.get("parent_id") == outer[0]["id"], f"Hole lacks its outer loop: {path}")
+        require(bool(loop["edges"]), f"Profile loop has no edges: {path}")
+        loop_edges.extend(item["curve_id"] for item in loop["edges"])
+    require(len(loop_edges) == len(set(loop_edges)) and set(loop_edges) <= curve_ids,
+            f"Profile edge does not uniquely refer to an exported curve: {path}")
+    for constraint in sketch["constraints"]:
+        require(set(constraint["curve_ids"]) <= curve_ids, f"Unknown constraint curve: {path}")
+
+
 def render(registry, locale):
     heading = {
         "en": ("CAD capabilities", "This reference lists proposed Luma operations and their upstream scope.",
@@ -303,6 +330,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--write-docs", action="store_true")
     parser.add_argument("--provider", action="append", default=[], metavar="ID=CHECKOUT")
+    parser.add_argument("--sketch-profile", action="append", default=[], type=Path, metavar="JSON")
     args = parser.parse_args()
     repositories = dict(item.split("=", 1) for item in args.provider)
     schemas = {path.stem: read(path) for path in SCHEMAS.glob("*.json")}
@@ -342,6 +370,8 @@ def main():
     verify_wire(validator, registry, operations)
     verify_host_contract(registry, validator)
     verify_domain_contracts(validator)
+    for path in args.sketch_profile:
+        verify_sketch_profile(validator, path)
     verify_guards(lock)
     verify_vectors()
     for locale in ("ru", "en"):

@@ -9,6 +9,8 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const [view, scene, report] = process.argv.slice(2);
+const expected = process.env.VIEW_EXPECTED_REVISION ?? "3";
+const brep = process.env.VIEW_BREP === "1";
 if (!view || !scene) throw new Error("usage: test-view-scene.mjs VIEW_CHECKOUT SCENE_JSON [REPORT_JSON]");
 const { chromium } = await import(pathToFileURL(resolve(view, "node_modules/playwright/index.mjs")));
 const { PNG } = await import(pathToFileURL(resolve(view, "node_modules/pngjs/lib/png.js")));
@@ -22,7 +24,9 @@ const view = await create_mesh_viewport(document.querySelector('canvas'));
 view.resize(480, 360, false);
 const data = await (await fetch('/scene.json')).json();
 view.open_scene(JSON.stringify(data));
+if (${brep}) view.fit();
 window.current = () => JSON.parse(view.stats());
+window.pickFace = async (x, y) => JSON.parse(await view.pick_topology('cad-test', x, y, 'face', 0));
 </script>`;
 const files = new Map([
   ["/", ["text/html", script]],
@@ -52,11 +56,11 @@ try {
   async function render() {
     const start = performance.now();
     await page.goto(`http://127.0.0.1:${server.address().port}/`);
-    await page.waitForFunction(() => {
+    await page.waitForFunction((revision) => {
       const stats = window.current?.();
-      return stats?.scene?.revision === "3" && stats.mesh.visible_instances === 1
+      return stats?.scene?.revision === revision && stats.mesh.visible_instances === 1
         && stats.queue.submissions > 0 && stats.queue.in_flight === 0;
-    }, undefined, { timeout: 30000 }).catch((error) => {
+    }, expected, { timeout: 30000 }).catch((error) => {
       throw new Error(errors.join("; ") || String(error));
     });
     return performance.now() - start;
@@ -70,7 +74,22 @@ try {
   for (let index = 0; index < png.data.length; index += 4) {
     if (png.data.readUInt32BE(index) !== corner) changed++;
   }
-  assert.ok(changed > 1000, "expected the accepted Core mesh to cover visible pixels");
+  assert.ok(changed > 1000, `expected the accepted mesh to cover visible pixels, got ${changed}`);
+  if (brep) {
+    const pick = await page.evaluate(async () => {
+      for (const x of [200, 280, 160, 320]) {
+        const candidate = await window.pickFace(x, 180);
+        if (candidate.result.status === "hit") return candidate;
+      }
+      return null;
+    });
+    assert.ok(pick, "expected a face hit away from the fixture's central hole");
+    assert.equal(pick.scene_revision, expected);
+    assert.equal(pick.result.source.kind, "brep_publication");
+    assert.ok(Number.isInteger(pick.result.entity_ordinal), JSON.stringify(pick));
+    assert.match(pick.result.source.geometry_sha256, /^[0-9a-f]{64}$/);
+    assert.equal(pick.result.precision, "brep_display_tessellation", JSON.stringify(pick));
+  }
   if (report) {
     const adapter = await page.evaluate(async () => {
       const device = await navigator.gpu.requestAdapter();
@@ -110,7 +129,7 @@ try {
     const sceneBytes = files.get("/scene.json")[1];
     const wasmBytes = files.get("/living_view_web_bg.wasm")[1];
     await writeFile(report, JSON.stringify({
-      profile: "cad-1/t1-view-accepted-plate",
+      profile: brep ? "cad-2/view-brep-publication" : "cad-1/t1-view-accepted-plate",
       timestamp_utc: new Date().toISOString(),
       benchmark: "navigation to accepted revision rendered with idle GPU queue",
       browser: browser.version(),
@@ -132,7 +151,7 @@ try {
       changed_pixels: changed,
     }, null, 2) + "\n", { flag: "wx" });
   }
-  process.stdout.write(`PASS View rendered accepted Core revision 3 in Chromium ${browser.version()}\n`);
+  process.stdout.write(`PASS View rendered accepted revision ${expected} in Chromium ${browser.version()}\n`);
 } finally {
   await browser?.close();
   server.close();

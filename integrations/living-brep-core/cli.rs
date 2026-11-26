@@ -1,11 +1,16 @@
 //! Owner-only bridge from an accepted Core extrusion to a derived B-rep.
+mod artifact;
+mod profile;
+
 use brep_core::{
-    decode_native, BrepKernel, KernelContext, KernelOutcome, StandaloneKernel, K1_SOLID,
+    decode_native, BrepKernel, KernelContext, StandaloneKernel, ValidatedBrep, K1_SOLID,
 };
 use hir_transaction::PreparationContext;
 use hir_types::EntityId;
 use living_cad_viewer::checkpoint::project::ProjectStore;
-use living_ir_brep_preview::publication::{project::ProjectPublicationStore, PublicationError};
+use living_ir_brep_preview::publication::{
+    project::ProjectPublicationStore, Artifacts, PublicationError,
+};
 use serde_json::{json, Value};
 use std::{
     path::Path,
@@ -59,6 +64,12 @@ fn execute(args: &[String]) -> Result<Value> {
                 "revision":head.native_revision.to_string(), "definition_hash":head.definition_hash,
                 "feature":source.feature(), "sketch":sketch, "signed_height_m":height}))
         }
+        ("sketch-profile", [document, feature]) => {
+            let source = project
+                .extrusion_source(document, id(feature)?, &PreparationContext::default())
+                .map_err(core_error)?;
+            profile::sketch_profile(&source)
+        }
         ("publish", [document, feature, revision, digest, operation]) => {
             let revision: u64 = revision.parse().map_err(|_| usage())?;
             if !lower_hex(digest, 64) {
@@ -99,42 +110,66 @@ fn execute(args: &[String]) -> Result<Value> {
             ))
         }
         ("measure", [operation]) => {
-            let operation = id(operation)?;
-            if !derived.exists() {
-                return Err(Failure("MissingPublication", Value::Null));
-            }
             let mut context = kernel_context();
-            let store =
-                ProjectPublicationStore::open(derived, &project).map_err(publication_error)?;
-            let artifacts = store
-                .recover(operation, OUTPUT_BYTES)
-                .map_err(publication_error)?
-                .ok_or(Failure("MissingPublication", Value::Null))?;
-            let shape = decode_native(&artifacts.geometry, artifacts.receipt.geometry, &context)
-                .map_err(|code| Failure("InvalidBrep", json!(format!("{code:?}"))))?;
-            let outcome = StandaloneKernel.accept(shape, K1_SOLID, &mut context);
-            let value = match outcome {
-                KernelOutcome::Success { value, .. } => value,
-                KernelOutcome::Cancelled(_) => return Err(Failure("Cancelled", Value::Null)),
-                KernelOutcome::LimitExceeded(_) => {
-                    return Err(Failure("ResourceLimit", Value::Null))
-                }
-                _ => return Err(Failure("InvalidBrep", Value::Null)),
-            };
-            let volume = value.volume_m3();
+            let (artifacts, value) = load_brep(&project, derived, operation, &mut context)?;
             let profile = value.profile();
             let report: Value =
                 serde_json::from_slice(&artifacts.report).map_err(encoding_error)?;
             let provenance: Value =
                 serde_json::from_slice(&artifacts.provenance).map_err(encoding_error)?;
             Ok(json!({
-                "receipt":artifacts.receipt, "volume_m3":[volume.lower(),volume.upper()],
+                "receipt":artifacts.receipt, "volume_m3":artifact::interval(value.volume_m3()),
                 "outer_loop":profile.outer_loop, "hole_loops":profile.hole_loops,
                 "report":report, "provenance":provenance,
             }))
         }
+        ("view", [operation]) => {
+            let mut context = kernel_context();
+            let (published, value) = load_brep(&project, derived, operation, &mut context)?;
+            artifact::view(&published, &value, &mut context)
+        }
+        ("distance", [operation, digest, scope, coordinates @ ..]) => {
+            let mut context = kernel_context();
+            let (_, value) = load_brep(&project, derived, operation, &mut context)?;
+            check_topology_digest(&value, digest)?;
+            artifact::distance(&value, scope, coordinates, &mut context)
+        }
+        ("section", [operation, digest, plane]) => {
+            let mut context = kernel_context();
+            let (_, value) = load_brep(&project, derived, operation, &mut context)?;
+            check_topology_digest(&value, digest)?;
+            artifact::section(&value, plane, &mut context)
+        }
         _ => Err(usage()),
     }
+}
+
+fn load_brep(
+    project: &ProjectStore,
+    derived: &Path,
+    operation: &str,
+    context: &mut KernelContext,
+) -> Result<(Artifacts, ValidatedBrep)> {
+    let operation = id(operation)?;
+    if !derived.exists() {
+        return Err(Failure("MissingPublication", Value::Null));
+    }
+    let store = ProjectPublicationStore::open(derived, project).map_err(publication_error)?;
+    let artifacts = store
+        .recover(operation, OUTPUT_BYTES)
+        .map_err(publication_error)?
+        .ok_or(Failure("MissingPublication", Value::Null))?;
+    let shape = decode_native(&artifacts.geometry, artifacts.receipt.geometry, context)
+        .map_err(|code| Failure("InvalidBrep", json!(format!("{code:?}"))))?;
+    let value = artifact::outcome(StandaloneKernel.accept(shape, K1_SOLID, context))?;
+    Ok((artifacts, value))
+}
+
+fn check_topology_digest(value: &ValidatedBrep, digest: &str) -> Result<()> {
+    if artifact::hex(&value.blob_digest()) != digest {
+        return Err(Failure("StaleTopologyRef", Value::Null));
+    }
+    Ok(())
 }
 
 fn kernel_context() -> KernelContext {
@@ -201,5 +236,5 @@ fn id(value: &str) -> Result<EntityId> {
 }
 
 fn usage() -> Failure {
-    Failure("Usage", json!("luma-cad-brep DB PROJECT DERIVED source PART FEATURE | publish PART FEATURE REVISION DIGEST OPERATION_UUID | latest PART FEATURE | measure OPERATION_UUID"))
+    Failure("Usage", json!("luma-cad-brep DB PROJECT DERIVED source PART FEATURE | sketch-profile PART FEATURE | publish PART FEATURE REVISION DIGEST OPERATION_UUID | latest PART FEATURE | measure OPERATION_UUID | view OPERATION_UUID | distance OPERATION_UUID GEOMETRY_SHA solid|face:N X Y Z | section OPERATION_UUID GEOMETRY_SHA FRAME_JSON"))
 }

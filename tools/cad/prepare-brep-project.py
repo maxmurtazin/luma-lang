@@ -52,16 +52,20 @@ path = "cli_test.rs"
 
 [dependencies]
 brep-core = { path = "../living-brep-core/crates/brep-core" }
+hir-evaluation-api = { path = "../living-ir-core/crates/hir-evaluation-api" }
 hir-transaction = { path = "../living-ir-core/crates/hir-transaction" }
 hir-types = { path = "../living-ir-core/crates/hir-types" }
+living-cad-features = { path = "../living-ir-core/crates/living-cad-features" }
+living-sketch = { path = "../living-ir-core/crates/living-sketch" }
 living-cad-viewer = { path = "../living-ir-core/crates/living-cad-viewer", features = ["trusted-checkpoint"] }
 living-ir-brep-preview = { path = "../living-brep-core/integrations/living-ir-preview", features = ["project"] }
 serde_json = "=1.0.145"
 """, encoding="utf-8")
-    for filename in ("cli.rs", "cli_test.rs"):
+    for filename in ("cli.rs", "cli_test.rs", "profile.rs", "artifact.rs"):
         shutil.copyfile(ROOT / "integrations/living-brep-core" / filename, bridge / filename)
     shutil.copyfile(directory / "living-brep-core/integrations/living-ir-preview/Cargo.lock",
                     bridge / "Cargo.lock")
+    (bridge / "brep-pin.txt").write_text(lock["brep"]["commit"] + "\n", encoding="utf-8")
     print(bridge / "Cargo.toml")
 
 
