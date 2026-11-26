@@ -7,19 +7,30 @@ use luma_host_api::{
 use std::{collections::BTreeSet, sync::Mutex};
 
 const PART: &str = "AdmittedPartRef";
-const PARAMETER: &str = "AdmittedLengthRef";
+const LENGTH: &str = "AdmittedLengthRef";
+const COUNT: &str = "AdmittedCountRef";
+const PARAMETER_TYPES: [(Kind, &str); 2] = [(Kind::Length, LENGTH), (Kind::Count, COUNT)];
 
 #[derive(Clone, Copy)]
 enum Operation {
     Part,
-    Parameter,
+    Parameter(Kind, &'static str),
     Value,
     Set,
     Reset,
 }
 const OPERATIONS: &[(&str, &str, Operation)] = &[
     ("project", "part", Operation::Part),
-    ("project", "parameter", Operation::Parameter),
+    (
+        "project",
+        "parameter",
+        Operation::Parameter(Kind::Length, LENGTH),
+    ),
+    (
+        "project",
+        "count_parameter",
+        Operation::Parameter(Kind::Count, COUNT),
+    ),
     ("param", "value", Operation::Value),
     ("param", "set", Operation::Set),
     ("param", "reset", Operation::Reset),
@@ -27,23 +38,54 @@ const OPERATIONS: &[(&str, &str, Operation)] = &[
 
 impl Operation {
     fn descriptor(self, module: &str, name: &str) -> Descriptor {
+        let exact = Parameter::Exact;
         let part = Type::Opaque(PART.into());
-        let parameter = Type::Opaque(PARAMETER.into());
-        let length = Kind::Length.value_type();
-        let (inputs, result, effect) = match self {
-            Self::Part => (vec![Type::Text], part, Effect::ReadPinned),
-            Self::Parameter => (vec![part, Type::Text], parameter, Effect::ReadPinned),
-            Self::Value => (vec![parameter], length, Effect::ReadPinned),
-            Self::Set => (vec![parameter, length], Type::Unit, Effect::BuildPlan),
-            Self::Reset => (vec![parameter], Type::Unit, Effect::BuildPlan),
+        let reference = || Parameter::Mapped {
+            slot: 0,
+            types: PARAMETER_TYPES
+                .map(|(kind, name)| (Type::Opaque(name.into()), kind.value_type()))
+                .into(),
+        };
+        let (parameters, result, effect) = match self {
+            Self::Part => (
+                vec![exact(Type::Text)],
+                ResultType::Exact(part),
+                Effect::ReadPinned,
+            ),
+            Self::Parameter(_, name) => (
+                vec![exact(part), exact(Type::Text)],
+                ResultType::Exact(Type::Opaque(name.into())),
+                Effect::ReadPinned,
+            ),
+            Self::Value => (
+                vec![reference()],
+                ResultType::Variable(0),
+                Effect::ReadPinned,
+            ),
+            Self::Set => (
+                vec![
+                    reference(),
+                    Parameter::Variable {
+                        slot: 0,
+                        accepts: PARAMETER_TYPES.map(|(kind, _)| kind.value_type()).into(),
+                    },
+                ],
+                ResultType::Exact(Type::Unit),
+                Effect::BuildPlan,
+            ),
+            Self::Reset => (
+                vec![reference()],
+                ResultType::Exact(Type::Unit),
+                Effect::BuildPlan,
+            ),
         };
         Descriptor {
             module: module.into(),
             name: name.into(),
             operation: format!("{module}.{name}"),
             major: 1,
-            parameters: inputs.into_iter().map(Parameter::Exact).collect(),
-            result: ResultType::Exact(result),
+            parameters,
+            result,
             effect,
             modes: [Mode::Command].into(),
         }
@@ -168,19 +210,16 @@ impl Dispatch for CommandHost {
                 }
                 Ok(self.handle(PART, part))
             }
-            (Operation::Parameter, [part, Value::Text(key)]) => {
+            (Operation::Parameter(kind, name), [part, Value::Text(key)]) => {
                 self.key(part)?;
                 let parameter = overlay
                     .entries()
                     .get(key)
                     .ok_or_else(|| Error::new("UnknownParameter", key))?;
-                if parameter.declaration.default.kind() != Kind::Length {
-                    return Err(Error::new(
-                        "UnsupportedCapability",
-                        "command supports Length parameters",
-                    ));
+                if parameter.declaration.default.kind() != kind {
+                    return Err(Error::new("ParameterTypeMismatch", key));
                 }
-                Ok(self.handle(PARAMETER, key))
+                Ok(self.handle(name, key))
             }
             (Operation::Value, [parameter]) => {
                 let key = self.key(parameter)?;
@@ -192,10 +231,15 @@ impl Dispatch for CommandHost {
                     .host_value()
             }
             (Operation::Set, [parameter, value]) => {
-                *overlay = overlay.with_override(
-                    self.writable_key(parameter)?,
-                    Some(Kind::Length.parse(value)?),
-                )?;
+                let key = self.writable_key(parameter)?;
+                let kind = overlay
+                    .entries()
+                    .get(key)
+                    .ok_or_else(|| Error::new("UnknownParameter", key))?
+                    .declaration
+                    .default
+                    .kind();
+                *overlay = overlay.with_override(key, Some(kind.parse(value)?))?;
                 Ok(Value::Unit)
             }
             (Operation::Reset, [parameter]) => {

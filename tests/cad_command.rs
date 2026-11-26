@@ -76,3 +76,36 @@ fn bound_parameters_allow_reads_and_reject_command_overrides() {
         ParamValue::Length(0.1),
     );
 }
+
+#[test]
+fn count_commands_use_typed_references_and_validate_integers() {
+    use luma::cad::prepare_parameters;
+
+    let source = SourceBundle {
+        entry: "decl.luma".into(),
+        files: [(
+            "decl.luma".into(),
+            "use param\ncount = param.count(\"hole_count\", 2)\n".into(),
+        )]
+        .into(),
+    };
+    let plan = prepare_parameters(&source, &Default::default(), 1000).unwrap();
+    let parameters = &plan.parameters;
+    let wire: WireSourceBundle =
+        serde_json::from_str(include_str!("../examples/cad/plate-count-command.json")).unwrap();
+    let mut command = wire.admit().unwrap();
+    let overlay = prepare_command(&command, PART.into(), parameters, 1000).unwrap();
+    assert_eq!(
+        overlay.entries()["hole_count"].effective(),
+        ParamValue::Count(3)
+    );
+    let text = command.files.get_mut(&command.entry).unwrap();
+    *text = text.replace("before + 1", "2.5");
+    let error = prepare_command(&command, PART.into(), parameters, 1000).unwrap_err();
+    assert!(matches!(error, PreparationError::Execution(failure)
+        if failure.diagnostics.iter().any(|(_, diagnostic)| diagnostic.code == "ParameterCountRange")));
+    assert_eq!(
+        parameters.entries()["hole_count"].effective(),
+        ParamValue::Count(2)
+    );
+}

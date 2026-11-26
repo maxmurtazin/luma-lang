@@ -1,0 +1,8 @@
+{
+  "bundle_version": 1,
+  "entry": "count-command.luma",
+  "files": {
+    "count-command.luma": "use project\nuse param\n\npart = project.part(\"00000000-0000-4000-8000-000000000002\")\ncount = project.count_parameter(part, \"hole_count\")\nbefore = param.value(count)\nparam.set(count, before + 1)\nafter = param.value(count)\n"
+  },
+  "source_digest": "sha256:f91072f9b878afd37a4e156d1543a6828829a159a88787d71e5cadc743cffec3"
+}

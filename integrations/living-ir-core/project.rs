@@ -270,10 +270,12 @@ impl ProjectStore {
             .luma_recipes
             .get(document)
             .ok_or_else(|| error("MissingAcceptedSource", "Part has no accepted recipe"))?;
+        let parameters = recipe.parameters()?;
         Ok(json!({
             "recipe":recipe.instance, "recipe_revision":recipe.accepted_revision,
             "detached":recipe.detached, "bindings":recipe.bindings,
-            "outputs":bindings::published(&recipe.parameters()?)
+            "source_digest":recipe.source_digest,
+            "parameters":parameters, "outputs":bindings::published(&parameters)
         }))
     }
 

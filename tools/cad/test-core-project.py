@@ -160,6 +160,65 @@ def rejected_inputs(call, root, database):
     assert call("job-definition", job, code=5)["code"] == "CheckpointCorrupt"
     assert call("inspect")["project_revision"] == before
 
+def count_changes_geometry_atomically(call, root):
+    call("init", PART, operation(1))
+    recipe = ROOT / "examples/cad/plate-count-geometry.json"
+    command = ROOT / "examples/cad/plate-count-command.json"
+    history = []
+
+    def check_holes(receipt, count):
+        job = receipt["jobs"][0]["job"]
+        accepted_job = call("work")
+        assert accepted_job["job"] == job and accepted_job["state"] == "published"
+        result = call("job-definition", job)
+        nodes = json.loads(result["canonical_definition"])["geometry"]["nodes"]
+        holes = {node["id"] for node in nodes if node["kind"] == "cad.hole.v1"}
+        assert len(holes) == count
+        history.append((job, result))
+        return holes
+
+    seed = root / "count-seed.token"
+    preview = call("preview", "recipe", PART, 1, recipe, seed)
+    two_holes = check_holes(call("apply", seed, operation(2)), 2)
+
+    token = root / "count-next.token"
+    command_preview = call("preview", "command", PART, 2, command, token)
+    assert command_preview["accepted_source_digest"] == preview["accepted_source_digest"]
+    receipt = call("apply", token, operation(3))
+    assert two_holes < check_holes(receipt, 3)
+    accepted = call("recipe-info", PART)
+    assert accepted["parameters"]["hole_count"]["override_value"] == {"Count": 3}
+    assert accepted["source_digest"] == preview["accepted_source_digest"]
+
+    failed = root / "count-invalid.token"
+    assert call("preview", "command", PART, 3, command, failed, code=3)["code"] == "InvalidHoleDiameter"
+    assert not failed.exists()
+    assert call("recipe-info", PART) == accepted
+    assert call("receipt", PART, operation(3)) == receipt
+    for job, result in history:
+        assert call("job-definition", job) == result
+
+
+def repeated_history(call, root):
+    call("init", PART, operation(1))
+    seed = root / "history-seed.token"
+    call("preview", "recipe", PART, 1, ROOT / "examples/cad/plate-geometry.json", seed)
+    initial = call("apply", seed, operation(2))
+    commands = [
+        bundle(root, f"history-{width}", "plate-width-command.json",
+               lambda source: source.replace("units.mm(120)", f"units.mm({width})"))
+        for width in (120, 100)
+    ]
+    accepted = initial
+    for index in range(12):
+        token = root / f"repeat-{index}.token"
+        call("preview", "command", PART, accepted["project_revision"], commands[index % 2], token)
+        accepted = call("apply", token, operation(index + 3))
+    assert accepted["document_revision"] == "14"
+    assert call("receipt", PART, operation(2)) == initial
+    assert call("inspect")["project_revision"] == accepted["project_revision"]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("cli", type=Path, help="binary built with checkpoint-fault-injection")
@@ -226,7 +285,11 @@ def main():
         assert reaccepted["document_revision"] == accepted["document_revision"]
         jobs_and_closure(call, root)
         rejected_inputs(call, root, db)
-    print("PASS Core CAD-1 CLI: model, job and receipt rollback, retry, closure and detach")
+        db = root / "count.db"
+        count_changes_geometry_atomically(call, root)
+        db = root / "history.db"
+        repeated_history(call, root)
+    print("PASS Core CAD-1 CLI: rollback, jobs, detach, Count, and 12 consecutive revisions")
 
 
 if __name__ == "__main__":

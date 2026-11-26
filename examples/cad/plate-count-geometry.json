@@ -1,0 +1,8 @@
+{
+  "bundle_version": 1,
+  "entry": "count-plate.luma",
+  "files": {
+    "count-plate.luma": "use units\nuse param\nuse cad\nuse jobs\n\ncount = param.count(\"hole_count\", 2)\nblank = cad.plate(\"blank\", units.mm(100), units.mm(60), units.mm(8))\nleft = cad.through_hole(\"left_hole\", blank, units.mm(6), units.mm(-40), units.mm(0))\nright = cad.through_hole(\"right_hole\", left, units.mm(6), units.mm(40), units.mm(0))\npart = match param.value(count)\n2: right\n3: cad.through_hole(\"centre_hole\", right, units.mm(6), units.mm(0), units.mm(0))\n*: cad.through_hole(\"invalid_hole\", right, units.mm(0), units.mm(0), units.mm(0))\nend\ncad.output(\"solid\", part)\njob = jobs.submit(\"definition\", jobs.task(\"part_definition\"))\n"
+  },
+  "source_digest": "sha256:9f816e583d7e1905decc6bccafdc11938846e12589e99bf6cb8b66a0f9117c9d"
+}
