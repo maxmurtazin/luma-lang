@@ -111,6 +111,27 @@ def compose_job_commit(project, sqlite):
         fault("command-after-luma-outbox");
         fault("command-before-receipt");''')
     sqlite = replace(sqlite, "&Sha256::digest(receipt)[..]", "&Sha256::digest(&receipt)[..]")
+    sqlite = replace(sqlite, '        if Self::schema(&db)? != Self::schema(&expected)? {',
+        """        let actual = {
+            let observed = db.unchecked_transaction().map_err(failure)?;
+            #[cfg(feature = "luma-cad")]
+            if multi_part && luma_cad_jobs::schema_present(&observed).map_err(outbox_schema_error)? {
+                let fixture = expected.unchecked_transaction().map_err(failure)?;
+                luma_cad_jobs::install_in(&fixture).map_err(outbox_schema_error)?;
+                fixture.commit().map_err(failure)?;
+            }
+            let schema = Self::schema(&observed)?;
+            observed.commit().map_err(failure)?;
+            schema
+        };
+        if actual != Self::schema(&expected)? {""")
+    sqlite = replace(sqlite, 'pub(super) struct Database(Connection);',
+        """#[cfg(feature = "luma-cad")]
+fn outbox_schema_error(_: luma_cad_jobs::Error) -> Error {
+    error("UnsupportedCheckpointSchema", "Invalid CAD outbox schema ledger")
+}
+
+pub(super) struct Database(Connection);""")
     return project, sqlite
 
 

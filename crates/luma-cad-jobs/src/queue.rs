@@ -122,9 +122,27 @@ pub fn install(connection: &mut Connection) -> Result<()> {
 /// Install the schema within an existing model transaction.
 pub fn install_in(tx: &Transaction<'_>) -> Result<()> {
     tx.execute_batch(include_str!("queue.sql"))?;
-    let version: i64 = tx.query_row("SELECT version FROM lcad_schema WHERE id=1", [], |row| {
-        row.get(0)
-    })?;
+    validate_schema_version(tx)
+}
+
+/// Detect an optional outbox within the caller's SQLite snapshot.
+pub fn schema_present(connection: &Connection) -> Result<bool> {
+    let installed = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='lcad_schema')",
+        [],
+        |row| row.get::<_, bool>(0),
+    )?;
+    if installed {
+        validate_schema_version(connection)?;
+    }
+    Ok(installed)
+}
+
+fn validate_schema_version(connection: &Connection) -> Result<()> {
+    let version: i64 =
+        connection.query_row("SELECT version FROM lcad_schema WHERE id=1", [], |row| {
+            row.get(0)
+        })?;
     if version != 1 {
         return Err(Error::Invalid("unsupported outbox schema version"));
     }
@@ -133,12 +151,7 @@ pub fn install_in(tx: &Transaction<'_>) -> Result<()> {
 
 /// Capture one explicitly selected intent in the caller's read snapshot.
 pub fn capture(connection: &Connection, scope: &Scope, key: &str) -> Result<Option<JobReceipt>> {
-    let installed = connection.query_row(
-        "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='lcad_schema')",
-        [],
-        |row| row.get::<_, bool>(0),
-    )?;
-    if !installed {
+    if !schema_present(connection)? {
         return Ok(None);
     }
     intent(connection, scope, key)?
