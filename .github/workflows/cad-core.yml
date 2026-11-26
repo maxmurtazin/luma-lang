@@ -1,5 +1,11 @@
 name: CAD-1 pinned Core integration
-on: [workflow_dispatch]
+on:
+  workflow_dispatch:
+    inputs:
+      benchmark:
+        description: Record a release T0 benchmark
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -10,6 +16,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.100.0'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -23,6 +32,18 @@ jobs:
           token: ${{ secrets.LUMA_CAD_CORE_READ_TOKEN }}
           persist-credentials: false
       - run: python -B tools/cad/prepare-core-project.py _cad_core
-      - run: cargo test --manifest-path _cad_core/Cargo.toml -p living-cad-viewer --features luma-cad luma_cad1_recipe --lib
+      - run: cargo test --manifest-path _cad_core/Cargo.toml -p living-cad-viewer --features luma-cad --lib checkpoint::
       - run: cargo build --manifest-path _cad_core/Cargo.toml -p living-cad-viewer --features luma-cad,checkpoint-fault-injection --bin luma-cad-project
       - run: python -B tools/cad/test-core-project.py _cad_core/target/debug/luma-cad-project
+      - run: npm ci && npm run build
+        working-directory: editors/vscode
+      - run: LUMA_CAD_PROJECT_CLI="$PWD/_cad_core/target/debug/luma-cad-project" node --test editors/vscode/test/cad-native.cjs
+      - if: inputs.benchmark
+        run: cargo build --release --manifest-path _cad_core/Cargo.toml -p living-cad-viewer --features luma-cad,checkpoint-fault-injection --bin luma-cad-project
+      - if: inputs.benchmark
+        run: python -B tools/cad/benchmark-project.py _cad_core/target/release/luma-cad-project --build "Luma ${{ github.sha }}; Rust 1.100.0; release; luma-cad,checkpoint-fault-injection" > cad1-t0-benchmark.json
+      - if: inputs.benchmark
+        uses: actions/upload-artifact@v4
+        with:
+          name: cad1-t0-benchmark
+          path: cad1-t0-benchmark.json

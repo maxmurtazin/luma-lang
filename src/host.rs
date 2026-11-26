@@ -44,7 +44,7 @@ impl WireSourceBundle {
             files: self.files,
         };
         bundle.validate_shape()?;
-        if luma_cad_contract::source_digest(&bundle.entry, &bundle.files) != self.source_digest {
+        if bundle.source_digest() != self.source_digest {
             return Err(failure(
                 &bundle.entry,
                 "SourceDigestMismatch",
@@ -85,6 +85,10 @@ where
 }
 
 impl SourceBundle {
+    pub fn source_digest(&self) -> String {
+        luma_cad_contract::source_digest(&self.entry, &self.files)
+    }
+
     pub(crate) fn entry(&self) -> &Path {
         Path::new(&self.entry)
     }

@@ -46,17 +46,43 @@ impl<'a> JobsHost<'a> {
         })
     }
 
+    /// Expose explicitly admitted names for providers that supply a bounded
+    /// catalog instead of returning handles through domain-specific calls.
+    pub fn with_catalog(mut self) -> Result<Self, Error> {
+        self.registry = self.registry.with_descriptors([
+            descriptor(
+                "task",
+                vec![Parameter::Exact(Type::Text)],
+                TASK,
+                Effect::ReadPinned,
+            ),
+            descriptor(
+                "job",
+                vec![Parameter::Exact(Type::Text)],
+                JOB,
+                Effect::ReadPinned,
+            ),
+        ])?;
+        Ok(self)
+    }
+
     /// Call after successful Luma execution. Only the model authority may
     /// pass the returned plan to the SQLite transaction.
     pub fn finish(self, contracts: &BTreeMap<String, TaskContract>) -> crate::Result<Plan> {
-        let intents = self
+        let tasks = self.tasks;
+        Plan::prepare(contracts, tasks, self.into_intents()?)
+    }
+
+    /// Extract proposals after a successful run so the native provider can
+    /// bind their source to its final validated candidate before planning.
+    pub fn into_intents(self) -> crate::Result<Vec<Intent>> {
+        Ok(self
             .intents
             .into_inner()
             .map_err(|_| crate::Error::Corrupt)?
             .into_iter()
             .map(|(key, task)| Intent { key, task })
-            .collect();
-        Plan::prepare(contracts, self.tasks, intents)
+            .collect())
     }
 }
 
@@ -73,6 +99,18 @@ impl Dispatch for JobsHost<'_> {
         arguments: &[Value],
     ) -> Result<Value, Error> {
         match (descriptor.operation.as_str(), arguments) {
+            ("jobs.task", [Value::Text(name)]) => {
+                if !self.tasks.contains_key(name) {
+                    return Err(Error::new("UnadmittedTask", name));
+                }
+                Ok(opaque(TASK, json!(name)))
+            }
+            ("jobs.job", [Value::Text(name)]) => {
+                if !self.captured.contains_key(name) {
+                    return Err(Error::new("UnadmittedJob", name));
+                }
+                Ok(opaque(JOB, json!(name)))
+            }
             ("jobs.submit", [Value::Text(key), task]) => {
                 let task = handle(task, TASK)?;
                 if !self.tasks.contains_key(task) {

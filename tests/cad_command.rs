@@ -47,3 +47,32 @@ fn commands_scope_reads_to_one_part_and_observe_their_own_overrides() {
     assert!(prepare_command(&damaged, PART.into(), checked, 1000).is_err());
     assert_eq!(checked.entries()["width"].override_value, None);
 }
+
+#[test]
+fn bound_parameters_allow_reads_and_reject_command_overrides() {
+    use luma::{
+        cad_engine::CommandHost,
+        host::{run_with_host, Mode},
+    };
+
+    let recipe: WireSourceBundle =
+        serde_json::from_str(include_str!("../examples/cad/plate-geometry.json")).unwrap();
+    let plan = prepare_geometry(&recipe.admit().unwrap(), &Default::default(), 1000).unwrap();
+    let host = CommandHost::new(PART.into(), plan.parameters.parameters)
+        .unwrap()
+        .with_read_only(["width".into()].into());
+    let command: WireSourceBundle =
+        serde_json::from_str(include_str!("../examples/cad/plate-width-command.json")).unwrap();
+    let command = command.admit().unwrap();
+
+    let rejected = run_with_host(&command, Mode::Command, &host, 1000).unwrap_err();
+    assert_eq!(rejected.diagnostics[0].1.code, "ManagedParameterConflict");
+    let mut read = command;
+    let entry = read.files.get_mut(&read.entry).unwrap();
+    *entry = entry.replace("param.set(width, units.mm(120))", "");
+    assert!(run_with_host(&read, Mode::Command, &host, 1000).is_ok());
+    assert_eq!(
+        host.finish().unwrap().entries()["width"].effective(),
+        ParamValue::Length(0.1),
+    );
+}

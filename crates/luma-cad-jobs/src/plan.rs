@@ -59,7 +59,8 @@ pub struct TaskSpec {
     pub inputs: BTreeMap<String, FutureOutput>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Intent {
     pub key: String,
     pub task: String,

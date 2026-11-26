@@ -47,7 +47,7 @@ pub fn prepare_geometry(
         .map_err(PreparationError::Parameters)?;
     let execution = host::run_with_host(bundle, host::Mode::Recipe, &session, expression_budget)
         .map_err(PreparationError::Execution)?;
-    let digest = luma_cad_contract::source_digest(&bundle.entry, &bundle.files);
+    let digest = bundle.source_digest();
     session
         .finish(&execution.outputs, digest)
         .map_err(PreparationError::Parameters)

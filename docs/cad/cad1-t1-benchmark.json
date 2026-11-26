@@ -1,0 +1,36 @@
+{
+  "profile": "cad-1/t1-view-accepted-plate",
+  "timestamp_utc": "2026-11-26T10:50:28.792Z",
+  "benchmark": "navigation to accepted revision rendered with idle GPU queue",
+  "browser": "159.0.8154.6",
+  "view_pin": "a94fe6cca6f1d2982bb85e4cd4170422ba77f7b4",
+  "software": true,
+  "adapter": {
+    "vendor": "google",
+    "architecture": "swiftshader",
+    "device": "",
+    "description": "",
+    "isFallbackAdapter": true
+  },
+  "canvas": [
+    480,
+    360
+  ],
+  "host": {
+    "os": "linux",
+    "kernel": "6.18.57",
+    "arch": "x64",
+    "cpu": "AMD EPYC 9V74 80-Core Processor"
+  },
+  "scene_sha256": "da9a6126eb52a1f80f00163bf8c4e74dacdd910aee65d5c160ff4aae2c03cf41",
+  "scene_bytes": 4980168,
+  "wasm_sha256": "a22a4e93030c908bbdfdca40e5bbe94d60d9bfbd2589d7f93c8c1e32af877a6b",
+  "wasm_bytes": 1914181,
+  "cold_ms": 1671.453569,
+  "warmup_iterations": 5,
+  "samples": 30,
+  "p50_ms": 1043.2368535000005,
+  "p95_ms": 1164.6439949999985,
+  "max_sampled_browser_rss_bytes": 752287744,
+  "changed_pixels": 1686
+}

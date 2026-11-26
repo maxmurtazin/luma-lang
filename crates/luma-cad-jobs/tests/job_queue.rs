@@ -639,3 +639,67 @@ fn luma_jobs_prepare_against_captured_receipts_and_share_the_authority_commit() 
     );
     assert_eq!(admit_plan(&mut db, &plan), delivery);
 }
+
+#[test]
+fn catalog_inputs_and_first_outbox_install_are_transactional() {
+    use luma::{
+        cad_engine::CommandHost,
+        host::{run_with_host, Mode, SourceBundle},
+    };
+
+    let baseline = CommandHost::new(source(1).document, Default::default()).unwrap();
+    let tasks = [("mesh".into(), spec(Policy::HistoricalPinned))].into();
+    let captured = BTreeMap::new();
+    let host = JobsHost::new(&baseline, &tasks, &captured)
+        .unwrap()
+        .with_catalog()
+        .unwrap();
+    let entry = "catalog-check.luma";
+    let program = |text: &str| SourceBundle {
+        entry: entry.into(),
+        files: [(entry.into(), text.into())].into(),
+    };
+    let invalid = run_with_host(
+        &program("use jobs\njob = jobs.job(\"hidden\")\n"),
+        Mode::Command,
+        &host,
+        1000,
+    )
+    .unwrap_err();
+    assert_eq!(invalid.diagnostics[0].1.code, "UnadmittedJob");
+    run_with_host(
+        &program("use jobs\nsubmitted = jobs.submit(\"preview\", jobs.task(\"mesh\"))\n"),
+        Mode::Command,
+        &host,
+        1000,
+    )
+    .unwrap();
+    let plan = host.finish(&contracts()).unwrap();
+
+    let mut db = Connection::open_in_memory().unwrap();
+    let tx = db.transaction().unwrap();
+    tx.execute("CREATE TABLE accepted(revision INTEGER NOT NULL)", [])
+        .unwrap();
+    tx.commit().unwrap();
+    let stage = |tx: &mut rusqlite::Transaction<'_>| {
+        tx.execute("INSERT INTO accepted VALUES(1)", []).unwrap();
+        install_in(tx).unwrap();
+        admit(tx, &scope(), &plan).unwrap()
+    };
+    assert!(capture(&db, &scope(), "preview").unwrap().is_none());
+    let mut tx = db.transaction().unwrap();
+    stage(&mut tx);
+    tx.rollback().unwrap();
+    assert!(capture(&db, &scope(), "preview").unwrap().is_none());
+    let mut tx = db.transaction().unwrap();
+    let deliveries = stage(&mut tx);
+    tx.commit().unwrap();
+    let read = capture(&db, &scope(), "preview").unwrap().unwrap();
+    assert_eq!(read.job, deliveries[0].job);
+    assert_eq!(read.state, State::Admitted);
+    assert_eq!(
+        db.query_row("SELECT count(*) FROM accepted", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+}

@@ -1,3 +1,4 @@
+import {previewCadBundle} from './cad';
 import {resolveExecutable} from './executable';
 import * as vscode from 'vscode';
 import {execFile} from 'node:child_process';
@@ -9,6 +10,7 @@ import {randomBytes} from 'node:crypto';
 import {Graph,GraphNode,parseGraph,utf16Offset,diagnostics,category} from './core';
 const exec=promisify(execFile);
 export function activate(context:vscode.ExtensionContext){
+ context.subscriptions.push(vscode.commands.registerCommand('luma.cadPreview',previewCadBundle));
  const collection=vscode.languages.createDiagnosticCollection('luma'); const output=vscode.window.createOutputChannel('Luma');
  let panel:vscode.WebviewPanel|undefined,entry:vscode.Uri|undefined,graph:Graph|undefined,timer:ReturnType<typeof setTimeout>|undefined,generation=0,disposed=false;
  const source=(file:string,base:vscode.Uri)=>{if(path.basename(file)!==file)throw Error('CLI source must be a sibling filename.');return vscode.Uri.file(path.join(path.dirname(base.fsPath),file));};
