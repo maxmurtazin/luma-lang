@@ -209,7 +209,7 @@ impl ProjectStore {
             command_source: None,
         };
         Ok(Preview {
-            token: seal(&self.key, TOKEN_DOMAIN, &candidate)?,
+            token: seal_candidate(&self.key, &candidate)?,
             project_revision: expected_project.to_string(),
             accepted_source_digest: detach.accepted_source_digest.clone(),
             candidate_pin: pin,
@@ -301,6 +301,7 @@ impl ProjectStore {
         };
         let graph = bindings::graph(&registry, request.document, request.bindings)?;
         let edited = [request.document.to_owned()].into();
+        let mut retained_native_bytes = 0usize;
         let batch = graph
             .prepare(&edited, |document, values| {
                 let primary = document == request.document;
@@ -324,6 +325,15 @@ impl ProjectStore {
                     inputs: bindings::input_values(values)?,
                 };
                 let (candidate, pin) = self.prepare_part(&registry, part_request, ctx)?;
+                if let Some((_, _, native)) = &candidate.snapshot {
+                    retained_native_bytes = retained_native_bytes.saturating_add(native.len());
+                    if retained_native_bytes > MAX_BYTES {
+                        return Err(error(
+                            "ResourceLimit",
+                            "Luma closure exceeds native snapshot budget",
+                        ));
+                    }
+                }
                 let outputs = bindings::prepared_outputs(&candidate.recipe)?;
                 Ok(PreparedRecipe {
                     change: (candidate, pin),
@@ -353,13 +363,7 @@ impl ProjectStore {
             parts,
             command_source: request.command.then(|| request.source.to_owned()),
         };
-        let token = seal(&self.key, TOKEN_DOMAIN, &candidate)?;
-        if token.len() > MAX_BYTES {
-            return Err(error(
-                "ResourceLimit",
-                "Luma prepared closure exceeds size limit",
-            ));
-        }
+        let token = seal_candidate(&self.key, &candidate)?;
         Ok(Preview {
             token,
             project_revision: request.expected.to_string(),
@@ -846,6 +850,17 @@ impl ProjectStore {
             .get(&receipt.document_id)
             .and_then(|record| record.view.clone()))
     }
+}
+
+fn seal_candidate(key: &[u8; 32], candidate: &Candidate) -> Result<Vec<u8>, Error> {
+    let token = seal(key, TOKEN_DOMAIN, candidate)?;
+    if token.len() > MAX_BYTES {
+        return Err(error(
+            "ResourceLimit",
+            "Luma prepared closure exceeds size limit",
+        ));
+    }
+    Ok(token)
 }
 
 fn now() -> Result<u64, Error> {
