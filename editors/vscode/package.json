@@ -55,6 +55,10 @@
       {
         "command": "luma.graph",
         "title": "Luma: Open Graph Explorer"
+      },
+      {
+        "command": "luma.cadPreview",
+        "title": "Luma: Preview CAD Bundle"
       }
     ],
     "configuration": {
@@ -64,6 +68,12 @@
           "type": "string",
           "default": "luma",
           "description": "Executable name on PATH or absolute path to luma (luma.exe on Windows). The Windows installer bundles the runtime; the default searches its standard per-user location."
+        },
+        "luma.cadProjectExecutable": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Absolute path to the local luma-cad-project executable for CAD bundle previews."
         },
         "luma.debounceMs": {
           "type": "number",

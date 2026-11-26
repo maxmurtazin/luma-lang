@@ -1,7 +1,9 @@
 //! Local owner-only CLI for the composed Core and Luma adapter.
 use hir_transaction::PreparationContext;
 use living_cad_viewer::{
-    checkpoint::project::{CreateDocument, DocumentKind, ProjectStore, Receipt},
+    checkpoint::project::{
+        luma_cad::LengthBinding, CreateDocument, DocumentKind, ProjectStore, Receipt,
+    },
     error, Error,
 };
 use serde_json::{json, Value};
@@ -61,30 +63,64 @@ fn run(args: &[String]) -> Result<Value, Error> {
     }
     let mut store = ProjectStore::open(path, project, key)?;
     match (action.as_str(), args) {
-        ("preview", [mode, part, revision, bundle, destination]) => {
+        ("capabilities", []) => Ok(json!({
+            "profile":"core-part/1", "binding_type":"Length", "task_keys":["part_definition"],
+            "limits":{"affected_recipes":64,"binding_reads":4096,"prepared_token_bytes":8*1024*1024}
+        })),
+        ("inspect", []) => {
+            let registry = store.registry()?;
+            Ok(json!({
+                "project_id": registry.project_id,
+                "project_revision": registry.revision.to_string(),
+                "documents": registry.documents,
+            }))
+        }
+        ("preview", [mode, part, revision, bundle, destination, jobs @ ..]) => {
             let revision = revision.parse().map_err(|_| usage())?;
             let source = String::from_utf8(read(bundle, 256 * 1024)?)
                 .map_err(|_| error("InvalidSourceBundle", "Expected UTF-8 Luma bundle"))?;
-            let preview = match mode.as_str() {
-                "recipe" => store.prepare_luma_recipe(part, revision, &source, &context),
-                "command" => store.prepare_luma_command(part, revision, &source, &context),
+            let command = match mode.as_str() {
+                "recipe" => false,
+                "command" => true,
                 _ => return Err(usage()),
-            }?;
-            let mut options = OpenOptions::new();
-            options.write(true).create_new(true);
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::OpenOptionsExt;
-                options.mode(0o600);
-            }
-            options
-                .open(destination)
-                .and_then(|mut file| file.write_all(&preview.token).and_then(|_| file.sync_all()))
-                .map_err(|_| error("OutputFile", "Could not create a new prepared-token file"))?;
-            Ok(
-                json!({"project_revision":preview.project_revision,"candidate_changed":preview.candidate_changed,
-                "candidate_pin":preview.candidate_pin,"accepted_source_digest":preview.accepted_source_digest}),
-            )
+            };
+            let preview =
+                store.prepare_luma_with_jobs(part, revision, &source, command, jobs, &context)?;
+            write_preview(&preview, destination)
+        }
+        ("create-part", [part, revision, operation]) => {
+            let revision = revision.parse().map_err(|_| usage())?;
+            validate_operation(operation)?;
+            store
+                .create_document(
+                    &CreateDocument {
+                        request_id: operation.clone(),
+                        document_id: part.clone(),
+                        expected_project_revision: revision,
+                        kind: DocumentKind::Part,
+                        name: "Luma Part".into(),
+                    },
+                    &context,
+                )
+                .map(|receipt| receipt_json(&receipt))
+        }
+        ("bind", [part, revision, file, destination, jobs @ ..]) => {
+            let revision = revision.parse().map_err(|_| usage())?;
+            let bindings: Vec<LengthBinding> = serde_json::from_slice(&read(file, 64 * 1024)?)
+                .map_err(|_| {
+                    error(
+                        "InvalidRecipeBinding",
+                        "Expected a JSON array of Length bindings",
+                    )
+                })?;
+            let preview = store.prepare_luma_bindings(part, revision, &bindings, jobs, &context)?;
+            write_preview(&preview, destination)
+        }
+        ("recipe-info", [part]) => store.luma_recipe_info(part),
+        ("detach", [part, revision, destination]) => {
+            let revision = revision.parse().map_err(|_| usage())?;
+            let preview = store.prepare_luma_detach(part, revision, &context)?;
+            write_preview(&preview, destination)
         }
         ("apply", [token, operation]) => Ok(receipt_json(&store.apply_luma(
             &read(token, 8 * 1024 * 1024)?,
@@ -92,12 +128,46 @@ fn run(args: &[String]) -> Result<Value, Error> {
             &context,
         )?)),
         ("receipt", [part, operation]) => Ok(receipt_json(&receipt(&store, part, operation)?)),
+        ("job", [part, key]) => Ok(json!(store.luma_job(part, key)?)),
+        ("work", []) => Ok(json!(store.run_luma_job()?)),
+        ("job-cancel", [job]) => Ok(json!(
+            store.cancel_luma_job(job.parse().map_err(|_| usage())?)?
+        )),
+        ("job-retry", [job, attempt]) => Ok(json!(store.retry_luma_job(
+            job.parse().map_err(|_| usage())?,
+            attempt.parse().map_err(|_| usage())?,
+        )?)),
+        ("job-definition", [job]) => store.luma_job_definition(job.parse().map_err(|_| usage())?),
         #[cfg(feature = "living-view-v2")]
         ("scene", [part, operation, scratch]) => {
             store.luma_scene(&receipt(&store, part, operation)?, Path::new(scratch))
         }
         _ => Err(usage()),
     }
+}
+
+fn write_preview(
+    preview: &living_cad_viewer::checkpoint::project::luma_cad::Preview,
+    destination: &str,
+) -> Result<Value, Error> {
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    options
+        .open(destination)
+        .and_then(|mut file| file.write_all(&preview.token).and_then(|_| file.sync_all()))
+        .map_err(|_| error("OutputFile", "Could not create a new prepared-token file"))?;
+    let mut result = json!({"project_revision":preview.project_revision,
+        "candidate_changed":preview.candidate_changed,"candidate_pin":preview.candidate_pin,
+        "accepted_source_digest":preview.accepted_source_digest});
+    if let Some(report) = &preview.detach {
+        result["detach"] = json!(report);
+    }
+    Ok(result)
 }
 
 fn receipt(store: &ProjectStore, part: &str, operation: &str) -> Result<Receipt, Error> {
@@ -107,8 +177,16 @@ fn receipt(store: &ProjectStore, part: &str, operation: &str) -> Result<Receipt,
 }
 
 fn receipt_json(receipt: &Receipt) -> Value {
-    json!({"document_id":receipt.document_id,"document_revision":receipt.document_revision.to_string(),
-        "project_revision":receipt.project_revision.to_string()})
+    let mut result = json!({"document_id":receipt.document_id,
+        "document_revision":receipt.document_revision.to_string(),
+        "project_revision":receipt.project_revision.to_string()});
+    if !receipt.luma_jobs.is_empty() {
+        result["jobs"] = json!(receipt.luma_jobs);
+    }
+    if !receipt.luma_dependent_jobs.is_empty() {
+        result["dependent_jobs"] = json!(receipt.luma_dependent_jobs);
+    }
+    result
 }
 
 fn validate_operation(value: &str) -> Result<(), Error> {
@@ -155,5 +233,5 @@ fn key() -> Result<[u8; 32], Error> {
 }
 
 fn usage() -> Error {
-    error("Usage", "luma-cad-project DB PROJECT init PART OP | preview MODE PART REVISION BUNDLE TOKEN | apply TOKEN OP | receipt PART OP | scene PART OP SCRATCH")
+    error("Usage", "luma-cad-project DB PROJECT init PART OP | create-part PART REVISION OP | preview MODE PART REVISION BUNDLE TOKEN [JOB_KEY ...] | bind PART REVISION BINDINGS TOKEN [JOB_KEY ...] | recipe-info PART | detach PART REVISION TOKEN | apply TOKEN OP | receipt PART OP | job PART KEY | work | job-cancel JOB | job-retry JOB ATTEMPT | job-definition JOB | scene PART OP SCRATCH")
 }

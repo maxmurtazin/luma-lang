@@ -4,7 +4,7 @@ use luma_host_api::{
     CallSite, Descriptor, Dispatch, Effect, Error, Mode, Parameter, Registry, ResultType, Type,
     Value,
 };
-use std::sync::Mutex;
+use std::{collections::BTreeSet, sync::Mutex};
 
 const PART: &str = "AdmittedPartRef";
 const PARAMETER: &str = "AdmittedLengthRef";
@@ -57,6 +57,7 @@ pub struct CommandHost {
     units: UnitsHost,
     registry: Registry,
     overlay: Mutex<ParameterSnapshot>,
+    read_only: BTreeSet<String>,
 }
 
 impl CommandHost {
@@ -76,7 +77,21 @@ impl CommandHost {
             units,
             registry,
             overlay: Mutex::new(snapshot),
+            read_only: BTreeSet::new(),
         })
+    }
+
+    pub fn with_read_only(mut self, keys: BTreeSet<String>) -> Self {
+        self.read_only = keys;
+        self
+    }
+
+    fn writable_key<'a>(&self, reference: &'a Value) -> Result<&'a str, Error> {
+        let key = self.key(reference)?;
+        if self.read_only.contains(key) {
+            return Err(Error::new("ManagedParameterConflict", key));
+        }
+        Ok(key)
     }
 
     pub fn finish(self) -> Result<ParameterSnapshot, Error> {
@@ -177,12 +192,14 @@ impl Dispatch for CommandHost {
                     .host_value()
             }
             (Operation::Set, [parameter, value]) => {
-                *overlay = overlay
-                    .with_override(self.key(parameter)?, Some(Kind::Length.parse(value)?))?;
+                *overlay = overlay.with_override(
+                    self.writable_key(parameter)?,
+                    Some(Kind::Length.parse(value)?),
+                )?;
                 Ok(Value::Unit)
             }
             (Operation::Reset, [parameter]) => {
-                *overlay = overlay.with_override(self.key(parameter)?, None)?;
+                *overlay = overlay.with_override(self.writable_key(parameter)?, None)?;
                 Ok(Value::Unit)
             }
             _ => Err(Error::new("HostTypeMismatch", "invalid command arguments")),

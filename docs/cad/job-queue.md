@@ -39,8 +39,9 @@ cargo test --locked --manifest-path crates/luma-cad-jobs/Cargo.toml
 
 Хост устанавливает схему через `install` и использует
 `TransactionBehavior::Immediate` для записей. Идентификаторы задач
-действительны в пределах одной базы. Подключение очереди к Core ProjectStore и воркеры
-конкретных CAD-провайдеров входят в дальнейшую интеграцию.
+действительны в пределах одной базы. Core ProjectStore использует ту же транзакцию для чекпойнта, постановки
+задач и подписанной квитанции. Встроенный worker публикует определение
+принятого Part по историческому pin.
 [Профиль Core ProjectStore](core-project.md)
 
 ### Вызовы из Luma
@@ -56,5 +57,5 @@ cargo test --locked --manifest-path crates/luma-cad-jobs/Cargo.toml
 После успешного исполнения host передаёт план в `admit` в транзакции
 владельца модели. Тест запускает программу Luma, обновляет модель и
 сопоставление intent → job в одной SQLite-транзакции и проверяет откат,
-успешный commit и повтор. Подключение к Core ProjectStore остаётся этапом
-интеграции. [Тест](../../crates/luma-cad-jobs/tests/job_queue.rs)
+успешный commit и повтор. Сквозной прогон обновлённого адаптера Core
+имеет статус `not_run`. [Тест](../../crates/luma-cad-jobs/tests/job_queue.rs)

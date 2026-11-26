@@ -1,11 +1,16 @@
 //! Luma recipe adapter for the pinned Core ProjectStore.
+mod bindings;
+mod jobs;
 use super::*;
+pub use bindings::LengthBinding;
 use hir_transaction::PreparationStage;
 use hir_types::{RequestId, Revision};
 use luma::{
-    cad::{prepare_command, prepare_geometry},
-    cad_engine::{Geometry, Parameter, ParameterSnapshot, RecipeGeometryPlan},
-    host::WireSourceBundle,
+    cad_engine::{
+        CommandHost, Geometry, GeometryHost, ParamValue, Parameter, ParameterSnapshot,
+        PreparedRecipe, RecipeGeometryPlan,
+    },
+    host::{run_with_host, Dispatch, Mode, SourceBundle, WireSourceBundle},
 };
 use serde_json::{json, Value};
 use std::{
@@ -35,8 +40,26 @@ pub(super) struct RecipeRecord {
     features: BTreeMap<String, Identity>,
     parameter_ids: BTreeMap<String, String>,
     retired_parameters: BTreeSet<String>,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    retired_features: BTreeSet<String>,
+    #[serde(default)]
+    detached: bool,
+    #[serde(default)]
+    accepted_revision: u64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    bindings: Vec<LengthBinding>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    binding_base: BTreeMap<String, Option<String>>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    historical_outputs: BTreeMap<u64, String>,
     public_output: String,
     view: Option<SourcePin>,
+}
+
+impl RecipeRecord {
+    pub(super) fn is_managed(&self) -> bool {
+        !self.detached
+    }
 }
 
 #[derive(Deserialize, Serialize)]
@@ -48,10 +71,45 @@ struct Candidate {
     document: String,
     expected_project: u64,
     expires: u64,
+    parts: Vec<PartChange>,
+    command_source: Option<String>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct PartChange {
+    document: String,
     recipe: RecipeRecord,
     snapshot: Option<(u64, String, String)>,
-    command_source: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    queued: Option<jobs::QueueRequest>,
     changed: bool,
+}
+
+struct PreviewRequest<'a> {
+    document: &'a str,
+    expected: u64,
+    source: &'a str,
+    command: bool,
+    job_keys: &'a [String],
+    bindings: Option<&'a [LengthBinding]>,
+}
+
+struct PartRequest<'a> {
+    document: &'a str,
+    source: &'a str,
+    command: bool,
+    job_keys: &'a [String],
+    bindings: &'a [LengthBinding],
+    inputs: BTreeMap<String, ParamValue>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DetachReport {
+    pub recipe: String,
+    pub accepted_source_digest: String,
+    pub released_entities: Vec<String>,
+    pub released_bindings: Vec<LengthBinding>,
 }
 
 #[derive(Debug, Serialize)]
@@ -61,6 +119,8 @@ pub struct Preview {
     pub accepted_source_digest: String,
     pub candidate_pin: SourcePin,
     pub candidate_changed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detach: Option<DetachReport>,
 }
 
 impl ProjectStore {
@@ -72,7 +132,7 @@ impl ProjectStore {
         source: &str,
         ctx: &PreparationContext,
     ) -> Result<Preview, Error> {
-        self.prepare_luma(document, expected_project, source, false, ctx)
+        self.prepare_luma_with_jobs(document, expected_project, source, false, &[], ctx)
     }
 
     /// Prepare a command and re-run the exact accepted recipe against its override overlay.
@@ -83,29 +143,255 @@ impl ProjectStore {
         source: &str,
         ctx: &PreparationContext,
     ) -> Result<Preview, Error> {
-        self.prepare_luma(document, expected_project, source, true, ctx)
+        self.prepare_luma_with_jobs(document, expected_project, source, true, &[], ctx)
     }
 
-    fn prepare_luma(
+    /// Release the complete native region while retaining its frozen definitions
+    /// and the exact source and IDs of its former owner in the checkpoint.
+    pub fn prepare_luma_detach(
+        &self,
+        document: &str,
+        expected_project: u64,
+        ctx: &PreparationContext,
+    ) -> Result<Preview, Error> {
+        let registry = self.registry()?;
+        if registry.revision != expected_project {
+            return Err(error("Conflict", "Project revision changed before detach"));
+        }
+        let (head, _, _) = part_head(&registry, document)?;
+        bindings::reject_followers(&registry, document)?;
+        ctx.check(Revision(head.native_revision), PreparationStage::Validation)
+            .map_err(overlay_error)?;
+        let mut recipe = registry
+            .luma_recipes
+            .get(document)
+            .filter(|recipe| !recipe.detached)
+            .cloned()
+            .ok_or_else(|| error("MissingAcceptedSource", "Part has no managed recipe"))?;
+        let pin = SourcePin {
+            project_id: registry.project_id.clone(),
+            document_id: document.into(),
+            native_revision: head.native_revision,
+            definition_hash: head.definition_hash,
+            output_ref: OutputRef {
+                entity_id: recipe.public_output.clone(),
+                port: "solid".into(),
+            },
+        };
+        let detach = DetachReport {
+            recipe: recipe.instance.clone(),
+            accepted_source_digest: recipe.source_digest.clone(),
+            released_bindings: recipe.bindings.clone(),
+            released_entities: recipe
+                .features
+                .values()
+                .map(|feature| feature.id.clone())
+                .chain(recipe.parameter_ids.values().cloned())
+                .collect(),
+        };
+        // Native parameter inputs are already literal at the accepted state.
+        // Preserve the historical View intent and stop subsequent recipe writes.
+        recipe.detached = true;
+        let candidate = Candidate {
+            version: 1,
+            profile: PROFILE.into(),
+            project: registry.project_id,
+            document: document.into(),
+            expected_project,
+            expires: now()?.saturating_add(TTL_SECONDS),
+            parts: vec![PartChange {
+                document: document.into(),
+                recipe,
+                snapshot: None,
+                queued: None,
+                changed: true,
+            }],
+            command_source: None,
+        };
+        Ok(Preview {
+            token: seal(&self.key, TOKEN_DOMAIN, &candidate)?,
+            project_revision: expected_project.to_string(),
+            accepted_source_digest: detach.accepted_source_digest.clone(),
+            candidate_pin: pin,
+            candidate_changed: true,
+            detach: Some(detach),
+        })
+    }
+
+    /// Admit an explicit set of job inputs alongside the ordinary source bundle.
+    pub fn prepare_luma_with_jobs(
         &self,
         document: &str,
         expected_project: u64,
         source: &str,
         command: bool,
+        job_keys: &[String],
+        ctx: &PreparationContext,
+    ) -> Result<Preview, Error> {
+        self.prepare_luma(
+            PreviewRequest {
+                document,
+                expected: expected_project,
+                source,
+                command,
+                job_keys,
+                bindings: None,
+            },
+            ctx,
+        )
+    }
+
+    /// Replace the explicit Length bindings and prepare the whole resulting closure.
+    pub fn prepare_luma_bindings(
+        &self,
+        document: &str,
+        expected: u64,
+        bindings: &[LengthBinding],
+        job_keys: &[String],
+        ctx: &PreparationContext,
+    ) -> Result<Preview, Error> {
+        self.prepare_luma(
+            PreviewRequest {
+                document,
+                expected,
+                source: "",
+                command: false,
+                job_keys,
+                bindings: Some(bindings),
+            },
+            ctx,
+        )
+    }
+
+    pub fn luma_recipe_info(&self, document: &str) -> Result<Value, Error> {
+        uuid(document)?;
+        let registry = self.registry()?;
+        let recipe = registry
+            .luma_recipes
+            .get(document)
+            .ok_or_else(|| error("MissingAcceptedSource", "Part has no accepted recipe"))?;
+        Ok(json!({
+            "recipe":recipe.instance, "recipe_revision":recipe.accepted_revision,
+            "detached":recipe.detached, "bindings":recipe.bindings,
+            "outputs":bindings::published(&recipe.parameters()?)
+        }))
+    }
+
+    fn prepare_luma(
+        &self,
+        request: PreviewRequest<'_>,
         ctx: &PreparationContext,
     ) -> Result<Preview, Error> {
         let registry = self.registry()?;
-        if registry.revision != expected_project {
+        if registry.revision != request.expected {
             return Err(error(
                 "Conflict",
                 "Project revision changed before Luma preparation",
             ));
         }
-        let (head, part, native_bytes) = part_head(&registry, document)?;
+        part_head(&registry, request.document)?;
+        let primary_source = if request.bindings.is_some() {
+            &registry
+                .luma_recipes
+                .get(request.document)
+                .ok_or_else(|| error("MissingAcceptedSource", "Part has no managed recipe"))?
+                .source
+        } else {
+            request.source
+        };
+        let graph = bindings::graph(&registry, request.document, request.bindings)?;
+        let edited = [request.document.to_owned()].into();
+        let batch = graph
+            .prepare(&edited, |document, values| {
+                let primary = document == request.document;
+                let admitted = registry.luma_recipes.get(document);
+                let effective_bindings =
+                    admitted.map_or(&[][..], |record| record.bindings.as_slice());
+                let part_request = PartRequest {
+                    document,
+                    source: if primary {
+                        primary_source
+                    } else {
+                        &admitted.ok_or_else(Error::internal)?.source
+                    },
+                    command: primary && request.command,
+                    job_keys: if primary { request.job_keys } else { &[] },
+                    bindings: if primary {
+                        request.bindings.unwrap_or(effective_bindings)
+                    } else {
+                        effective_bindings
+                    },
+                    inputs: bindings::input_values(values)?,
+                };
+                let (candidate, pin) = self.prepare_part(&registry, part_request, ctx)?;
+                let outputs = bindings::prepared_outputs(&candidate.recipe)?;
+                Ok(PreparedRecipe {
+                    change: (candidate, pin),
+                    outputs,
+                })
+            })
+            .map_err(bindings::closure_error)?;
+
+        let mut parts = Vec::with_capacity(batch.changes.len());
+        let mut primary = None;
+        for (_, prepared) in batch.changes {
+            let (candidate, pin) = prepared.change;
+            if candidate.document == request.document {
+                primary = Some((pin, candidate.recipe.source_digest.clone()));
+            }
+            parts.push(candidate);
+        }
+        let (pin, accepted_source_digest) = primary.ok_or_else(Error::internal)?;
+        let candidate_changed = parts.iter().any(|part| part.changed);
+        let candidate = Candidate {
+            version: 1,
+            profile: PROFILE.into(),
+            project: registry.project_id,
+            document: request.document.into(),
+            expected_project: batch.project_revision,
+            expires: now()?.saturating_add(TTL_SECONDS),
+            parts,
+            command_source: request.command.then(|| request.source.to_owned()),
+        };
+        let token = seal(&self.key, TOKEN_DOMAIN, &candidate)?;
+        if token.len() > MAX_BYTES {
+            return Err(error(
+                "ResourceLimit",
+                "Luma prepared closure exceeds size limit",
+            ));
+        }
+        Ok(Preview {
+            token,
+            project_revision: request.expected.to_string(),
+            accepted_source_digest,
+            candidate_pin: pin,
+            candidate_changed,
+            detach: None,
+        })
+    }
+
+    fn prepare_part(
+        &self,
+        registry: &Registry,
+        request: PartRequest<'_>,
+        ctx: &PreparationContext,
+    ) -> Result<(PartChange, SourcePin), Error> {
+        let PartRequest {
+            document,
+            source,
+            command,
+            job_keys,
+            bindings,
+            inputs,
+        } = request;
+        let (head, part, native_bytes) = part_head(registry, document)?;
         let revision = Revision(head.native_revision);
         ctx.check(revision, PreparationStage::Validation)
             .map_err(overlay_error)?;
         let previous = registry.luma_recipes.get(document);
+        if previous.is_some_and(|record| record.detached) {
+            return Err(error("DetachedRecipe", "The Part's recipe was detached"));
+        }
         let old: Value = serde_json::from_str(native_bytes).map_err(json_error)?;
         if previous.is_none()
             && [
@@ -128,24 +414,99 @@ impl ProjectStore {
             ));
         }
         let parameters: BTreeMap<String, Parameter> = previous
-            .map(|record| serde_json::from_str(&record.parameter_json))
-            .transpose()
-            .map_err(json_error)?
+            .map(RecipeRecord::parameters)
+            .transpose()?
             .unwrap_or_default();
-        let inherited = ParameterSnapshot::new(parameters).map_err(luma_error)?;
+        let mut inherited = ParameterSnapshot::new(parameters).map_err(luma_error)?;
+        if let Some(previous) = previous {
+            let mut base = Vec::with_capacity(previous.binding_base.len());
+            for (key, value) in &previous.binding_base {
+                let value = value
+                    .as_deref()
+                    .map(serde_json::from_str)
+                    .transpose()
+                    .map_err(json_error)?;
+                base.push((key.as_str(), value));
+            }
+            inherited = inherited.with_overrides(base).map_err(luma_error)?;
+        }
+        let binding_base = inputs
+            .keys()
+            .map(|key| {
+                let value = inherited.entries().get(key).ok_or_else(|| {
+                    error("UnknownParameter", "Binding target parameter is absent")
+                })?;
+                let saved = value
+                    .override_value
+                    .map(|value| serde_json::to_string(&value))
+                    .transpose()
+                    .map_err(json_error)?;
+                Ok((key.clone(), saved))
+            })
+            .collect::<Result<BTreeMap<_, _>, Error>>()?;
+        let inherited = inherited
+            .with_overrides(
+                inputs
+                    .iter()
+                    .map(|(key, &value)| (key.as_str(), Some(value))),
+            )
+            .map_err(luma_error)?;
         let admitted = admit(source)?;
+        let instance = living_cad_features::derived_id(uuid(document)?, "luma/recipe/1");
+        let scope = jobs::scope(&registry.project_id, &instance.to_string());
+        let captured = self.capture_luma_jobs(&scope, job_keys)?;
+        if !job_keys.is_empty() && self.registry()?.revision != registry.revision {
+            return Err(error(
+                "Conflict",
+                "Project revision changed during job admission",
+            ));
+        }
+        let tasks = jobs::catalog(&luma_cad_jobs::SourcePin {
+            document: document.into(),
+            revision: head.native_revision,
+            definition_digest: jobs::normalized_hash(&head.definition_hash),
+        });
+        let mut intents = Vec::new();
+        let mut evaluate = |bundle: &SourceBundle, mode, native: &dyn Dispatch| {
+            let host = luma_cad_jobs::JobsHost::new(native, &tasks, &captured)
+                .and_then(luma_cad_jobs::JobsHost::with_catalog)
+                .map_err(luma_error)?;
+            let result = run_with_host(bundle, mode, &host, 100_000).map_err(source_error)?;
+            // The accepted recipe's intents are declared again on a command-driven rerun.
+            let mut added = host.into_intents().map_err(jobs::queue_error)?;
+            intents.append(&mut added);
+            Ok::<_, Error>(result)
+        };
         let (exact_source, bundle, values) = if command {
             let previous = previous.ok_or_else(|| {
                 error("MissingAcceptedSource", "Part has no accepted Luma recipe")
             })?;
-            let values = prepare_command(&admitted, document.into(), &inherited, 100_000)
-                .map_err(execution_error)?;
-            (previous.source.as_str(), admit(&previous.source)?, values)
+            let host = CommandHost::new(document.into(), inherited)
+                .map_err(luma_error)?
+                .with_read_only(inputs.keys().cloned().collect());
+            evaluate(&admitted, Mode::Command, &host)?;
+            (
+                &*previous.source,
+                admit(&previous.source)?,
+                host.finish().map_err(luma_error)?,
+            )
         } else {
             (source, admitted, inherited)
         };
-        let plan = prepare_geometry(&bundle, &values, 100_000).map_err(execution_error)?;
-        let instance = living_cad_features::derived_id(uuid(document)?, "luma/recipe/1");
+        let host = GeometryHost::new(values).map_err(luma_error)?;
+        let execution = evaluate(&bundle, Mode::Recipe, &host)?;
+        let plan = host
+            .finish(&execution.outputs, bundle.source_digest())
+            .map_err(luma_error)?;
+        if inputs
+            .keys()
+            .any(|key| !plan.parameters.parameters.entries().contains_key(key))
+        {
+            return Err(error(
+                "ReferencedEntityRemoval",
+                "Recipe removed a bound parameter",
+            ));
+        }
         let (next, features, view_requested) = canonical(old, instance, &plan, previous)?;
         let parameter_ids: BTreeMap<_, _> = plan
             .parameters
@@ -161,6 +522,7 @@ impl ProjectStore {
             })
             .collect();
         let mut retired_parameters = BTreeSet::new();
+        let mut retired_features = BTreeSet::new();
         if let Some(previous) = previous {
             retired_parameters.extend(previous.retired_parameters.iter().cloned());
             retired_parameters.extend(
@@ -170,10 +532,30 @@ impl ProjectStore {
                     .filter(|key| !parameter_ids.contains_key(*key))
                     .cloned(),
             );
+            retired_features.extend(previous.retired_features.iter().cloned());
+            let removed = previous
+                .features
+                .iter()
+                .filter(|(key, _)| !features.contains_key(*key))
+                .map(|(key, feature)| (key.clone(), feature.id.as_str()))
+                .collect::<BTreeMap<_, _>>();
+            let removed_ids = removed.values().copied().collect();
+            let new_root = &features[&plan.outputs["solid"]].id;
+            if !removed.is_empty() || new_root != &previous.public_output {
+                reject_referenced_replacement(
+                    &registry,
+                    document,
+                    &removed_ids,
+                    (new_root != &previous.public_output)
+                        .then_some(previous.public_output.as_str()),
+                    &Cancellation::from_shared_flag(ctx.cancellation_flag()),
+                )?;
+            }
+            retired_features.extend(removed.into_keys());
             if features
                 .keys()
                 .chain(parameter_ids.keys())
-                .any(|key| retired_parameters.contains(key))
+                .any(|key| retired_parameters.contains(key) || retired_features.contains(key))
                 || parameter_ids
                     .keys()
                     .any(|key| previous.features.contains_key(key))
@@ -215,9 +597,9 @@ impl ProjectStore {
                 "The selected output must be the terminal native solid",
             ));
         }
-        let mut pin = source_pin(&registry, &model.pin);
+        let mut pin = source_pin(registry, &model.pin);
         pin.output_ref = output;
-        let record = RecipeRecord {
+        let mut record = RecipeRecord {
             version: 1,
             instance: instance.to_string(),
             source_digest: plan.source_digest,
@@ -228,6 +610,18 @@ impl ProjectStore {
             features,
             parameter_ids,
             retired_parameters,
+            retired_features,
+            detached: false,
+            accepted_revision: previous.map_or(0, |record| record.accepted_revision),
+            bindings: {
+                let mut sorted = bindings.to_vec();
+                sorted.sort_by(|a, b| a.target.cmp(&b.target));
+                sorted
+            },
+            binding_base,
+            historical_outputs: previous
+                .map(|record| record.historical_outputs.clone())
+                .unwrap_or_default(),
             view: view_requested.then(|| pin.clone()),
         };
         let changed = match previous {
@@ -236,29 +630,34 @@ impl ProjectStore {
                     || previous.source_digest != record.source_digest
                     || previous.parameter_json != record.parameter_json
                     || previous.view != record.view
+                    || previous.bindings != record.bindings
+                    || previous.binding_base != record.binding_base
             }
             None => true,
         };
-        let candidate = Candidate {
-            version: 1,
-            profile: PROFILE.into(),
-            project: registry.project_id,
-            document: document.into(),
-            expected_project,
-            expires: now()?.saturating_add(TTL_SECONDS),
-            recipe: record,
-            snapshot: native,
-            command_source: command.then(|| source.to_owned()),
-            changed,
-        };
-        let token = seal(&self.key, TOKEN_DOMAIN, &candidate)?;
-        Ok(Preview {
-            token,
-            project_revision: expected_project.to_string(),
-            accepted_source_digest: candidate.recipe.source_digest,
-            candidate_pin: pin,
-            candidate_changed: changed,
-        })
+        if changed {
+            record.accepted_revision = registry
+                .revision
+                .checked_add(1)
+                .ok_or_else(|| error("ResourceLimit", "Project revision exhausted"))?;
+            if let Some(previous) = previous {
+                record.historical_outputs.insert(
+                    previous.accepted_revision,
+                    serde_json::to_string(&bindings::published(&previous.parameters()?))
+                        .map_err(json_error)?,
+                );
+            }
+        }
+        Ok((
+            PartChange {
+                document: document.into(),
+                recipe: record,
+                snapshot: native,
+                queued: jobs::QueueRequest::prepare(&pin, intents)?,
+                changed,
+            },
+            pin,
+        ))
     }
 
     /// Accept exactly the authenticated preview at Core's SQLite CAS point.
@@ -285,7 +684,7 @@ impl ProjectStore {
             ));
         }
         let apply = |store: &mut Self| {
-            store.commit(
+            store.commit_with(
                 (
                     &candidate.document,
                     operation_id,
@@ -297,29 +696,27 @@ impl ProjectStore {
                     if now()? > candidate.expires {
                         return Err(error("PreparedExpired", "Prepare the Luma candidate again"));
                     }
-                    let entry = registry
-                        .documents
-                        .get_mut(&candidate.document)
-                        .ok_or_else(|| error("MissingDocument", "Part document is absent"))?;
-                    if let Some(ref native) = candidate.snapshot {
-                        let part = registry
-                            .parts
-                            .get_mut(&candidate.document)
-                            .ok_or_else(Error::internal)?;
-                        part.snapshots.push(native.clone());
-                        // This profile protects the managed graph from generic history edits.
-                        part.timeline = None;
-                        entry.revision = native.0;
-                    } else if candidate.changed || candidate.command_source.is_some() {
-                        registry.revision = registry
-                            .revision
-                            .checked_add(1)
-                            .ok_or_else(|| error("ResourceLimit", "Project revision exhausted"))?;
-                    }
-                    if candidate.changed {
-                        registry
-                            .luma_recipes
-                            .insert(candidate.document.clone(), candidate.recipe.clone());
+                    let mut primary_rebuilt = false;
+                    for change in &candidate.parts {
+                        let entry = registry
+                            .documents
+                            .get_mut(&change.document)
+                            .ok_or_else(|| error("MissingDocument", "Part document is absent"))?;
+                        if let Some(ref native) = change.snapshot {
+                            let part = registry
+                                .parts
+                                .get_mut(&change.document)
+                                .ok_or_else(Error::internal)?;
+                            part.snapshots.push(native.clone());
+                            part.timeline = None;
+                            entry.revision = native.0;
+                            primary_rebuilt |= change.document == candidate.document;
+                        }
+                        if change.changed {
+                            registry
+                                .luma_recipes
+                                .insert(change.document.clone(), change.recipe.clone());
+                        }
                     }
                     if let Some(source) = &candidate.command_source {
                         registry
@@ -328,7 +725,33 @@ impl ProjectStore {
                             .or_default()
                             .insert(operation_id.to_owned(), source.clone());
                     }
-                    Ok(entry.revision)
+                    // Core advances the envelope once when the primary Part changes.
+                    if !primary_rebuilt
+                        && (candidate.command_source.is_some()
+                            || candidate.parts.iter().any(|change| change.changed))
+                    {
+                        registry.revision = registry
+                            .revision
+                            .checked_add(1)
+                            .ok_or_else(|| error("ResourceLimit", "Project revision exhausted"))?;
+                    }
+                    Ok(registry.documents[&candidate.document].revision)
+                },
+                |tx, receipt| {
+                    for change in &candidate.parts {
+                        if let Some(request) = &change.queued {
+                            let scope = jobs::scope(&candidate.project, &change.recipe.instance);
+                            let deliveries = request.admit(tx, &scope)?;
+                            if change.document == candidate.document {
+                                receipt.luma_jobs = deliveries;
+                            } else {
+                                receipt
+                                    .luma_dependent_jobs
+                                    .insert(change.document.clone(), deliveries);
+                            }
+                        }
+                    }
+                    Ok(())
                 },
             )
         };
@@ -457,17 +880,44 @@ fn source_error(failure: luma::runtime::Failure) -> Error {
             .collect::<Vec<_>>()),
     )
 }
-fn execution_error(err: luma::cad::PreparationError) -> Error {
-    match err {
-        luma::cad::PreparationError::Execution(failure) => source_error(failure),
-        luma::cad::PreparationError::Parameters(problem) => luma_error(problem),
-    }
-}
 fn luma_error(err: luma::host_api::Error) -> Error {
     error(err.code, &err.message)
 }
 fn overlay_error(err: hir_transaction::OverlayError) -> Error {
     living_hir_facade::commit_error(hir_transaction::CommitError::Overlay(err))
+}
+
+fn reject_referenced_replacement(
+    registry: &Registry,
+    document: &str,
+    removed: &BTreeSet<&str>,
+    replaced_output: Option<&str>,
+    cancel: &Cancellation,
+) -> Result<(), Error> {
+    for assembly in registry.assemblies.keys() {
+        let assembly = read_assembly(registry, assembly, cancel)?;
+        let referenced: BTreeSet<_> = assembly
+            .definitions
+            .iter()
+            .flat_map(|definition| &definition.instances)
+            .filter_map(|instance| match instance {
+                Instance::Part(part) => Some(part.part.as_str()),
+                Instance::Subassembly(_) => None,
+            })
+            .collect();
+        if assembly.parts.iter().any(|part| {
+            referenced.contains(part.reference_id.as_str())
+                && part.document_id == document
+                && (removed.contains(part.output_ref.entity_id.as_str())
+                    || replaced_output == Some(part.output_ref.entity_id.as_str()))
+        }) {
+            return Err(error(
+                "ReferencedEntityRemoval",
+                "A project assembly refers to the removed feature or replaced output",
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn canonical(
@@ -497,16 +947,6 @@ fn canonical(
             return Err(error(
                 "IncompatibleRecipe",
                 "Stored recipe identity or version differs",
-            ));
-        }
-        if previous
-            .features
-            .keys()
-            .any(|key| !plan.features.iter().any(|feature| &feature.key == key))
-        {
-            return Err(error(
-                "UnsupportedCapability",
-                "Removing accepted features requires reference reconciliation",
             ));
         }
     }
@@ -590,12 +1030,6 @@ fn canonical(
         .get(output)
         .ok_or_else(|| error("InvalidPlan", "Solid output is missing"))?
         .id;
-    if previous.is_some_and(|record| &record.public_output != root) {
-        return Err(error(
-            "UnsupportedCapability",
-            "Replacing the public solid requires reference reconciliation",
-        ));
-    }
     crate::editor::set_root(&mut document, Some(root))?;
     crate::editor::manifest(&mut document)?;
     Ok((document, features, !plan.view_intents.is_empty()))
@@ -761,6 +1195,111 @@ mod tests {
             assert!(text.contains(&updated_pin.definition_hash));
             assert!(text.contains("resources"));
         }
+    }
+
+    #[test]
+    fn luma_cad1_recipe_preserves_referenced_output_and_tombstoned_keys() {
+        let root = super::super::super::tests::Directory::new();
+        let mut store = ProjectStore::create(&root.0.join("managed.db"), PROJECT, [9; 32]).unwrap();
+        let ctx = PreparationContext::default();
+        let assembly = "00000000-0000-4000-8000-000000000003";
+        let instance = "00000000-0000-4000-8000-000000000004";
+        store
+            .create_document(
+                &CreateDocument {
+                    request_id: operation(1),
+                    document_id: PART.into(),
+                    expected_project_revision: 0,
+                    kind: DocumentKind::Part,
+                    name: "Plate".into(),
+                },
+                &ctx,
+            )
+            .unwrap();
+        let initial = store.prepare_luma_recipe(PART, 1, RECIPE, &ctx).unwrap();
+        let accepted = store
+            .apply_luma(&initial.token, &operation(2), &ctx)
+            .unwrap();
+        let source = store.luma_view(&accepted).unwrap().unwrap();
+
+        let mut smaller = admit(RECIPE).unwrap();
+        let text = smaller.files.get_mut(&smaller.entry).unwrap();
+        text.truncate(text.find("part = cad.through_hole").unwrap());
+        text.push_str("cad.output(\"solid\", left)\n");
+        let source_digest = smaller.source_digest();
+        let smaller = json!({"bundle_version":1,"entry":smaller.entry,
+            "files":smaller.files,"source_digest":source_digest})
+        .to_string();
+
+        let reference_free = store.prepare_luma_recipe(PART, 2, &smaller, &ctx).unwrap();
+        let created = store
+            .create_document(
+                &CreateDocument {
+                    request_id: operation(3),
+                    document_id: assembly.into(),
+                    expected_project_revision: 2,
+                    kind: DocumentKind::Assembly,
+                    name: "Assembly".into(),
+                },
+                &ctx,
+            )
+            .unwrap();
+        let added = store
+            .apply_document(
+                &DocumentCommand {
+                    request_id: operation(4),
+                    document_id: assembly.into(),
+                    expected_project_revision: created.project_revision,
+                    expected_document_revision: created.document_revision,
+                    action: DocumentAction::AddExistingPart {
+                        instance_id: instance.into(),
+                        source,
+                        local: LocalTransform::default(),
+                    },
+                },
+                &root.0,
+                &ctx,
+            )
+            .unwrap();
+        assert_eq!(
+            store
+                .apply_luma(&reference_free.token, &operation(5), &ctx)
+                .unwrap_err()
+                .code
+                .as_ref(),
+            "Conflict"
+        );
+        let blocked = store
+            .prepare_luma_recipe(PART, added.project_revision, &smaller, &ctx)
+            .unwrap_err();
+        assert_eq!(blocked.code.as_ref(), "ReferencedEntityRemoval");
+        let freed = store
+            .apply_document(
+                &DocumentCommand {
+                    request_id: operation(6),
+                    document_id: assembly.into(),
+                    expected_project_revision: added.project_revision,
+                    expected_document_revision: added.document_revision,
+                    action: DocumentAction::RemoveOccurrence {
+                        instance_id: instance.into(),
+                    },
+                },
+                &root.0,
+                &ctx,
+            )
+            .unwrap();
+        let next = store
+            .prepare_luma_recipe(PART, freed.project_revision, &smaller, &ctx)
+            .unwrap();
+        let removed = store.apply_luma(&next.token, &operation(7), &ctx).unwrap();
+        assert_eq!(
+            store
+                .prepare_luma_recipe(PART, removed.project_revision, RECIPE, &ctx)
+                .unwrap_err()
+                .code
+                .as_ref(),
+            "StableKeyMigrationRequired"
+        );
     }
 
     fn check_holes(store: &ProjectStore, pin: &SourcePin, centre: f64, half_width: f64) {

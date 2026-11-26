@@ -1,6 +1,7 @@
 """Exercise the local project CLI, including process failure inside Core's SQLite commit."""
 import argparse
 from concurrent.futures import ThreadPoolExecutor
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -17,6 +18,118 @@ PART = "00000000-0000-4000-8000-000000000002"
 
 def operation(index):
     return f"{index:032x}"
+
+
+def bundle(root, name, original, rewrite):
+    frame = json.loads((ROOT / "examples/cad" / original).read_text(encoding="utf-8"))
+    entry = frame["entry"]
+    frame["files"][entry] = rewrite(frame["files"][entry])
+    typed = {"bundle_version": {"$u64": "1"}, "entry": entry, "files": frame["files"]}
+    frame["source_digest"] = lcan.digest("luma.cad.source", lcan.encode(typed))
+    path = root / f"{name}.json"
+    path.write_text(json.dumps(frame), encoding="utf-8")
+    return path
+
+
+def jobs_and_closure(call, root):
+    preview_job = bundle(
+        root, "queue", "plate-geometry.json",
+        lambda s: 'use jobs\n' + s + '\njob = jobs.submit("definition", jobs.task("part_definition"))\n',
+    )
+    token = root / "queue.token"
+    call("preview", "recipe", PART, 4, preview_job, token)
+    call("apply", token, operation(7), crash="command-after-luma-outbox", code=73)
+    assert call("receipt", PART, operation(7), code=3)["code"] == "UnknownOperation"
+    assert call("work") is None
+    call("apply", token, operation(7), crash="command-after-commit", code=73)
+    accepted = call("receipt", PART, operation(7))
+    delivery = accepted["jobs"][0]
+    assert delivery["key"] == "definition"
+    assert call("apply", token, operation(7)) == accepted
+    assert call("job", PART, "definition")["state"] == "admitted"
+    assert call("job-cancel", delivery["job"])["state"] == "cancelled"
+    assert call("job-retry", delivery["job"], 0)["state"] == "admitted"
+    finished = call("work")
+    assert finished["job"] == delivery["job"]
+    assert finished["state"] == "published"
+    result = call("job-definition", delivery["job"])
+    digest = hashlib.sha256(result["canonical_definition"].encode()).hexdigest()
+    assert result["manifest"]["manifest_digest"] == f"sha256:{digest}"
+    repeat_token = root / "repeat-queue.token"
+    assert not call("preview", "recipe", PART, 5, preview_job, repeat_token)["candidate_changed"]
+    assert call("apply", repeat_token, operation(8))["jobs"] == accepted["jobs"]
+    pinned_revision = call("recipe-info", PART)["recipe_revision"]
+
+    follow = "00000000-0000-4000-8000-000000000003"
+    pinned = "00000000-0000-4000-8000-000000000004"
+    bounded = bundle(
+        root, "bounded", "plate-geometry.json",
+        lambda s: s.replace('param.length("width", units.mm(100))',
+                            'param.length("width", units.mm(120))')
+                   .replace("height = ", "param.bounds(width, units.mm(100), units.mm(130))\nheight = "),
+    )
+    revision = 5
+    for index, part in enumerate((follow, pinned)):
+        op = 10 + 3 * index
+        assert call("create-part", part, revision, operation(op))["project_revision"] == str(revision + 1)
+        revision += 1
+        source_token = root / f"source-{index}.token"
+        call("preview", "recipe", part, revision, bounded, source_token)
+        call("apply", source_token, operation(op + 1))
+        revision += 1
+        manifest = root / f"bindings-{index}.json"
+        binding = {"target": "width", "producer": PART, "output": "width"}
+        if part == pinned:
+            binding["revision"] = pinned_revision
+        manifest.write_text(json.dumps([binding]), encoding="utf-8")
+        binding_token = root / f"bindings-{index}.token"
+        call("bind", part, revision, manifest, binding_token)
+        call("apply", binding_token, operation(op + 2))
+        revision += 1
+
+    def width(part):
+        return call("recipe-info", part)["outputs"]["width"]["Length"]
+
+    assert width(PART) == width(follow) == width(pinned) == 0.12
+    command = bundle(
+        root, "wider", "plate-width-command.json",
+        lambda s: s.replace("units.mm(120)", "units.mm(125)"),
+    )
+    closure = root / "closure.token"
+    call("preview", "command", PART, revision, command, closure)
+    call("apply", closure, operation(16), crash="command-before-commit", code=73)
+    assert width(PART) == width(follow) == width(pinned) == 0.12
+    accepted = call("apply", closure, operation(16))
+    revision += 1
+    assert accepted["project_revision"] == str(revision)
+    assert width(PART) == width(follow) == 0.125
+    assert width(pinned) == 0.12
+
+    failed = bundle(
+        root, "out-of-bounds", "plate-width-command.json",
+        lambda s: s.replace("units.mm(120)", "units.mm(140)"),
+    )
+    failure = root / "failed-closure.token"
+    assert call("preview", "command", PART, revision, failed, failure, code=3)["code"] == "ParameterBounds"
+    assert not failure.exists()
+    assert width(PART) == width(follow) == 0.125
+    assert width(pinned) == 0.12
+
+    detached = root / "detached.token"
+    assert call("detach", PART, revision, detached, code=3)["code"] == "ReferencedEntityRemoval"
+    unbind = root / "unbind.json"
+    unbind.write_text("[]", encoding="utf-8")
+    unbind_token = root / "unbind.token"
+    call("bind", follow, revision, unbind, unbind_token)
+    call("apply", unbind_token, operation(17))
+    revision += 1
+    report = call("detach", PART, revision, detached)["detach"]
+    assert report["released_entities"]
+    receipt = call("apply", detached, operation(18))
+    assert receipt["project_revision"] == str(revision + 1)
+    assert receipt["document_revision"] == accepted["document_revision"]
+    assert call("recipe-info", PART)["detached"]
+    assert width(PART) == 0.125 and width(pinned) == 0.12
 
 
 def main():
@@ -73,19 +186,18 @@ def main():
             with args.scene.open("x", encoding="utf-8") as output:
                 json.dump(scene, output)
         # Source-only provenance gets a project revision and reuses the exact native revision.
-        edited = json.loads((ROOT / "examples/cad/plate-geometry.json").read_text(encoding="utf-8"))
-        edited["files"][edited["entry"]] += "\n# source-only provenance change\n"
-        typed = {"bundle_version": {"$u64": "1"}, "entry": edited["entry"], "files": edited["files"]}
-        edited["source_digest"] = lcan.digest("luma.cad.source", lcan.encode(typed))
-        edited_path = root / "edited.json"
-        edited_path.write_text(json.dumps(edited), encoding="utf-8")
+        edited_path = bundle(
+            root, "edited", "plate-geometry.json",
+            lambda s: s + "\n# source-only provenance change\n",
+        )
         next_token = root / "edited.token"
         source_only = call("preview", "recipe", PART, 3, edited_path, next_token)
         assert source_only["candidate_changed"]
         reaccepted = call("apply", next_token, operation(5))
         assert reaccepted["project_revision"] == "4"
         assert reaccepted["document_revision"] == accepted["document_revision"]
-    print("PASS Core CAD-1 CLI: recipe, command, competing retry, crashes, recovery")
+        jobs_and_closure(call, root)
+    print("PASS Core CAD-1 CLI: model, job and receipt rollback, retry, closure and detach")
 
 
 if __name__ == "__main__":
