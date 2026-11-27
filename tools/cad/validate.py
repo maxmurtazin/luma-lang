@@ -378,6 +378,24 @@ def verify_cad3_profile(lock, registry):
             and row["target_verification"] == {"t0": "passed", "t1": "not_run"},
             "Unqualified CAD-3 status")
 
+    path = FIXTURES / "cad3-voxel-project-v1.json"
+    project = read(path)
+    require(path.relative_to(ROOT).as_posix() in lock["contract"]["inputs"]
+            and project["schema_version"] == 1 and project["profile"] == path.stem
+            and project["builds_on"] == profile["profile"]
+            and project["provider_commits"] == profile["provider_commits"]
+            and set(project["targets"]) == set(lock["targets"]), "Invalid CAD-3 project profile")
+    require(set(project["entry_points"]) == set(profile["entry_points"]) | {
+        "field-csg", "mask seed", "mask patch", "mask undo", "mask boolean",
+        "paged pack", "paged query", "paged gc"
+    }, "Missing CAD-3 project entry points")
+    require(set(project["acceptance"]) == set(checks)
+            and set(project["acceptance"].values()) <= {"passed", "partial", "not_run"}
+            and set(project["evidence"]) >= set(profile["evidence"])
+            and all((ROOT / path).is_file() for path in project["evidence"])
+            and project["scope"] and project["independent_profiles"],
+            "Missing CAD-3 project acceptance evidence")
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)

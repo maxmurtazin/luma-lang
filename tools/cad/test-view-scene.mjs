@@ -11,6 +11,7 @@ import { pathToFileURL } from "node:url";
 const [view, scene, report] = process.argv.slice(2);
 const expected = process.env.VIEW_EXPECTED_REVISION ?? "3";
 const brep = process.env.VIEW_BREP === "1";
+const recovery = process.env.VIEW_RECOVERY === "1";
 if (!view || !scene) throw new Error("usage: test-view-scene.mjs VIEW_CHECKOUT SCENE_JSON [REPORT_JSON]");
 const { chromium } = await import(pathToFileURL(resolve(view, "node_modules/playwright/index.mjs")));
 const { PNG } = await import(pathToFileURL(resolve(view, "node_modules/pngjs/lib/png.js")));
@@ -27,6 +28,24 @@ view.open_scene(JSON.stringify(data));
 if (${brep || process.env.VIEW_FIT === "1"}) view.fit();
 window.current = () => JSON.parse(view.stats());
 window.pickFace = async (x, y) => JSON.parse(await view.pick_topology('cad-test', x, y, 'face', 0));
+if (${recovery}) {
+  window.snapshot = () => JSON.parse(view.scene_snapshot());
+  window.delta = (delta) => view.apply_delta(JSON.stringify(delta));
+  window.openInvalid = () => {
+    const invalid = structuredClone(data);
+    const occurrence = Object.values(invalid.scene.occurrences)[0];
+    occurrence.presentation = { kind: 'unsupported_test_node' };
+    view.open_scene(JSON.stringify(invalid));
+  };
+  window.isLost = () => view.is_lost();
+  window.recover = () => view.recover();
+  window.openFields = async () => {
+    const response = await fetch('/fields.json');
+    view.open_scene(JSON.stringify(await response.json()));
+    view.fit();
+  };
+  window.pickAt = async (x, y) => JSON.parse(await view.pick('cad-field', x, y));
+}
 </script>`;
 const files = new Map([
   ["/", ["text/html", script]],
@@ -34,6 +53,10 @@ const files = new Map([
   ["/living_view_web_bg.wasm", ["application/wasm", await readFile(resolve(wasm, "living_view_web_bg.wasm"))]],
   ["/scene.json", ["application/json", await readFile(scene)]],
 ]);
+if (recovery) {
+  const mixed = await readFile(resolve(view, "fixtures/scenes/v3-mixed.json"));
+  files.set("/fields.json", ["application/json", mixed]);
+}
 const server = createServer((request, response) => {
   const file = files.get(request.url);
   if (!file) return response.writeHead(404).end();
@@ -51,6 +74,14 @@ try {
     ] : [],
   });
   const page = await browser.newPage({ viewport: { width: 480, height: 360 } });
+  if (recovery) await page.addInitScript(() => {
+    const requestDevice = GPUAdapter.prototype.requestDevice;
+    GPUAdapter.prototype.requestDevice = async function (...args) {
+      const device = await requestDevice.apply(this, args);
+      window.testDevice = device;
+      return device;
+    };
+  });
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   async function render() {
@@ -75,6 +106,45 @@ try {
     if (png.data.readUInt32BE(index) !== corner) changed++;
   }
   assert.ok(changed > 1000, `expected the accepted mesh to cover visible pixels, got ${changed}`);
+  if (recovery) {
+    const snapshot = await page.evaluate(() => window.snapshot());
+    const delta = {
+      schema_major: 1, scene_id: snapshot.contents.stamp.scene_id, request_id: "cad-stale",
+      base_revision: (BigInt(expected) - 1n).toString(), next_revision: expected,
+      operations: [],
+    };
+    await assert.rejects(page.evaluate((delta) => window.delta(delta), delta), /scene|revision|conflict/i);
+    await assert.rejects(page.evaluate(() => window.openInvalid()), /unsupported_test_node|unknown variant/);
+    assert.deepEqual(await page.evaluate(() => window.snapshot()), snapshot);
+    const pick = await page.evaluate(() => window.pickFace(240, 180));
+    assert.equal(pick.result.status, "hit");
+    assert.equal(pick.result.source.kind, "external_asset");
+    assert.equal(pick.result.precision, "display_mesh_unknown");
+    assert.equal(pick.result.entity_ordinal, undefined);
+
+    await page.evaluate(() => { window.testDevice.destroy(); });
+    await page.waitForFunction(() => window.isLost());
+    await assert.rejects(page.evaluate(() => window.pickFace(240, 180)), /DeviceLost/);
+    await page.evaluate(() => window.recover());
+    assert.equal(await page.evaluate(() => window.isLost()), false);
+    assert.deepEqual(await page.evaluate(() => window.snapshot()), snapshot);
+    const restoredPick = await page.evaluate(() => window.pickFace(240, 180));
+    assert.equal(restoredPick.scene_revision, expected);
+    assert.deepEqual(restoredPick.result.source, pick.result.source);
+    await page.evaluate(() => window.openFields());
+    const fieldPick = await page.evaluate(async () => {
+      for (let y = 36; y < 360; y += 32) {
+        for (let x = 48; x < 480; x += 32) {
+          const pick = await window.pickAt(x, y);
+          if (pick.result.status === "unresolved") return pick;
+        }
+      }
+      return null;
+    });
+    assert.equal(fieldPick?.result.reason, "sampled_field_no_bracket");
+    assert.equal(fieldPick.result.source, undefined);
+    assert.deepEqual(errors, []);
+  }
   if (brep) {
     const pick = await page.evaluate(async () => {
       for (const x of [200, 280, 160, 320]) {

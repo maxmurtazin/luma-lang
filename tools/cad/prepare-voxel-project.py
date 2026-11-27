@@ -60,7 +60,7 @@ tempfile = "=3.27.0"
 """, encoding="utf-8")
     project = destination / "project"
     project.mkdir()
-    for file in ("project.rs", "project_test.rs"):
+    for file in ("project.rs", "project_test.rs", "blocks.rs", "paged.rs", "provider.rs"):
         shutil.copyfile(integration / file, project / file)
     shutil.copyfile(ROOT / "examples/cad/voxel-sphere.json", project / "sphere.json")
     shutil.copyfile(ROOT / "examples/cad/voxel-sample-command.json", project / "sample-command.json")
@@ -83,12 +83,13 @@ checkpoint-fault-injection = ["living-cad-viewer/checkpoint-fault-injection"]
 
 [dependencies]
 living-cad-viewer = { path = "../core/crates/living-cad-viewer", features = ["luma-cad"] }
+living-voxel-pilot = { path = "../core/integrations/living-voxel-pilot" }
 hir-transaction = { path = "../core/crates/hir-transaction" }
 serde = "=1.0.228"
 serde_json = "=1.0.145"
 sha2 = "=0.10.9"
 hex = "=0.4.3"
-tempfile = "=3.27.0"
+tempfile = "=3.20.0"
 """ + "luma = { path = " + json.dumps(ROOT.as_posix()) + " }\n", encoding="utf-8")
     print(project / "Cargo.toml")
     print(native / "Cargo.toml")

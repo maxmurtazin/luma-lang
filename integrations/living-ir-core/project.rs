@@ -1342,5 +1342,18 @@ mod tests {
         }
         assert!(sample(half_width - 0.001, 0.012, 0.0) < 0.0);
         assert!(sample(half_width + 0.001, 0.012, 0.0) > 0.0);
+        let tolerance = 0.000_000_1;
+        let hole_edge = centre + 0.003;
+        assert!((half_width - hole_edge - 0.007).abs() < tolerance);
+        for side in [-1.0, 1.0] {
+            assert!(sample(side * (hole_edge - tolerance), 0.0, 0.0) > 0.0);
+            assert!(sample(side * (hole_edge + tolerance), 0.0, 0.0) < 0.0);
+            assert!(sample(side * (half_width - tolerance), 0.0, 0.0) < 0.0);
+            assert!(sample(side * (half_width + tolerance), 0.0, 0.0) > 0.0);
+            assert!(sample(0.0, side * (0.030 - tolerance), 0.0) < 0.0);
+            assert!(sample(0.0, side * (0.030 + tolerance), 0.0) > 0.0);
+            assert!(sample(0.0, 0.0, side * (0.004 - tolerance)) < 0.0);
+            assert!(sample(0.0, 0.0, side * (0.004 + tolerance)) > 0.0);
+        }
     }
 }

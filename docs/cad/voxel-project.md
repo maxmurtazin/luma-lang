@@ -96,11 +96,99 @@ LUMA_VOXEL_PROVIDER="$CLI" cargo test --locked --manifest-path "$BUILD/project/C
   --features checkpoint-fault-injection --test project
 ```
 
-Выпуск квалифицирует узловую регулярную сетку, исторические задания
-для сферы и поверхность для View. Изменяемые блоки с footprint и
-Undo, проектный paged GC, adaptive и lattice остаются за границами
-этого выпуска.
+Профиль регулярной сферы квалифицирует узловую сетку, исторические
+задания для сферы и поверхность для View. Правки резидентных блоков
+и paged GC квалифицированы в проектном профиле ниже.
 
 [Манифест приёмки CAD-3](../../conformance/cad/cad3-regular-sphere-v1.json)
 отдельно фиксирует проверенные, частично проверенные и открытые AT.
 Для T1 проверен показ сетки в Chromium с программным WebGPU.
+
+## Профиль проектных объёмов
+
+Профиль `cad3-voxel-project-v1` добавляет проектные Bool-маски,
+страничное хранилище и операции над опубликованными полями. Для этих
+команд нужен нативный `voxel-cli` из закреплённого Living Voxel. Выше
+для семплирования используется отдельный `luma-cad-voxel`.
+
+```sh
+cargo build --locked --manifest-path "$BUILD/voxel/Cargo.toml" -p voxel-cli
+VOXEL_CLI="$BUILD/voxel/target/debug/voxel-cli"
+LUMA_VOXEL_PROVIDER="$CLI" LUMA_VOXEL_CLI="$VOXEL_CLI" \
+  cargo test --locked --manifest-path "$BUILD/project/Cargo.toml" \
+  --features checkpoint-fault-injection --test project
+```
+
+Передавайте абсолютный путь к доверенному локальному `voxel-cli`.
+`MASK_DB` указывает на отдельную SQLite-базу публикаций проекта.
+`OBJECTS` указывает на выделенный каталог страничного хранилища.
+Команда `seed` привязывает готовый LVX с резидентным Bool-каналом и
+проверенным SHA‑256 к принятой ревизии Part. Источником правок служит
+конкретная публикация. Все идентификаторы публикаций задаются как UUID.
+`seed` принимает ожидаемое поколение слота, для нового слота передайте 0.
+
+```sh
+"$PROJECT_CLI" "$DB" "$PROJECT" mask "$MASK_DB" "$VOXEL_CLI" \
+  seed "$BASE" "$PART" "$PART_REV" "$DEFINITION_HASH" mask 0 mask.lvx "$MASK_SHA"
+"$PROJECT_CLI" "$DB" "$PROJECT" mask "$MASK_DB" "$VOXEL_CLI" patch "$EDIT" "$BASE" patch.json
+"$PROJECT_CLI" "$DB" "$PROJECT" mask "$MASK_DB" "$VOXEL_CLI" undo "$UNDO" "$EDIT"
+"$PROJECT_CLI" "$DB" "$PROJECT" mask "$MASK_DB" "$VOXEL_CLI" export "$UNDO" undo.lvx
+```
+
+Правка `replace` записывает до 64 полных блоков. `data: null` удаляет
+блок, после чего применяется фон канала. `copy_face` читает соседний по
+грани блок исходной публикации. CLI выбирает footprint в зависимости от
+операции. Запись в тот же блок или область чтения отклоняется,
+включая случай возврата прежних байтов. Подготовленная правка проверяет
+поколение слота при публикации. Повтор завершённой команды возвращает
+квитанцию. `status UUID` читает квитанцию, `head PART SLOT` читает
+текущую публикацию в слоте.
+
+```json
+{"operation":"copy_face","channel":"mask","from":[1,0,0],"to":[0,0,0]}
+```
+
+`mask … boolean or LEFT RIGHT CHANNEL` обрабатывает две исторические
+маски, сохраняя их привязки. Поддерживаются также `and` и `diff`.
+`field-csg VOXEL_CLI difference LEFT_JOB RIGHT_JOB implicit` применяет
+min/max CSG к двум LVX-задачам семплирования. Также доступны `union` и
+`intersection`. Результат содержит поле `ImplicitScalar` со статусом
+`NotDistance` и ссылки на обе публикации. Запрос точного расстояния
+отклоняется до запуска Voxel. Оба маршрута возвращают результат по stdout.
+
+```sh
+printf '%s\n' '{"max_objects":256,"max_object_bytes":65536,"max_total_bytes":2097152}' > limits.json
+printf '%s\n' '[[0,0,0],[8,0,0]]' > indices.json
+"$PROJECT_CLI" "$DB" "$PROJECT" paged "$MASK_DB" "$VOXEL_CLI" "$OBJECTS" pack "$UNDO" limits.json
+"$PROJECT_CLI" "$DB" "$PROJECT" paged "$MASK_DB" "$VOXEL_CLI" "$OBJECTS" \
+  query "$UNDO" mask indices.json limits.json
+"$PROJECT_CLI" "$DB" "$PROJECT" paged "$MASK_DB" "$VOXEL_CLI" "$OBJECTS" gc limits.json
+"$PROJECT_CLI" "$DB" "$PROJECT" paged "$MASK_DB" "$VOXEL_CLI" "$OBJECTS" \
+  gc limits.json "$PLAN_DIGEST"
+```
+
+Публикация `pack` создаёт неизменяемую ссылку для конкретного
+исторического LVX. `query` различает неизвестный отсчёт, незагруженный
+блок и выход за сетку. В `PLAN_DIGEST` передайте `plan_digest`. GC под
+блокировкой перепроверяет план и помещает недостижимые объекты в
+карантин. Тест на Linux проверяет сохранность снимков и блоков при
+исчерпании бюджета и после выполнения GC.
+
+Для проверки View добавьте `VIEW_RECOVERY=1` к описанному выше запуску
+со сценой сферы. Проверка отклоняет устаревший delta и неизвестный узел,
+восстанавливает прежнюю сцену после потери WebGPU и проверяет
+`unresolved` на закреплённой сцене полей Living View.
+
+Общий сценарий пластины проверяет размеры и положение отверстий в
+обеих ревизиях, перемычку 7 мм и стабильный выход Part. Показ принятой
+ревизии входит в [квалификацию Core и View](core-project.md).
+
+```sh
+cargo test --manifest-path "$BUILD/core/Cargo.toml" -p living-cad-viewer \
+  --features luma-cad --lib luma_cad1_recipe_command_cas_retry_restart
+```
+
+[Манифест проектного профиля](../../conformance/cad/cad3-voxel-project-v1.json)
+отражает область приёмки. В этой конфигурации семплирование авторской
+геометрии поддерживает сферу. Авторские lattice, adaptive-сетки и
+точный экспорт B-rep требуют отдельно квалифицированных профилей.
