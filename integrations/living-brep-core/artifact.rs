@@ -199,10 +199,27 @@ pub(crate) fn run_tasks(
     source_bundle: &str,
     context: &mut KernelContext,
 ) -> Result<Value> {
-    use luma::cad_engine::{BrepTask, EngineeringQuery};
-    let bundle = read_luma_bundle(source_bundle)?;
+    let (source_digest, tasks) = prepare_tasks(source_bundle)?;
+    evaluate_tasks(published, model, &source_digest, &tasks, context)
+}
+
+#[cfg(feature = "luma-tasks")]
+pub(crate) fn prepare_tasks(path: &str) -> Result<(String, Vec<luma::cad_engine::BrepTask>)> {
+    let bundle = read_luma_bundle(path)?;
     let tasks = luma::cad::prepare_brep_tasks(&bundle, 100_000)
         .map_err(|problem| Failure("BrepTaskPlanRejected", json!(format!("{problem:?}"))))?;
+    Ok((bundle.source_digest().to_string(), tasks))
+}
+
+#[cfg(feature = "luma-tasks")]
+pub(crate) fn evaluate_tasks(
+    published: &Artifacts,
+    model: &ValidatedBrep,
+    source_digest: &str,
+    tasks: &[luma::cad_engine::BrepTask],
+    context: &mut KernelContext,
+) -> Result<Value> {
+    use luma::cad_engine::{BrepTask, EngineeringQuery};
     let mut reports = Vec::with_capacity(tasks.len());
     for task in tasks {
         let (operation, result) = match task {
@@ -232,7 +249,7 @@ pub(crate) fn run_tasks(
         reports.push(json!({"operation":operation,"result":result}));
     }
     Ok(json!({
-        "source_digest":bundle.source_digest(),
+        "source_digest":source_digest,
         "geometry_sha256":hex(&model.blob_digest()),
         "results":reports
     }))

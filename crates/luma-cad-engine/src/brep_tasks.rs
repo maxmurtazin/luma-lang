@@ -14,7 +14,8 @@ pub enum EngineeringQuery {
     BoundaryDistance { point_m: [f64; 3] },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum BrepTask {
     Mesh,
     Section { z_m: f64 },

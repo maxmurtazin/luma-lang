@@ -4,6 +4,8 @@ mod drawing;
 #[cfg(feature = "luma-tasks")]
 mod m7;
 mod profile;
+#[cfg(feature = "luma-tasks")]
+mod queue;
 
 use brep_core::{
     decode_native, BrepKernel, KernelContext, StandaloneKernel, ValidatedBrep, K1_SOLID,
@@ -57,6 +59,12 @@ fn execute(args: &[String]) -> Result<Value> {
         ProjectStore::open(Path::new(database), project, project_key()?).map_err(core_error)?;
     let derived = Path::new(derived);
     match (action.as_str(), args) {
+        #[cfg(feature = "luma-tasks")]
+        (
+            action @ ("jobs-submit" | "jobs-work" | "jobs-receipt" | "jobs-status" | "jobs-result"
+            | "jobs-cancel" | "jobs-retry"),
+            args,
+        ) => queue::run(&project, derived, action, args),
         #[cfg(feature = "luma-tasks")]
         ("luma-tasks", [operation, digest, bundle]) => {
             let mut context = kernel_context();
@@ -216,6 +224,9 @@ fn core_error(problem: living_cad_viewer::Error) -> Failure {
         "ResourceLimit" => "ResourceLimit",
         "Cancelled" => "Cancelled",
         "Conflict" => "Conflict",
+        "RequestIdReuse" => "RequestIdReuse",
+        "UnknownJob" => "UnknownJob",
+        "JobPending" => "JobPending",
         "UnsupportedGeometry" => "UnsupportedGeometry",
         _ => "CoreProject",
     };
@@ -256,5 +267,5 @@ fn id(value: &str) -> Result<EntityId> {
 }
 
 fn usage() -> Failure {
-    Failure("Usage", json!("luma-cad-brep DB PROJECT DERIVED source PART FEATURE | sketch-profile PART FEATURE | publish PART FEATURE REVISION DIGEST OPERATION_UUID | latest PART FEATURE | measure OPERATION_UUID | view OPERATION_UUID | distance OPERATION_UUID GEOMETRY_SHA solid|face:N X Y Z | section OPERATION_UUID GEOMETRY_SHA FRAME_JSON | luma-tasks OPERATION_UUID GEOMETRY_SHA BUNDLE | luma-m7 M7_PROVIDER LEFT_OP LEFT_SHA RIGHT_OP RIGHT_SHA BUNDLE | sheet-publish PART LIR2D INPUT SHEET review|manufacturing OUTPUT [--font FONT]"))
+    Failure("Usage", json!("luma-cad-brep DB PROJECT DERIVED source PART FEATURE | sketch-profile PART FEATURE | publish PART FEATURE REVISION DIGEST OPERATION_UUID | latest PART FEATURE | measure OPERATION_UUID | view OPERATION_UUID | distance OPERATION_UUID GEOMETRY_SHA solid|face:N X Y Z | section OPERATION_UUID GEOMETRY_SHA FRAME_JSON | luma-tasks OPERATION_UUID GEOMETRY_SHA BUNDLE | jobs-submit REQUEST_UUID OPERATION_UUID GEOMETRY_SHA BUNDLE | jobs-work | jobs-receipt REQUEST_UUID | jobs-status JOB | jobs-result JOB | jobs-cancel JOB | jobs-retry JOB ATTEMPT | luma-m7 M7_PROVIDER LEFT_OP LEFT_SHA RIGHT_OP RIGHT_SHA BUNDLE | sheet-publish PART LIR2D INPUT SHEET review|manufacturing OUTPUT [--font FONT]"))
 }

@@ -6,9 +6,10 @@ mod queue;
 pub use host::JobsHost;
 pub use plan::{FutureOutput, Intent, Plan, Policy, SourcePin, TaskContract, TaskSpec};
 pub use queue::{
-    admit, attempt_receipt, cancel, capture, claim, complete, current, fail, install, install_in,
-    intent, publish, receipt, retry, schema_present, set_head, slot_generation, Artifact, Attempt,
-    CancelOutcome, Claimed, Current, Delivery, JobId, JobReceipt, Publication, Scope, State,
+    admit, artifact_content, attempt_receipt, cancel, capture, claim, complete,
+    complete_with_content, current, fail, install, install_in, intent, publish, receipt, retry,
+    schema_present, set_head, slot_generation, task_payload, Artifact, Attempt, CancelOutcome,
+    Claimed, Current, Delivery, JobId, JobReceipt, Publication, Scope, State,
 };
 
 #[derive(Debug)]
