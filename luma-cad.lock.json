@@ -17,8 +17,9 @@
       "schema/cad/registry-v1.json": "sha256:a57e6cb7a87338b9a2080e2b1f162c9a3243b76d70907e7622129713560e9f58",
       "schema/cad/sketch-profile-v1.json": "sha256:06237d88913edee9628d806be19c4b8a4b2aae94197f21b219379800f1055716",
       "schema/cad/wire-v1.json": "sha256:1a0a8fe30c338c333d15626abb7c32917684287bc87dc0f3bd9febc0d3a60986",
-      "conformance/cad/registry-v1.json": "sha256:420cdd6935c19da1180a75cceee1a4665c429da678ae6a9f2f53e605de870fdb",
-      "conformance/cad/cad2-profile-v1.json": "sha256:71252872b985b3fb2ff30ea27ba7648f78160573894a5d41633be1c2e8de646d"
+      "conformance/cad/registry-v1.json": "sha256:51848fbd69a63798256b32e3030908838667a000a2ccc779a5ecd43655bcda3e",
+      "conformance/cad/cad2-profile-v1.json": "sha256:71252872b985b3fb2ff30ea27ba7648f78160573894a5d41633be1c2e8de646d",
+      "conformance/cad/cad3-regular-sphere-v1.json": "sha256:b35943fbe8b3c808f18a36cb35450897fbf4aa52a6945c725769ec26bb3e92f4"
     }
   },
   "numeric_profiles": [

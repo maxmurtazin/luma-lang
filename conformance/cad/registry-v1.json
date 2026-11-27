@@ -1306,7 +1306,6 @@
           "DeclareTask"
         ],
         "modes": [
-          "recipe",
           "command"
         ],
         "phases": [
@@ -1324,15 +1323,15 @@
       "provider": "voxel",
       "backend_operation": "bounded FieldEvaluator sampling",
       "backend_version": "0.1.0",
-      "adapter_version": "absent",
+      "adapter_version": "luma-cad-voxel-project@1",
       "stage": "CAD-3",
       "backend": "implemented",
-      "adapter": "absent",
-      "binding": "planned",
-      "availability": "unavailable",
+      "adapter": "qualified_profile",
+      "binding": "qualified_profile",
+      "availability": "available",
       "input_support": "requires_preflight",
       "target_verification": {
-        "t0": "not_run",
+        "t0": "passed",
         "t1": "not_run"
       },
       "evidence": [
@@ -1342,11 +1341,11 @@
       "required_grants": [
         "job-submit"
       ],
-      "limits": "Explicit metric, grid and missing-data policy",
+      "limits": "Accepted Core editor sphere, F64 Node grid, at most 32768 samples per historical job",
       "numerical_profile": "si-f64-v1",
       "reason": {
-        "en": "The Luma host binding is planned.",
-        "ru": "Binding в Luma запланирован."
+        "ru": "Командное семплирование принятой сферы Core на регулярной узловой сетке с публикацией LVX.",
+        "en": "Command sampling of a pinned Core sphere on a regular node grid with LVX publication."
       }
     }
   }

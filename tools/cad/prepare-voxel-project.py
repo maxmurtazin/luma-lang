@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -28,9 +29,12 @@ def main():
         target = destination / name
         subprocess.run(["git", "clone", "--quiet", "--no-checkout", checkout, target], check=True)
         subprocess.run(["git", "-C", target, "checkout", "--quiet", "--detach", pins[name]], check=True)
+    subprocess.run([sys.executable, "-B", ROOT / "tools/cad/prepare-core-project.py",
+                    destination / "core"], check=True)
     native = destination / "native"
     native.mkdir()
-    shutil.copyfile(ROOT / "integrations/living-voxel-core/cli.rs", native / "cli.rs")
+    integration = ROOT / "integrations/living-voxel-core"
+    shutil.copyfile(integration / "cli.rs", native / "cli.rs")
     shutil.copyfile(ROOT / "integrations/living-voxel-core/Cargo.lock", native / "Cargo.lock")
     (native / "provider-pins.json").write_text(json.dumps(pins) + "\n", encoding="utf-8")
     (native / "build.rs").write_text(
@@ -54,6 +58,39 @@ serde = { version = "=1.0.228", features = ["derive"] }
 serde_json = "=1.0.145"
 tempfile = "=3.27.0"
 """, encoding="utf-8")
+    project = destination / "project"
+    project.mkdir()
+    for file in ("project.rs", "project_test.rs"):
+        shutil.copyfile(integration / file, project / file)
+    shutil.copyfile(ROOT / "examples/cad/voxel-sphere.json", project / "sphere.json")
+    shutil.copyfile(ROOT / "examples/cad/voxel-sample-command.json", project / "sample-command.json")
+    shutil.copyfile(integration / "project.Cargo.lock", project / "Cargo.lock")
+    (project / "Cargo.toml").write_text("""[package]
+name = "luma-cad-voxel-project"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "luma-cad-voxel-project"
+path = "project.rs"
+
+[[test]]
+name = "project"
+path = "project_test.rs"
+
+[features]
+checkpoint-fault-injection = ["living-cad-viewer/checkpoint-fault-injection"]
+
+[dependencies]
+living-cad-viewer = { path = "../core/crates/living-cad-viewer", features = ["luma-cad"] }
+hir-transaction = { path = "../core/crates/hir-transaction" }
+serde = "=1.0.228"
+serde_json = "=1.0.145"
+sha2 = "=0.10.9"
+hex = "=0.4.3"
+tempfile = "=3.27.0"
+""" + "luma = { path = " + json.dumps(ROOT.as_posix()) + " }\n", encoding="utf-8")
+    print(project / "Cargo.toml")
     print(native / "Cargo.toml")
 
 

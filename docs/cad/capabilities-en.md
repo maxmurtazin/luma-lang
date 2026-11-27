@@ -4,7 +4,7 @@
 
 Runtime availability is scoped to the verified integration profiles.
 
-[CAD](README.md) · [Registry](../../conformance/cad/registry-v1.json) · [CAD-2](brep-project.md)
+[CAD](README.md) · [Registry](../../conformance/cad/registry-v1.json) · [CAD-2](brep-project.md) · [CAD-3](voxel-project.md)
 
 | Operation | Stage | Backend | Adapter | Luma binding | Runtime | T0 / T1 | Reason |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -25,7 +25,7 @@ Runtime availability is scoped to the verified integration profiles.
 | `units.mm` | CAD-1 | absent | absent | planned | unavailable | not_run / not_run | The Luma host binding is planned. |
 | `view.from_body` | CAD-1 | implemented | implemented | planned | unavailable | not_run / not_run | The Luma host binding is planned. |
 | `view.show` | CAD-1 | implemented | implemented | planned | unavailable | not_run / not_run | The Luma host binding is planned. |
-| `voxel.sample` | CAD-3 | implemented | absent | planned | unavailable | not_run / not_run | The Luma host binding is planned. |
+| `voxel.sample` | CAD-3 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Command sampling of a pinned Core sphere on a regular node grid with LVX publication. |
 
 ## Signatures
 

@@ -24,7 +24,7 @@ const view = await create_mesh_viewport(document.querySelector('canvas'));
 view.resize(480, 360, false);
 const data = await (await fetch('/scene.json')).json();
 view.open_scene(JSON.stringify(data));
-if (${brep}) view.fit();
+if (${brep || process.env.VIEW_FIT === "1"}) view.fit();
 window.current = () => JSON.parse(view.stats());
 window.pickFace = async (x, y) => JSON.parse(await view.pick_topology('cad-test', x, y, 'face', 0));
 </script>`;
