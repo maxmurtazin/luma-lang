@@ -215,7 +215,8 @@ cargo test --locked --manifest-path "$BUILD/native/Cargo.toml" \
 ## Объём приёмки
 
 Профиль CAD-2 включает встроенный Core CAS, Luma-команды для Sketch
-и Draft, нативную экструзию из ProfileRef, очередь инженерных задач
-и привязки 2D к параметрам Length в Part того же проекта. Открыты
-режим recipe и более широкие внешние зависимости 2D. [Встроенный 2D](embedded-2d.md)
+и Draft, рецепт Sketch/B-rep с фиксированной топологией, нативную
+экструзию из ProfileRef, очередь инженерных задач и привязки 2D к
+параметрам Length в Part того же проекта. Открыты расширение профиля
+рецепта и более широкие внешние зависимости 2D. [Встроенный 2D](embedded-2d.md)
 [Критерии CAD-2](../../spec/cad/Luma-CAD-Development-Specification-v1.0-RU.md#sec-32)

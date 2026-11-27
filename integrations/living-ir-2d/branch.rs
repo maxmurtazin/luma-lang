@@ -1,6 +1,8 @@
 //! Prepared branch files are authority tokens, never persisted previews.
 use super::super::{luma_cad::PROFILE, part_head, seal, unseal, ProjectStore, Receipt};
-use super::{check_scope, provider_error, unregistered, CoreReads, Embedded2dV1};
+use super::{
+    check_scope, provider_error, reject_recipe_edit, unregistered, CoreReads, Embedded2dV1,
+};
 use crate::{checkpoint::unix_seconds, error, Error};
 use hir_transaction::{PreparationContext, PreparationStage};
 use hir_types::Revision;
@@ -43,6 +45,7 @@ impl ProjectStore {
             return Err(error("Conflict", "Project revision changed"));
         }
         let (head, _, _) = part_head(&registry, part)?;
+        reject_recipe_edit(&registry, part)?;
         let state = registry.embedded_2d.get(part).ok_or_else(unregistered)?;
         if state.revision != batch.expected_revision.0 {
             return Err(error("Conflict", "Embedded 2D revision changed"));
@@ -113,6 +116,7 @@ impl ProjectStore {
                     return Err(error("PreparedExpired", "Prepare a new branch proposal"));
                 }
                 let (head, _, _) = part_head(registry, part)?;
+                reject_recipe_edit(registry, part)?;
                 let state = registry.embedded_2d.get(part).ok_or_else(unregistered)?;
                 if state.revision != token.batch.expected_revision.0 {
                     return Err(error("Conflict", "Embedded 2D revision changed"));

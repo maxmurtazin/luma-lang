@@ -85,8 +85,24 @@ pub fn prepare_sketch(
     bundle: &host::SourceBundle,
     expression_budget: usize,
 ) -> Result<luma_cad_engine::SketchPlan, PreparationError> {
-    let session = luma_cad_engine::SketchHost::new().map_err(PreparationError::Parameters)?;
-    host::run_with_host(bundle, host::Mode::Command, &session, expression_budget)
+    prepare_sketch_in(bundle, host::Mode::Command, expression_budget)
+}
+
+pub fn prepare_sketch_recipe(
+    bundle: &host::SourceBundle,
+    expression_budget: usize,
+) -> Result<luma_cad_engine::SketchPlan, PreparationError> {
+    prepare_sketch_in(bundle, host::Mode::Recipe, expression_budget)
+}
+
+fn prepare_sketch_in(
+    bundle: &host::SourceBundle,
+    mode: host::Mode,
+    expression_budget: usize,
+) -> Result<luma_cad_engine::SketchPlan, PreparationError> {
+    let session =
+        luma_cad_engine::SketchHost::for_mode(mode).map_err(PreparationError::Parameters)?;
+    host::run_with_host(bundle, mode, &session, expression_budget)
         .map_err(PreparationError::Execution)?;
     session.finish().map_err(PreparationError::Parameters)
 }
