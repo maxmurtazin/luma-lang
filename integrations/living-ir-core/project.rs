@@ -549,7 +549,7 @@ impl ProjectStore {
             let new_root = &features[&plan.outputs["solid"]].id;
             if !removed.is_empty() || new_root != &previous.public_output {
                 reject_referenced_replacement(
-                    &registry,
+                    registry,
                     document,
                     &removed_ids,
                     (new_root != &previous.public_output)

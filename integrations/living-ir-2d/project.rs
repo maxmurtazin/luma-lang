@@ -168,15 +168,22 @@ impl ProjectStore {
         let payload = if let Some(id) = sketch {
             let id = ObjectId::try_from(id.to_owned())
                 .map_err(|_| error("InvalidPayload", "Invalid Sketch ID"))?;
-            serde_json::to_value(
+            let mut report = serde_json::to_value(
                 snapshot
                     .sketch_report(&id)
                     .map_err(|problem| provider_error(&problem))?,
             )
+            .map_err(json_error)?;
+            let authored = snapshot
+                .sketches()
+                .get(&id)
+                .ok_or_else(|| error("CheckpointCorrupt", "Missing Sketch for solver report"))?;
+            report["solver_policy"] = json!(authored.solver_policy);
+            report["branch_token"] = json!(authored.branch_token);
+            report
         } else {
-            serde_json::to_value(&snapshot)
-        }
-        .map_err(json_error)?;
+            serde_json::to_value(&snapshot).map_err(json_error)?
+        };
         Ok(json!({
             "project_id": registry.project_id,
             "project_revision": registry.revision.to_string(),

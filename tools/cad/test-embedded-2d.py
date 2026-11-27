@@ -125,6 +125,8 @@ def qualify(cli, fixtures, lir2d, out, disabled, brep):
     solution = call("2d-solve-report", part, entity(10))
     assert solution["value"]["degrees_of_freedom"] == 0
     assert solution["value"]["feasibility"] == "feasible"
+    assert solution["value"]["solver_policy"] == "preserve_branch"
+    assert "branch_token" in solution["value"]
     accepted = call("2d-inspect", part)
     assert accepted["value"]["ownership_mode"] == "embedded"
     assert entity(12) in accepted["value"]["profiles"] and entity(60) in accepted["value"]["drafts"]
