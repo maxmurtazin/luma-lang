@@ -216,6 +216,13 @@ cargo test --locked --manifest-path "$BUILD/native/Cargo.toml" \
 
 ## Объём приёмки
 
+Выпуск `cad2-profile-v1` фиксирует ревизии Core, Living IR 2D, B-rep
+и View, точки входа CLI и проверки. На T0 квалифицированы нативные
+операции для Linux x86-64. T1 подтверждает публикацию B-rep в View
+и выбор грани в Chromium с программным WebGPU. Профиль собирается из
+закреплённых провайдеров по командам выше.
+[Манифест выпуска](../../conformance/cad/cad2-profile-v1.json)
+
 Профиль CAD-2 включает встроенный Core CAS, Luma-команды для Sketch
 и Draft, рецепт Sketch/B-rep с добавлением объектов и отсоединением,
 нативную экструзию из ProfileRef, очередь инженерных задач и

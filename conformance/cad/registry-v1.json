@@ -73,12 +73,12 @@
       "adapter_version": "living-ir-preview@1",
       "stage": "CAD-2",
       "backend": "implemented",
-      "adapter": "implemented",
-      "binding": "planned",
-      "availability": "unavailable",
+      "adapter": "qualified_profile",
+      "binding": "qualified_profile",
+      "availability": "available",
       "input_support": "requires_preflight",
       "target_verification": {
-        "t0": "not_run",
+        "t0": "passed",
         "t1": "not_run"
       },
       "evidence": [
@@ -92,8 +92,8 @@
       "limits": "L3K1Solid: planar profile, one material region, normal signed extrusion",
       "numerical_profile": "si-f64-v1",
       "reason": {
-        "en": "The Luma host binding is planned.",
-        "ru": "Binding в Luma запланирован."
+        "en": "Embedded positive normal extrusion of one closed XY profile, with straight exterior and circular holes.",
+        "ru": "Положительная нормальная экструзия одного замкнутого профиля XY с прямолинейным внешним контуром и круглыми отверстиями."
       }
     },
     "brep.planar_union": {
@@ -126,7 +126,6 @@
           "BuildPlan"
         ],
         "modes": [
-          "recipe",
           "command"
         ],
         "phases": [
@@ -147,12 +146,12 @@
       "adapter_version": "absent",
       "stage": "CAD-2",
       "backend": "experimental",
-      "adapter": "absent",
-      "binding": "planned",
-      "availability": "unavailable",
+      "adapter": "qualified_profile",
+      "binding": "qualified_profile",
+      "availability": "available",
       "input_support": "requires_preflight",
       "target_verification": {
-        "t0": "not_run",
+        "t0": "passed",
         "t1": "not_run"
       },
       "evidence": [
@@ -166,8 +165,8 @@
       "limits": "Restricted coplanar M7 profile, no general solid Boolean",
       "numerical_profile": "si-f64-v1",
       "reason": {
-        "en": "The Luma host binding is planned.",
-        "ru": "Binding в Luma запланирован."
+        "en": "Separate command profile M7 for two pinned publications with a common frame and signed height.",
+        "ru": "Отдельный командный профиль M7 для двух закреплённых публикаций с общей системой координат и знаковой высотой."
       }
     },
     "cad.output": {
@@ -454,12 +453,12 @@
       "adapter_version": "absent",
       "stage": "CAD-2",
       "backend": "implemented",
-      "adapter": "absent",
-      "binding": "planned",
-      "availability": "unavailable",
+      "adapter": "qualified_profile",
+      "binding": "qualified_profile",
+      "availability": "available",
       "input_support": "requires_preflight",
       "target_verification": {
-        "t0": "not_run",
+        "t0": "passed",
         "t1": "not_run"
       },
       "evidence": [
@@ -472,8 +471,8 @@
       "limits": "Standalone; embedded Core writes unavailable",
       "numerical_profile": "si-f64-v1",
       "reason": {
-        "en": "The Luma host binding is planned.",
-        "ru": "Binding в Luma запланирован."
+        "en": "Embedded command profile with a registered Core Part and one authority commit.",
+        "ru": "Командный профиль встроенного Draft с зарегистрированным Part и единой транзакцией Core."
       }
     },
     "elements.place": {
@@ -955,12 +954,12 @@
       "adapter_version": "absent",
       "stage": "CAD-2",
       "backend": "implemented",
-      "adapter": "absent",
-      "binding": "planned",
-      "availability": "unavailable",
+      "adapter": "qualified_profile",
+      "binding": "qualified_profile",
+      "availability": "available",
       "input_support": "requires_preflight",
       "target_verification": {
-        "t0": "not_run",
+        "t0": "passed",
         "t1": "not_run"
       },
       "evidence": [
@@ -978,8 +977,8 @@
       "limits": "Closed nonintersecting loops, holes and minimum web",
       "numerical_profile": "si-f64-v1",
       "reason": {
-        "en": "The Luma host binding is planned.",
-        "ru": "Binding в Luma запланирован."
+        "en": "Closed and fully constrained embedded XY sketch validated by the pinned solver.",
+        "ru": "Замкнутый встроенный эскиз XY с полным набором ограничений и проверкой закреплённым решателем."
       }
     },
     "units.add": {
