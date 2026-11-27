@@ -1,5 +1,6 @@
 mod branch;
 mod core_reads;
+mod recipe;
 
 use core_reads::CoreReads;
 
@@ -22,6 +23,8 @@ pub(super) struct Embedded2dV1 {
     schema: EmbeddedSchema,
     pub(super) revision: u64,
     snapshot_json: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    recipe: Option<recipe::AcceptedRecipe>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -44,6 +47,7 @@ impl Embedded2dV1 {
             schema: EmbeddedSchema::V1,
             revision: snapshot.revision.0,
             snapshot_json,
+            recipe: None,
         })
     }
 
@@ -134,6 +138,7 @@ impl ProjectStore {
             |registry| {
                 let (head, _, _) = part_head(registry, part)?;
                 let record = registry.embedded_2d.get(part).ok_or_else(unregistered)?;
+                reject_recipe_edit(registry, part)?;
                 if record.revision != batch.expected_revision.0 {
                     return Err(error("Conflict", "Embedded 2D revision changed"));
                 }
@@ -154,7 +159,9 @@ impl ProjectStore {
                     .check(native_revision, PreparationStage::Sealing)
                     .map_err(living_hir_facade::overlay_error)?;
                 let revision = match extrusion {
-                    Some(intent) => stage_extrusion(registry, &head, &candidate, intent, context)?,
+                    Some(intent) => {
+                        stage_extrusion(registry, &head, &candidate, intent, false, context)?
+                    }
                     None => head.native_revision,
                 };
                 registry.embedded_2d.insert(part.to_owned(), staged);
@@ -207,6 +214,20 @@ impl ProjectStore {
             "value": payload
         }))
     }
+}
+
+pub(super) fn reject_recipe_edit(registry: &Registry, part: &str) -> Result<(), Error> {
+    if registry
+        .embedded_2d
+        .get(part)
+        .is_some_and(|state| state.recipe.is_some())
+    {
+        return Err(error(
+            "ManagedEntityConflict",
+            "Update the accepted Sketch recipe to edit this Part",
+        ));
+    }
+    Ok(())
 }
 
 fn check_scope(document: &str, snapshot: &DocumentSnapshot) -> Result<(), Error> {
@@ -262,6 +283,7 @@ fn stage_extrusion(
     head: &PartHead,
     source: &DocumentSnapshot,
     intent: &ProfileExtrusion,
+    rebuild: bool,
     context: &PreparationContext,
 ) -> Result<u64, Error> {
     use crate::sketch::{Decimal, Element, Sketch};
@@ -301,15 +323,32 @@ fn stage_extrusion(
     let canonical = facade.export_snapshot(&pin, &cancel)?;
     let mut model: Value =
         serde_json::from_slice(canonical.canonical_bytes()).map_err(json_error)?;
+    let old_sketch = crate::sketch::read(&model)?;
     if !model["geometry"]["nodes"]
         .as_array()
         .is_some_and(Vec::is_empty)
-        || crate::sketch::read(&model)?.is_some()
+        || (!rebuild && old_sketch.is_some())
     {
         return Err(error(
             "UnsupportedGeometry",
             "Embedded Profile extrusion requires an empty native Part",
         ));
+    }
+    if rebuild {
+        let prior = crate::extrude::read(&model)?
+            .ok_or_else(|| error("CheckpointCorrupt", "Missing managed extrusion"))?;
+        if prior.features.len() != 1
+            || prior.features[0].id != intent.feature_id
+            || prior.pocket_sketch.is_some()
+            || old_sketch
+                .as_ref()
+                .is_none_or(|sketch| sketch.id != profile.sketch_id.as_str())
+        {
+            return Err(error(
+                "CheckpointCorrupt",
+                "Managed extrusion identity differs",
+            ));
+        }
     }
 
     let mut elements = BTreeMap::new();
@@ -350,26 +389,40 @@ fn stage_extrusion(
         id: profile.sketch_id.as_str().into(),
         plane: "XY".into(),
         sketch_revision: source.revision.0,
-        parent_digest: None,
+        parent_digest: old_sketch.as_ref().map(Sketch::digest).transpose()?,
         cad_document_id: document.clone(),
-        created_at_revision: revision.0,
-        source_definition_hash: head.definition_hash.clone(),
+        created_at_revision: old_sketch
+            .as_ref()
+            .map_or(revision.0, |sketch| sketch.created_at_revision),
+        source_definition_hash: old_sketch.map_or_else(
+            || head.definition_hash.clone(),
+            |sketch| sketch.source_definition_hash,
+        ),
         source_entity: None,
         numeric_profile: "sk1-research-example/v1".into(),
         elements,
     };
     sketch.model()?;
-    crate::sketch::write(&mut model, &sketch)?;
-    let (model, _) = crate::extrude::apply(
-        &model,
+    let command = if rebuild {
+        crate::extrude::refresh_source(
+            &mut model,
+            serde_json::to_string(&sketch).map_err(json_error)?,
+            &cancel,
+        )?;
+        crate::extrude::Command::UpdateExtrudeLength {
+            feature_id: intent.feature_id.clone(),
+            length_m: intent.signed_height_m.to_string(),
+        }
+    } else {
+        crate::sketch::write(&mut model, &sketch)?;
         crate::extrude::Command::CreateExtrude {
             feature_id: intent.feature_id.clone(),
             source_digest: sketch.digest()?,
             length_m: intent.signed_height_m.to_string(),
             direction: Direction::OneSided,
-        },
-        &cancel,
-    )?;
+        }
+    };
+    let (model, _) = crate::extrude::apply(&model, command, &cancel)?;
     let bytes = serde_json::to_vec(&model).map_err(json_error)?;
     let candidate =
         facade.prepare_import(&store, &bytes, RequestId::from_u128(1), revision, context)?;

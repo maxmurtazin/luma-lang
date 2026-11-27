@@ -26,12 +26,19 @@ def write(path, value):
     return path
 
 
-def source(path, complete, height=4):
-    program = ["use units", "use sketch", "use draft", "use brep",
-               f's = sketch.create("{entity(10)}", "{entity(11)}", "{entity(12)}")']
-    coordinates = [(0, 0), (40, 0), (40, 30), (0, 30), (20, 15), (24, 15)]
+def source(path, complete, height=4, *, width=40, recipe=False, feature=80):
+    program = ["use units", "use sketch", "use brep"]
+    if recipe:
+        program.extend(["use cad", "use param",
+                        f'width = param.length("width", units.mm({width}))',
+                        f'height = param.length("height", units.mm({height}))'])
+    else:
+        program.append("use draft")
+    program.append(f's = sketch.create("{entity(10)}", "{entity(11)}", "{entity(12)}")')
+    coordinates = [(0, 0), (width, 0), (width, 30), (0, 30), (20, 15), (24, 15)]
     for index, (x, y) in enumerate(coordinates):
-        xyz = f"units.mm({x}), units.mm({y})"
+        x_length = "param.value(width)" if recipe and index in (1, 2) else f"units.mm({x})"
+        xyz = f"{x_length}, units.mm({y})"
         program.extend([
             f'p{index} = sketch.point(s, "{entity(20 + index)}", {xyz})',
             f'sketch.fix(s, "{entity(30 + index)}", p{index}, {xyz})',
@@ -40,14 +47,20 @@ def source(path, complete, height=4):
         program.append(f'sketch.line(s, "{entity(40 + index)}", p{index}, p{(index + 1) % 4})')
     program.extend([
         f'sketch.circle(s, "{entity(44)}", p4, p5)', "profile = sketch.profile(s)",
-        f'd = draft.create("{entity(60)}")',
-        f'layer = draft.layer(d, "{entity(70)}")',
-        f'a = draft.point(layer, "{entity(71)}", units.mm(0), units.mm(0))',
-        f'b = draft.point(layer, "{entity(72)}", units.mm(10), units.mm(0))',
-        f'edge = draft.add(layer, "{entity(73)}", a, b)',
-        'draft.transform(edge, units.mm(5), units.mm(2))',
-        f'body = brep.extrude("{entity(80)}", profile, units.mm({height}))',
     ])
+    if recipe:
+        program.extend([f'body = brep.extrude("{entity(feature)}", profile, param.value(height))',
+                        'cad.output("solid", body)'])
+    else:
+        program.extend([
+            f'd = draft.create("{entity(60)}")',
+            f'layer = draft.layer(d, "{entity(70)}")',
+            f'a = draft.point(layer, "{entity(71)}", units.mm(0), units.mm(0))',
+            f'b = draft.point(layer, "{entity(72)}", units.mm(10), units.mm(0))',
+            f'edge = draft.add(layer, "{entity(73)}", a, b)',
+            'draft.transform(edge, units.mm(5), units.mm(2))',
+            f'body = brep.extrude("{entity(feature)}", profile, units.mm({height}))',
+        ])
     files = {"draw-part.luma": "\n".join(program) + "\n"}
     digest = lcan.digest("luma.cad.source", lcan.encode({
         "bundle_version": {"$u64": "1"}, "entry": "draw-part.luma", "files": files,
@@ -207,6 +220,88 @@ def qualify_core_length(call, out, setup, part):
     print("PASS authenticated Core Length, stale proposal and explicit repin")
 
 
+def qualify_recipe(call, evaluate, out, seed, setup, parent):
+    part = entity(140)
+    revision = call("2d-inspect", parent)["project_revision"]
+    created = call("create-part", part, revision, operation(140))
+    initial = write(out / "recipe-seed.json", {**seed, "document_id": part})
+    call("2d-register", part, created["project_revision"], operation(141), initial)
+    state = call("2d-inspect", part)
+
+    def preview(bundle, name, status=0):
+        token = out / f"{name}.token"
+        report = call("2d-recipe-preview", part, state["project_revision"], state["embedded_revision"],
+                      bundle, token, status=status)
+        assert token.exists() == (status == 0)
+        return report, token
+
+    def publish(number, width, height):
+        pin = evaluate("source", part, entity(80))
+        assert pin["sketch"] == entity(10)
+        wire = evaluate("sketch-profile", part, entity(80))
+        assert {curve["id"] for curve in wire["sketch"]["curves"]} == {entity(40 + i) for i in range(5)}
+        op = entity(number)
+        result = evaluate("publish", part, entity(80), pin["revision"], pin["definition_hash"], op)
+        assert result["state"] == "published"
+        measure = evaluate("measure", op)
+        volume = (width * 0.03 - math.pi * 0.004 ** 2) * height
+        assert measure["volume_m3"][0] <= volume <= measure["volume_m3"][1]
+        return measure
+
+    open_profile = source(out / "recipe-open.json", complete=False, recipe=True)
+    assert preview(open_profile, "open-profile", status=3)[0]["code"] == "Embedded2dRejected"
+    assert call("2d-inspect", part) == state
+    examples = Path(__file__).resolve().parents[2] / "examples/cad"
+    original = examples / "sketch-recipe.json"
+    report, token = preview(original, "original")
+    assert report["candidate_changed"]
+    assert call("2d-inspect", part) == state
+    call("2d-recipe-apply", token, operation(142), status=73, crash="command-before-receipt")
+    assert call("2d-inspect", part) == state
+    accepted = call("2d-recipe-apply", token, operation(142))
+    assert call("2d-recipe-apply", token, operation(142)) == accepted
+    state = call("2d-inspect", part)
+    info = call("2d-recipe-info", part)
+    assert info["bundle"] == json.loads(original.read_bytes())
+    assert info["profile_id"] == entity(12) and info["feature_id"] == entity(80)
+    assert info["part_revision"] == accepted["document_revision"]
+    if evaluate:
+        prior = publish(143, 0.04, 0.004)
+
+    raw = write(out / "recipe-raw-edit.json", {**setup, "document_id": part,
+                "expected_revision": state["embedded_revision"]})
+    failure = call("2d-apply", part, state["project_revision"], operation(144), raw, status=4)
+    assert failure["code"] == "ManagedEntityConflict"
+    cad1 = examples / "plate-geometry.json"
+    failure = call("preview", "recipe", part, state["project_revision"], cad1,
+                   out / "other-owner.token", status=4)
+    assert failure["code"] == "ManagedEntityConflict"
+    incompatible = source(out / "recipe-id-change.json", complete=True, recipe=True, feature=81)
+    assert preview(incompatible, "topology-change", status=3)[0]["code"] == "SketchRecipeTopologyChanged"
+    invalid = source(out / "recipe-invalid-width.json", complete=True, recipe=True, width=10)
+    assert preview(invalid, "invalid-width", status=3)[0]["code"] == "Embedded2dRejected"
+    assert call("2d-inspect", part) == state
+
+    unchanged, same = preview(original, "same-recipe")
+    assert not unchanged["candidate_changed"]
+    no_change = call("2d-recipe-apply", same, operation(145))
+    assert no_change["project_revision"] == accepted["project_revision"]
+    assert no_change["document_revision"] == accepted["document_revision"]
+    assert call("2d-inspect", part) == state
+    newer = source(out / "recipe-new.json", complete=True, recipe=True, width=50, height=6)
+    _, change = preview(newer, "recipe-update")
+    changed = call("2d-recipe-apply", change, operation(146))
+    assert int(changed["document_revision"]) == int(accepted["document_revision"]) + 1
+    assert int(changed["embedded_revision"]) == int(accepted["embedded_revision"]) + 1
+    assert call("2d-recipe-apply", same, operation(147), status=4)["code"] == "Conflict"
+    solution = call("2d-solve-report", part, entity(10))["value"]
+    assert solution["degrees_of_freedom"] == 0 and solution["points_m"][entity(22)] == [0.05, 0.03]
+    if evaluate:
+        publish(148, 0.05, 0.006)
+        assert evaluate("measure", entity(143)) == prior
+    print("PASS Sketch recipe preview, CAS, identity-preserving rebuild and receipt replay")
+
+
 def qualify(cli, fixtures, lir2d, out, disabled, brep):
     project, part = entity(1), entity(2)
     db = out / "project.db"
@@ -307,6 +402,7 @@ def qualify(cli, fixtures, lir2d, out, disabled, brep):
     assert final["part_revision"] == receipt["document_revision"]
     assert call(*plan) == receipt and seed.read_bytes() == original
     assert entity(61) in final["value"]["drafts"]
+    evaluate = None
     if brep:
         def evaluate(*args):
             process = subprocess.run([brep, db, project, out / "derived.db", *args],
@@ -325,6 +421,7 @@ def qualify(cli, fixtures, lir2d, out, disabled, brep):
         assert volume[0] <= expected <= volume[1], volume
     setup = qualify_branch(call, fixtures, out, project, part, final, key)
     qualify_core_length(call, out, setup, part)
+    qualify_recipe(call, evaluate, out, json.loads(seed.read_bytes()), setup, part)
     print("PASS embedded 2D Core CAS, crash rollback, concurrent conflict, replay and typed Luma extrusion")
 
 

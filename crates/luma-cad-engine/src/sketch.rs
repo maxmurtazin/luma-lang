@@ -1,4 +1,4 @@
-//! Command-mode lowering for the registered Living IR 2D document.
+//! Lowering for the registered Living IR 2D document.
 use crate::{Kind, ParamValue, ParameterHost};
 use luma_cad_contract::SEALED_MODULES;
 use luma_host_api::{
@@ -13,6 +13,7 @@ const SKETCH: &str = "SketchRef";
 const POINT: &str = "SketchPointRef";
 
 pub struct SketchHost {
+    mode: Mode,
     handles: ParameterHost,
     registry: Registry,
     plan: Mutex<Plan>,
@@ -23,6 +24,7 @@ struct Plan {
     ids: BTreeSet<String>,
     commands: Vec<Json>,
     extrusion: Option<ProfileExtrusion>,
+    output: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -44,6 +46,10 @@ fn opaque(name: &str) -> Type {
 
 impl SketchHost {
     pub fn new() -> Result<Self, Error> {
+        Self::for_mode(Mode::Command)
+    }
+
+    pub fn for_mode(mode: Mode) -> Result<Self, Error> {
         let handles = ParameterHost::new(Default::default())?;
         let length = Kind::Length.value_type();
         let specs = [
@@ -125,9 +131,19 @@ impl SketchHost {
                 vec![Type::Text, opaque("ProfileRef"), length],
                 opaque("BodyRef"),
             ),
+            (
+                "cad",
+                "output",
+                vec![Type::Text, opaque("BodyRef")],
+                Type::Unit,
+            ),
         ];
         let descriptors = specs
             .into_iter()
+            .filter(|(module, _, _, _)| match mode {
+                Mode::Recipe => *module != "draft",
+                Mode::Command => *module != "cad",
+            })
             .map(|(module, name, parameters, result)| Descriptor {
                 module: module.into(),
                 name: name.into(),
@@ -136,18 +152,23 @@ impl SketchHost {
                 parameters: parameters.into_iter().map(Parameter::Exact).collect(),
                 result: ResultType::Exact(result),
                 effect: Effect::BuildPlan,
-                modes: [Mode::Command].into(),
+                modes: [mode].into(),
             });
         let registry = Registry::new(
             SEALED_MODULES.iter().map(|name| (*name).into()),
             handles
                 .registry()
                 .descriptors()
-                .filter(|item| item.module == "units")
+                .filter(|item| {
+                    item.module == "units"
+                        || (mode == Mode::Recipe
+                            && matches!(item.operation.as_str(), "param.length" | "param.value"))
+                })
                 .cloned()
                 .chain(descriptors),
         )?;
         Ok(Self {
+            mode,
             handles,
             registry,
             plan: Mutex::default(),
@@ -160,6 +181,12 @@ impl SketchHost {
             return Err(Error::new(
                 "EmptySketchPlan",
                 "Expected at least one 2D command",
+            ));
+        }
+        if self.mode == Mode::Recipe && !plan.output {
+            return Err(Error::new(
+                "MissingRecipeOutput",
+                "Publish the recipe extrusion with cad.output(\"solid\", body)",
             ));
         }
         Ok(SketchPlan {
@@ -215,7 +242,7 @@ impl Dispatch for SketchHost {
             return Err(Error::new("HostRegistryMismatch", &descriptor.operation));
         }
         descriptor.check_mode(mode)?;
-        if descriptor.module == "units" {
+        if matches!(descriptor.module.as_str(), "units" | "param") {
             return self.handles.call(descriptor, mode, site, arguments);
         }
         match (descriptor.operation.as_str(), arguments) {
@@ -359,6 +386,24 @@ impl Dispatch for SketchHost {
                     signed_height_m,
                 });
                 self.handles.wrap_handle("BodyRef", feature_id)
+            }
+            ("cad.output", [Value::Text(key), body]) => {
+                let feature: String = self.handles.unwrap_handle(body, "BodyRef")?;
+                let mut plan = self.plan.lock().map_err(|_| poisoned())?;
+                if key != "solid"
+                    || plan.output
+                    || !plan
+                        .extrusion
+                        .as_ref()
+                        .is_some_and(|intent| intent.feature_id == feature)
+                {
+                    return Err(Error::new(
+                        "InvalidRecipeOutput",
+                        "Expected one solid output from the recipe extrusion",
+                    ));
+                }
+                plan.output = true;
+                Ok(Value::Unit)
             }
             _ => Err(Error::new("SketchInputType", &descriptor.operation)),
         }

@@ -239,6 +239,14 @@ def main():
         patches.update(compose_core(crate, provider, patches[cargo], patches[project]))
 
     adapter = (INTEGRATION / "project.rs").read_text()
+    if args.ir2d:
+        adapter = replace(
+            adapter,
+            "        let (head, part, native_bytes) = part_head(registry, document)?;",
+            """        #[cfg(feature = "luma-embedded-2d")]
+        super::luma_embedded_2d::reject_recipe_edit(registry, document)?;
+        let (head, part, native_bytes) = part_head(registry, document)?;""",
+        )
     cli = (INTEGRATION / "cli.rs").read_text()
     cli = compose_cli(cli, args.ir2d is not None)
     if not args.view:

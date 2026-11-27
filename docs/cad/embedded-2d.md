@@ -43,6 +43,9 @@ cargo build --manifest-path "$BUILD/native/Cargo.toml" --features luma-tasks
 | `2d-propose-branch PART PROJECT_REV BATCH.json TOKEN.json` | Рассчитывает предлагаемую ветвь, показывает её решение и сохраняет аутентифицированный токен. |
 | `2d-accept-branch TOKEN.json OPERATION` | Пересчитывает и сверяет предложение, затем фиксирует выбранную ветвь и квитанцию через Core CAS. |
 | `2d-length-source PART PARAMETER` | Возвращает `source` с точной нативной ревизией и хешем Part, значение Length в метрах и ревизию проекта. |
+| `2d-recipe-preview PART PROJECT_REV EMBEDDED_REV BUNDLE.json TOKEN.json` | Проверяет рецепт, рассчитывает 2D и нативный кандидат, сохраняет аутентифицированный токен. |
+| `2d-recipe-apply TOKEN.json OPERATION` | Повторно рассчитывает кандидат и принимает результат через Core CAS. |
+| `2d-recipe-info PART` | Возвращает сохранённый bundle, его хеш, ID профиля и экструзии и принятые ревизии. |
 
 Хост 2D команд Luma поддерживает `sketch.create(sketch_id, plane_id,
 profile_id)`, `sketch.point(sketch, id, x, y)`, `sketch.fix(sketch, id,
@@ -63,6 +66,56 @@ Length и профиль `mechanical-si-v1`. Нативный решатель �
 редактирование 2D сохраняет принятую ревизию экструзии доступной.
 Для публикации тела после CAS используйте `luma-cad-brep source`,
 `publish` и `measure`.
+
+### Рецепт Sketch/B-rep
+
+Первое принятие рецепта требует пустой нативный Part и зарегистрированное
+состояние 2D без геометрии и внешних привязок параметров.
+Рецепт определяет один эскиз XY, один профиль и одну положительную экструзию, которую объявляет
+через `cad.output("solid", body)`. Каждая точка фиксируется один раз
+в объявленных координатах. Для размеров можно использовать
+`param.length` и передавать значение через `param.value`.
+Для первого запуска используйте [рецепт пластины с отверстием](../../examples/cad/sketch-recipe.json).
+
+```sh
+"$PROJECT_CLI" "$DB" "$PROJECT" 2d-recipe-preview \
+  "$PART" "$PROJECT_REV" "$EMBEDDED_REV" examples/cad/sketch-recipe.json recipe.token
+"$PROJECT_CLI" "$DB" "$PROJECT" 2d-recipe-apply recipe.token "$OPERATION"
+"$PROJECT_CLI" "$DB" "$PROJECT" 2d-recipe-info "$PART"
+```
+
+Для пересборки измените значения в исходнике и обновите digest bundle.
+Например, ширину в поставляемом рецепте можно увеличить с 40 до 50 мм.
+
+```sh
+PYTHONPATH=tools/cad python3 -B - <<'PY'
+import json
+from pathlib import Path
+from lcan import digest, encode
+
+bundle = json.loads(Path("examples/cad/sketch-recipe.json").read_text(encoding="utf-8"))
+entry, files = bundle["entry"], bundle["files"]
+files[entry] = files[entry].replace('param.length("width", units.mm(40))',
+                                  'param.length("width", units.mm(50))')
+payload = {"bundle_version": {"$u64": "1"}, "entry": entry, "files": files}
+bundle["source_digest"] = digest("luma.cad.source", encode(payload))
+Path("wider-recipe.json").write_text(json.dumps(bundle), encoding="utf-8")
+PY
+```
+
+Передайте новый bundle и текущие ревизии в `2d-recipe-preview`.
+Сохраните UUID объектов, связи кривых и топологию плана.
+Core пересчитывает решатель на принятом 2D состоянии
+и одной транзакцией записывает исходник, 2D и нативную экструзию.
+Повтор того же исходника сохраняет принятую ревизию, а предыдущие
+публикации B-rep доступны по своим ID. Токен действителен пять минут
+и закрепляет ревизию проекта и версию интеграции.
+
+Принятый рецепт владеет геометрией Part. Сторонние правки через
+2D-пакеты, нативный редактор и рецепт CAD-1 отклоняются. В этом
+профиле размеры меняются через bundle. Командные overrides,
+отсоединение рецепта и изменение топологии требуют дополнительных
+маршрутов.
 
 ### Параметры Length из Core
 
@@ -118,7 +171,10 @@ cargo test --locked --manifest-path "$BUILD/native/Cargo.toml" --features luma-t
 и инженерный объём опубликованной экструзии. Отдельный сценарий ветви
 проверяет сохранение принятой геометрии при предпросмотре, подмену,
 срок действия, несовпадение хеша кандидата, аварийный откат и повтор
-квитанции. Проверка привязок Core покрывает подмену значения и хеша,
+квитанции. Проверка рецепта покрывает перестроение с сохранением ID,
+откат при сбое, старый токен, неизменившийся исходник и измерение
+текущей и исторической B-rep публикаций. Проверка привязок Core покрывает
+подмену значения и хеша,
 изменение исходного Part, отказ принять устаревшее предложение и
 пересчёт после явного обновления привязки. Отдельная проверка B-rep
 исполняет объявленные в Luma задачи над подлинной опубликованной

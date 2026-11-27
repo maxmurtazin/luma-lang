@@ -400,21 +400,7 @@ impl ProjectStore {
             return Err(error("DetachedRecipe", "The Part's recipe was detached"));
         }
         let old: Value = serde_json::from_str(native_bytes).map_err(json_error)?;
-        if previous.is_none()
-            && [
-                "/geometry/nodes",
-                "/hir/entities",
-                "/hir/components",
-                "/hir/ports",
-                "/dependencies",
-            ]
-            .into_iter()
-            .any(|path| {
-                old.pointer(path)
-                    .and_then(Value::as_array)
-                    .is_none_or(|items| !items.is_empty())
-            })
-        {
+        if previous.is_none() && !empty_part_graph(&old) {
             return Err(error(
                 "ManagedEntityConflict",
                 "A new Luma recipe requires an empty Part",
@@ -936,6 +922,23 @@ fn reject_referenced_replacement(
         }
     }
     Ok(())
+}
+
+pub(super) fn empty_part_graph(document: &Value) -> bool {
+    [
+        "/geometry/nodes",
+        "/hir/entities",
+        "/hir/components",
+        "/hir/ports",
+        "/dependencies",
+    ]
+    .into_iter()
+    .all(|path| {
+        document
+            .pointer(path)
+            .and_then(Value::as_array)
+            .is_some_and(Vec::is_empty)
+    })
 }
 
 fn canonical(
