@@ -1,5 +1,6 @@
 //! Luma recipe adapter for the pinned Core ProjectStore.
 mod bindings;
+pub mod brep_jobs;
 mod jobs;
 use super::*;
 pub use bindings::LengthBinding;

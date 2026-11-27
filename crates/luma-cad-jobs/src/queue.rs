@@ -63,6 +63,7 @@ pub struct Claimed {
     pub attempt: Attempt,
     pub task: TaskSpec,
     pub inputs: BTreeMap<String, Artifact>,
+    pub payload: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -102,6 +103,16 @@ struct TaskRecord {
     task: TaskSpec,
     output_schema: String,
     inputs: BTreeMap<String, JobId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    payload: Option<String>,
+}
+
+#[derive(Deserialize, Serialize)]
+struct ArtifactRecord {
+    #[serde(flatten)]
+    artifact: Artifact,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    content: Option<String>,
 }
 
 struct StoredJob {
@@ -183,6 +194,7 @@ pub fn admit(tx: &mut Transaction<'_>, scope: &Scope, plan: &Plan) -> Result<Vec
             task: task.clone(),
             output_schema: output_schema.clone(),
             inputs,
+            payload: plan.payloads.get(key).cloned(),
         };
         let payload = serde_json::to_string(&record)?;
         let latest = checkpoint
@@ -260,6 +272,10 @@ pub fn intent(connection: &Connection, scope: &Scope, key: &str) -> Result<Optio
     ).optional()?)
 }
 
+pub fn task_payload(connection: &Connection, job: JobId) -> Result<Option<String>> {
+    Ok(stored(connection, job)?.record.payload)
+}
+
 /// Select an accepted task only after every typed future output has been published.
 pub fn claim(tx: &mut Transaction<'_>, provider: &str) -> Result<Option<Claimed>> {
     if !digest(provider) {
@@ -307,11 +323,28 @@ pub fn claim(tx: &mut Transaction<'_>, provider: &str) -> Result<Option<Claimed>
         attempt: Attempt { job, number },
         task: record.task,
         inputs,
+        payload: record.payload,
     }))
 }
 
 /// Record a provider-verified artifact manifest. Publication is a separate step.
 pub fn complete(tx: &mut Transaction<'_>, attempt: Attempt, artifact: &Artifact) -> Result<()> {
+    complete_with_content(tx, attempt, artifact, None)
+}
+
+/// Commit an optional provider-owned artifact alongside the manifest in the same row.
+pub fn complete_with_content(
+    tx: &mut Transaction<'_>,
+    attempt: Attempt,
+    artifact: &Artifact,
+    content: Option<String>,
+) -> Result<()> {
+    if content
+        .as_ref()
+        .is_some_and(|bytes| bytes.len() > 8 * 1024 * 1024)
+    {
+        return Err(Error::Invalid("artifact content exceeds size limit"));
+    }
     let checkpoint = tx.savepoint()?;
     let job = check(&checkpoint, attempt, State::Running)?;
     if artifact.schema != job.record.output_schema || !digest(&artifact.manifest_digest) {
@@ -324,12 +357,31 @@ pub fn complete(tx: &mut Transaction<'_>, attempt: Attempt, artifact: &Artifact)
         params![
             attempt.job.0,
             attempt.number,
-            serde_json::to_string(artifact)?
+            serde_json::to_string(&ArtifactRecord {
+                artifact: artifact.clone(),
+                content
+            })?
         ],
     )?;
     transition(&checkpoint, attempt, "computed")?;
     checkpoint.commit()?;
     Ok(())
+}
+
+pub fn artifact_content(connection: &Connection, attempt: Attempt) -> Result<Option<String>> {
+    let record: Option<String> = connection
+        .query_row(
+            "SELECT artifact FROM lcad_attempts WHERE job=?1 AND number=?2 AND state='published'",
+            params![attempt.job.0, attempt.number],
+            |row| row.get(0),
+        )
+        .optional()?
+        .flatten();
+    record
+        .map(|encoded| serde_json::from_str::<ArtifactRecord>(&encoded))
+        .transpose()
+        .map(|record| record.and_then(|record| record.content))
+        .map_err(Into::into)
 }
 
 pub fn fail(tx: &mut Transaction<'_>, attempt: Attempt, outcome: &str) -> Result<()> {

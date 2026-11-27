@@ -51,6 +51,18 @@ impl Fixture {
         process
     }
 
+    #[cfg(all(feature = "luma-tasks", feature = "checkpoint-fault-injection"))]
+    fn crash(&self, stage: &str, args: &[&str]) {
+        let process = self
+            .command()
+            .env("LUMA_CAD_TEST_CRASH_AT", stage)
+            .args(args)
+            .output()
+            .unwrap();
+        assert_eq!(process.status.code(), Some(73), "{process:?}");
+        assert!(process.stdout.is_empty(), "{process:?}");
+    }
+
     fn apply(&self, store: &mut ProjectStore, action: DocumentAction) {
         self.apply_part(store, PART, action);
     }
@@ -222,7 +234,7 @@ fn publishes_pinned_normal_extrusion_and_measures_historical_brep() {
         "Empty"
     );
     #[cfg(feature = "luma-tasks")]
-    {
+    let queued = {
         let entry = "engineering.luma".to_string();
         let bundle = luma::host::SourceBundle {
             entry: entry.clone(),
@@ -268,7 +280,43 @@ cad.query_task(body, brep.distance(units.mm(0), units.mm(0), units.mm(2)), optio
             )["code"],
             "StaleTopologyRef"
         );
-    }
+
+        let request = "00000000-0000-4000-8000-000000000071";
+        let submit = [
+            "jobs-submit",
+            request,
+            FIRST,
+            digest,
+            file.to_str().unwrap(),
+        ];
+        #[cfg(feature = "checkpoint-fault-injection")]
+        {
+            fixture.crash("brep-job-before-admission", &submit);
+            assert_eq!(
+                fixture.call(&["jobs-receipt", request], 3)["code"],
+                "UnknownJob"
+            );
+            fixture.crash("brep-job-after-admission", &submit);
+        }
+        let accepted = fixture.call(&submit, 0);
+        assert_eq!(fixture.call(&submit, 0), accepted);
+        assert_eq!(fixture.call(&["jobs-receipt", request], 0), accepted);
+        let job = accepted["job"].as_i64().unwrap().to_string();
+        assert_eq!(fixture.call(&["jobs-status", &job], 0)["state"], "admitted");
+        assert_eq!(
+            fixture.call(&["jobs-result", &job], 3)["code"],
+            "JobPending"
+        );
+        let mut changed = bundle;
+        let source = changed.files.get_mut(&changed.entry).unwrap();
+        *source = source.replace("units.mm(2)", "units.mm(3)");
+        let wire = json!({"bundle_version":1,"entry":changed.entry,
+                         "files":changed.files,"source_digest":changed.source_digest()});
+        std::fs::write(&file, serde_json::to_vec(&wire).unwrap()).unwrap();
+        assert_eq!(fixture.call(&submit, 4)["code"], "RequestIdReuse");
+        std::fs::remove_file(file).unwrap();
+        (job, report)
+    };
     let oblique = json!({"origin_m":[0.,0.,0.002],"x_axis":[1.,0.,0.],
         "y_axis":[0.,0.,1.],"z_axis":[0.,-1.,0.]})
     .to_string();
@@ -309,6 +357,50 @@ cad.query_task(body, brep.distance(units.mm(0), units.mm(0), units.mm(2)), optio
         "StaleTopologyRef"
     );
     assert_eq!(fixture.call(&["measure", FIRST], 0), artifact);
+    #[cfg(feature = "luma-tasks")]
+    {
+        let (job, original) = queued;
+        let previous_attempt = 0;
+        #[cfg(feature = "checkpoint-fault-injection")]
+        let previous_attempt = {
+            let stages = ["brep-job-after-claim", "brep-job-before-publication"];
+            for (attempt, stage) in (previous_attempt + 1..).zip(stages) {
+                fixture.crash(stage, &["jobs-work"]);
+                let processing = fixture.call(&["jobs-status", &job], 0);
+                assert_eq!(processing["state"], "running");
+                assert_eq!(processing["attempt"], attempt);
+                assert_eq!(
+                    fixture.call(&["jobs-result", &job], 3)["code"],
+                    "JobPending"
+                );
+                assert_eq!(
+                    fixture.call(&["jobs-cancel", &job], 0)["state"],
+                    "cancelled"
+                );
+                assert_eq!(
+                    fixture.call(&["jobs-retry", &job, &attempt.to_string()], 0)["state"],
+                    "admitted"
+                );
+            }
+            previous_attempt + stages.len()
+        };
+        let published = fixture.call(&["jobs-work"], 0);
+        assert_eq!(published["state"], "published");
+        assert_eq!(published["publication"], "Historical");
+        assert_eq!(published["attempt"], previous_attempt + 1);
+        assert_eq!(fixture.call(&["jobs-work"], 0), Value::Null);
+        let recovered = fixture.call(&["jobs-result", &job], 0);
+        assert_eq!(recovered["manifest"], published["artifact"]);
+        assert_eq!(recovered["result"], original);
+        assert_eq!(fixture.call(&["jobs-cancel", &job], 0), published);
+        assert_eq!(
+            fixture.call(
+                &["jobs-retry", &job, &(previous_attempt + 1).to_string()],
+                4
+            )["code"],
+            "Conflict"
+        );
+    }
     assert_eq!(
         fixture.call(&["latest", PART, FEATURE], 0)["receipt"],
         next["receipt"]

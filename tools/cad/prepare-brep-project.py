@@ -1,5 +1,6 @@
 """Assemble the CAD-2 native CLI from the pinned Core and B-rep checkouts."""
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -37,9 +38,11 @@ def main():
                         source, checkout], check=True)
         git(checkout, "checkout", "--quiet", "--detach", commit)
 
+    prepare_core = [sys.executable, "-B", ROOT / "tools/cad/prepare-core-project.py",
+                    directory / "living-ir-core"]
     if args.ir2d:
-        subprocess.run([sys.executable, "-B", ROOT / "tools/cad/prepare-core-project.py",
-                        directory / "living-ir-core", "--ir2d", args.ir2d.resolve()], check=True)
+        prepare_core.extend(["--ir2d", args.ir2d.resolve()])
+    subprocess.run(prepare_core, check=True)
 
     integration = ROOT / "integrations/living-brep-core"
     project = directory / "living-ir-core/crates/living-cad-viewer/src/checkpoint/project.rs"
@@ -67,7 +70,8 @@ name = "project"
 path = "cli_test.rs"
 
 [features]
-luma-tasks = ["dep:luma"]
+luma-tasks = ["dep:luma", "living-cad-viewer/luma-cad"]
+checkpoint-fault-injection = ["living-cad-viewer/checkpoint-fault-injection"]
 
 [dependencies]
 brep-core = { path = "../living-brep-core/crates/brep-core" }
@@ -88,13 +92,25 @@ tempfile = "=3.27.0"
     if args.ir2d:
         text = text.replace('features = ["trusted-checkpoint"]', 'features = ["luma-cad", "luma-embedded-2d"]')
     manifest.write_text(text, encoding="utf-8")
-    for filename in ("cli.rs", "cli_test.rs", "profile.rs", "artifact.rs", "drawing.rs", "m7.rs"):
+    for filename in ("cli.rs", "cli_test.rs", "profile.rs", "artifact.rs", "drawing.rs", "m7.rs", "queue.rs"):
         shutil.copyfile(integration / filename, bridge / filename)
     shutil.copyfile(directory / "living-brep-core/integrations/living-ir-preview/Cargo.lock",
                     bridge / "Cargo.lock")
     shutil.copyfile(directory / "living-brep-core/experimental/rectangle-union/planar-boolean-v1.json",
                     bridge / "m7-contract.json")
     (bridge / "brep-pin.txt").write_text(lock["brep"]["commit"] + "\n", encoding="utf-8")
+    fingerprint = hashlib.sha256(b"luma-brep-engineering-worker/1\x00")
+    inputs = [
+        ROOT / "luma-cad.lock.json",
+        ROOT / "Cargo.lock",
+        ROOT / "integrations/living-ir-core/brep_jobs.rs",
+        *(ROOT / "src").glob("*.rs"),
+        *(ROOT / "crates").glob("*/src/*.rs"),
+        *(integration / name for name in ("artifact.rs", "cli.rs", "queue.rs")),
+    ]
+    for path in sorted(inputs):
+        fingerprint.update(hashlib.sha256(path.read_bytes()).digest())
+    (bridge / "brep-job-pin.txt").write_text(f"sha256:{fingerprint.hexdigest()}", encoding="utf-8")
     print(bridge / "Cargo.toml")
 
 

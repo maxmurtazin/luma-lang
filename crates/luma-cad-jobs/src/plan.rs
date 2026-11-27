@@ -70,6 +70,7 @@ pub struct Intent {
 pub struct Plan {
     pub(crate) tasks: Vec<(String, TaskSpec, String)>,
     pub(crate) intents: Vec<Intent>,
+    pub(crate) payloads: BTreeMap<String, String>,
 }
 
 impl Plan {
@@ -143,7 +144,17 @@ impl Plan {
         Ok(Self {
             tasks: ordered,
             intents,
+            payloads: BTreeMap::new(),
         })
+    }
+
+    /// Attach bounded provider-owned input to a task selected by this plan.
+    pub fn with_payload(mut self, key: &str, payload: String) -> Result<Self> {
+        if payload.len() > 64 * 1024 || !self.tasks.iter().any(|(task, _, _)| task == key) {
+            return Err(Error::Invalid("invalid task payload"));
+        }
+        self.payloads.insert(key.into(), payload);
+        Ok(self)
     }
 }
 

@@ -239,7 +239,10 @@ impl ProjectStore {
     }
 }
 
-fn definition_at<'a>(registry: &'a Registry, source: &queue::SourcePin) -> Result<&'a str, Error> {
+pub(super) fn definition_at<'a>(
+    registry: &'a Registry,
+    source: &queue::SourcePin,
+) -> Result<&'a str, Error> {
     registry
         .parts
         .get(&source.document)
@@ -260,7 +263,9 @@ fn definition_at<'a>(registry: &'a Registry, source: &queue::SourcePin) -> Resul
         })
 }
 
-fn job_write(connection: &rusqlite::Connection) -> Result<rusqlite::Transaction<'_>, Error> {
+pub(super) fn job_write(
+    connection: &rusqlite::Connection,
+) -> Result<rusqlite::Transaction<'_>, Error> {
     rusqlite::Transaction::new_unchecked(connection, rusqlite::TransactionBehavior::Immediate)
         .map_err(transaction_error)
 }
