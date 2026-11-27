@@ -558,3 +558,146 @@ fn project_mask_edits_and_paged_gc_preserve_historical_sources() {
     assert_eq!(mask(&["export", &undo, &history], 0), reversed);
     assert_eq!(mask(&["head", PART, "mask"], 0)["job_id"], copy);
 }
+
+#[test]
+fn publishes_pinned_gyroid_with_implicit_metric_and_historical_provenance() {
+    let provider = std::env::var("LUMA_VOXEL_PROVIDER").expect("absolute path to the Voxel CLI");
+    let mut fixture = Fixture::new();
+    let stock = "00000000-0000-4000-8000-000000000041";
+    let feature = "00000000-0000-4000-8000-000000000042";
+    fixture.apply(
+        serde_json::from_value(json!({"primitive":{
+            "document_id":PART,"feature_id":stock,
+            "geometry":{"kind":"create_plate","width":16.0,"height":12.0,"thickness":8.0}
+        }}))
+        .unwrap(),
+    );
+    let lattice = |threshold, update| {
+        serde_json::from_value(json!({"lattice":{
+        "document_id":PART,"feature_id":feature,"base":stock,"update":update,
+        "intent":{"version":1,"region":{"min_m":[-0.007,-0.005,-0.004],"max_m":[0.007,0.005,0.004]},
+            "cell":{"gyroid":{"threshold":threshold}},"cell_size_m":0.005,"origin_m":[0.0,0.0,0.0],
+            "rotation_xyzw":[0.0,0.0,0.0,1.0],"shell_m":0.001,
+            "exclusions":[null,null,null,null],"max_cells":100000,"max_sample_work":8192}
+    }})).unwrap()
+    };
+    fixture.apply(lattice(0.2, false));
+    let pin = fixture.call(&["lattice-source", PART], 0);
+    assert_eq!(pin["entity"], feature);
+    let grid = fixture.dir.path().join("gyroid-grid.json");
+    let specification = json!({
+        "layout":"Node","index_min":[0,0,0],"index_max":[33,25,17],
+        "origin_m":[-0.00997,-0.00707,-0.00473],"axes":[[1,0,0],[0,1,0],[0,0,1]],
+        "spacing_m":[0.0006,0.0006,0.0006],"block_edge":8
+    });
+    fs::write(&grid, specification.to_string()).unwrap();
+    let bundle = fixture.dir.path().join("sample.json");
+    fs::write(&bundle, include_bytes!("sample-command.json")).unwrap();
+    let id = fixture.call(
+        &[
+            "lattice-submit-luma",
+            &provider,
+            REQUEST,
+            PART,
+            &pin["revision"].to_string(),
+            pin["definition_hash"].as_str().unwrap(),
+            grid.to_str().unwrap(),
+            bundle.to_str().unwrap(),
+        ],
+        0,
+    );
+    let job = id["job"].to_string();
+    assert_eq!(fixture.call(&["lattice-receipt", REQUEST], 0), id);
+    assert!(fixture.call(&["work", &provider], 0).is_null());
+    fixture.apply(lattice(0.6, true));
+    assert_ne!(
+        fixture.call(&["lattice-source", PART], 0)["field_json"],
+        pin["field_json"]
+    );
+    assert_eq!(
+        fixture.call(&["lattice-cancel", &job], 0)["state"],
+        "cancelled"
+    );
+    assert_eq!(
+        fixture.call(&["lattice-retry", &job, "0"], 0)["state"],
+        "admitted"
+    );
+    assert_eq!(
+        fixture.call(&["lattice-work", &provider], 0)["state"],
+        "published"
+    );
+    assert_eq!(fixture.call(&["lattice-status", &job], 0)["attempt"], 1);
+    let dir = std::env::var_os("LUMA_VOXEL_GYROID_EVIDENCE");
+    let lvx = dir
+        .as_ref()
+        .map(Path::new)
+        .unwrap_or(fixture.dir.path())
+        .join("gyroid.lvx");
+    let result = fixture.call(&["lattice-export", &job, lvx.to_str().unwrap()], 0);
+    let report = &result["report"];
+    assert_eq!(report["part_source"], pin);
+    assert_eq!(report["profile"], "cad3-core-gyroid-lvx/1");
+    assert_eq!(report["source"]["semantic_kind"], "ImplicitScalar");
+    assert_eq!(report["known_samples"], 33 * 25 * 17);
+    assert_eq!(report["unknown_samples"], 0);
+    let digest = report["digests"]["blob_digest"].as_str().unwrap();
+
+    let sample = |args: &[&str]| {
+        let response = Command::new(&provider)
+            .arg(args[0])
+            .arg(&lvx)
+            .arg(digest)
+            .args(&args[1..])
+            .output()
+            .unwrap();
+        assert!(
+            response.status.success(),
+            "{}",
+            String::from_utf8_lossy(&response.stdout)
+        );
+        serde_json::from_slice::<Value>(&response.stdout).unwrap()["result"].clone()
+    };
+    let observation = sample(&["inspect", "17", "12", "8"])["observation"].clone();
+    assert_eq!(observation["sample"]["metric_status"], "NotDistance");
+    let angle = std::f64::consts::TAU / 0.005;
+    let [x, y, z] = [0.00023, 0.00013, 0.00007].map(|coordinate| coordinate * angle);
+    let reference =
+        ((x.sin() * y.cos() + y.sin() * z.cos() + z.sin() * x.cos()).abs() - 0.2) / angle;
+    assert!((observation["sample"]["value"]["value"].as_f64().unwrap() - reference).abs() < 1e-14);
+    let slice = sample(&["slice-xy", "8"]);
+    assert_eq!(slice["known"], 33 * 25);
+    assert_eq!(slice["unknown"], 0);
+    let full = Command::new(&provider)
+        .arg("surface")
+        .arg(&lvx)
+        .arg(digest)
+        .output()
+        .unwrap();
+    assert_eq!(full.status.code(), Some(2));
+    assert_eq!(
+        serde_json::from_slice::<Value>(&full.stdout).unwrap()["error"]["code"],
+        "UnsupportedCapability"
+    );
+    let window = json!({"index_min":[4,6,5],"index_max":[6,12,11]});
+    let request = fixture.dir.path().join("surface-window.json");
+    fs::write(&request, window.to_string()).unwrap();
+    let mesh = sample(&["surface", request.to_str().unwrap()]);
+    assert_eq!(mesh["surface"]["node_window"], window);
+    assert_eq!(mesh["surface"]["source_digest"], digest);
+    assert_eq!(mesh["surface"]["channel"], "implicit");
+    assert_eq!(mesh["surface"]["triangles"].as_array().unwrap().len(), 58);
+    assert_eq!(mesh["surface"]["report"]["boundary_edges"], 30);
+    assert_eq!(
+        mesh["surface"]["report"]["position_error_bound"],
+        "Unavailable"
+    );
+    assert_eq!(mesh["surface"]["report"]["hausdorff_bound"], "Unavailable");
+    if let Some(dir) = dir {
+        fs::write(Path::new(&dir).join("gyroid-sha.txt"), digest).unwrap();
+        fs::write(
+            Path::new(&dir).join("gyroid-surface.json"),
+            mesh.to_string(),
+        )
+        .unwrap();
+    }
+}
