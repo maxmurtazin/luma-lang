@@ -1,6 +1,6 @@
 //! Prepared branch files are authority tokens, never persisted previews.
 use super::super::{luma_cad::PROFILE, part_head, seal, unseal, ProjectStore, Receipt};
-use super::{check_scope, provider_error, unregistered, Embedded2dV1};
+use super::{check_scope, provider_error, unregistered, CoreReads, Embedded2dV1};
 use crate::{checkpoint::unix_seconds, error, Error};
 use hir_transaction::{PreparationContext, PreparationStage};
 use hir_types::Revision;
@@ -51,14 +51,19 @@ impl ProjectStore {
         context
             .check(revision, PreparationStage::Validation)
             .map_err(living_hir_facade::overlay_error)?;
+        let base = state.snapshot(part)?;
+        let mut reads = CoreReads::new(&registry, context);
+        reads.snapshot(&base, false)?;
+        reads.commands(&batch.commands)?;
         let (preview, proposal) = Runtime::propose_embedded_branch(
             batch.project_id.clone(),
-            state.snapshot(part)?,
+            base,
             &batch,
             &context.cancellation_flag(),
         )
         .map_err(|problem| provider_error(&problem))?;
         check_scope(part, &proposal)?;
+        let read_set = reads.snapshot(&proposal, true)?;
         context
             .check(revision, PreparationStage::Sealing)
             .map_err(living_hir_facade::overlay_error)?;
@@ -78,7 +83,7 @@ impl ProjectStore {
             json!({
                 "project_revision":expected_project.to_string(),"embedded_revision":preview.base_revision,
                 "document_id":part, "branch":branch, "candidate_digest":token.candidate_digest,
-                "sketch_solutions":preview.sketch_solutions,"expires_at":preview.expires_at.unix_timestamp().to_string(),
+                "sketch_solutions":preview.sketch_solutions,"core_read_set":read_set,"expires_at":preview.expires_at.unix_timestamp().to_string(),
             }),
             seal(&self.key, TOKEN_DOMAIN, &token)?,
         ))
@@ -116,15 +121,20 @@ impl ProjectStore {
                 context
                     .check(revision, PreparationStage::Validation)
                     .map_err(living_hir_facade::overlay_error)?;
+                let base = state.snapshot(part)?;
+                let mut reads = CoreReads::new(registry, context);
+                reads.snapshot(&base, false)?;
+                reads.commands(&token.batch.commands)?;
                 let snapshot = Runtime::accept_embedded_branch(
                     token.batch.project_id.clone(),
-                    state.snapshot(part)?,
+                    base,
                     &token.batch,
                     &token.candidate_digest,
                     &token.branch_token,
                     &context.cancellation_flag(),
                 )
                 .map_err(|problem| provider_error(&problem))?;
+                reads.snapshot(&snapshot, true)?;
                 let accepted = Embedded2dV1::successor(part, state.revision, &snapshot)?;
                 context
                     .check(revision, PreparationStage::Sealing)
