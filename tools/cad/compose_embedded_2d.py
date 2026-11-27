@@ -80,11 +80,11 @@ use super::{sqlite""")
     project = replace(project,
                       "        let document_revision = apply(&mut registry)?;\n        if previous != Some(document_revision) {",
                       """        #[cfg(feature = "luma-embedded-2d")]
-        let previous_2d = registry.embedded_2d.get(document).map(|state| state.revision);
+        let previous_2d = registry.embedded_2d.get(document).map(|state| (state.revision, state.managed_recipe()));
         let document_revision = apply(&mut registry)?;
         let changed = previous != Some(document_revision);
         #[cfg(feature = "luma-embedded-2d")]
-        let changed = changed || previous_2d != registry.embedded_2d.get(document).map(|state| state.revision);
+        let changed = changed || previous_2d != registry.embedded_2d.get(document).map(|state| (state.revision, state.managed_recipe()));
         if changed {""")
     sketch = crate / "src/sketch.rs"
     sketch_text = replace(sketch.read_text(encoding="utf-8"), "fn write(document: &mut Value, sketch: &Sketch)",
@@ -103,7 +103,8 @@ def compose_cli(cli, enabled):
     else:
         arms = """        ("2d-register" | "2d-apply" | "2d-inspect" | "2d-solve-report" | "2d-luma"
           | "2d-propose-branch" | "2d-accept-branch" | "2d-length-source"
-          | "2d-recipe-preview" | "2d-command-preview" | "2d-recipe-apply" | "2d-recipe-info", _) =>
+          | "2d-recipe-preview" | "2d-command-preview" | "2d-recipe-apply" | "2d-recipe-info"
+          | "2d-recipe-detach", _) =>
             Err(error("UnsupportedEmbedded2d", "Core host was built without the registered 2D adapter")),
 """
     return replace(cli, match, match + arms)

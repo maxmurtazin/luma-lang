@@ -6,6 +6,7 @@ impl Runtime {
         project: ObjectId,
         snapshot: DocumentSnapshot,
         request: &CommandEnvelope,
+        sources: FixtureSources,
         cancellation: &AtomicBool,
     ) -> Result<DocumentSnapshot, ErrorEnvelope> {
         if request.commands.iter().any(|item| {
@@ -16,8 +17,8 @@ impl Runtime {
         }) {
             return Err(branch_confirmation_required());
         }
-        let runtime = Self::embedded_evaluator(project, snapshot, request)?;
-        let preview = runtime.embedded_preview(request, cancellation)?;
+        let runtime = Self::embedded_evaluator(project, snapshot, request, sources)?;
+        let preview = runtime.preview_with_cancel(request, cancellation)?;
         runtime.preview_snapshot(&preview.preview_id)
     }
 
@@ -25,9 +26,10 @@ impl Runtime {
         project: ObjectId,
         snapshot: DocumentSnapshot,
         request: &CommandEnvelope,
+        sources: FixtureSources,
         cancellation: &AtomicBool,
     ) -> Result<(Preview, DocumentSnapshot), ErrorEnvelope> {
-        let runtime = Self::embedded_evaluator(project, snapshot, request)?;
+        let runtime = Self::embedded_evaluator(project, snapshot, request, sources)?;
         let preview = runtime.branch_preview(request, cancellation)?;
         let candidate = runtime.preview_snapshot(&preview.preview_id)?;
         Ok((preview, candidate))
@@ -40,9 +42,10 @@ impl Runtime {
         proposal: &CommandEnvelope,
         candidate_digest: &Digest,
         branch_token: &ObjectId,
+        sources: FixtureSources,
         cancellation: &AtomicBool,
     ) -> Result<DocumentSnapshot, ErrorEnvelope> {
-        let runtime = Self::embedded_evaluator(project, snapshot, proposal)?;
+        let runtime = Self::embedded_evaluator(project, snapshot, proposal, sources)?;
         let preview = runtime.branch_preview(proposal, cancellation)?;
         if &preview.candidate_digest != candidate_digest {
             return Err(ErrorEnvelope::new(
@@ -82,7 +85,7 @@ impl Runtime {
             sketch_id: branch.sketch_id,
             branch_token: branch_token.clone(),
         }];
-        let accepted = runtime.embedded_preview(&acceptance, cancellation)?;
+        let accepted = runtime.preview_with_cancel(&acceptance, cancellation)?;
         if accepted.acceptance_status != "ready" || accepted.branch_proposal.is_some() {
             return Err(branch_confirmation_required());
         }
@@ -93,11 +96,10 @@ impl Runtime {
         project: ObjectId,
         snapshot: DocumentSnapshot,
         request: &CommandEnvelope,
+        sources: FixtureSources,
     ) -> Result<Self, ErrorEnvelope> {
-        if snapshot.is_standalone() || snapshot.dependency_count() != 0 {
-            return Err(unsupported(
-                "expected Core-owned state without external dependencies",
-            ));
+        if snapshot.is_standalone() {
+            return Err(unsupported("expected Core-owned state"));
         }
         if request
             .commands
@@ -108,19 +110,7 @@ impl Runtime {
                 "embedded history commands require Core history",
             ));
         }
-        Self::new_local(project, snapshot, FixtureSources::default())
-    }
-
-    fn embedded_preview(
-        &self,
-        request: &CommandEnvelope,
-        cancellation: &AtomicBool,
-    ) -> Result<Preview, ErrorEnvelope> {
-        let preview = self.preview_with_cancel(request, cancellation)?;
-        if !preview.source_read_set.is_empty() {
-            return Err(unsupported("embedded source reads require a Core read set"));
-        }
-        Ok(preview)
+        Self::new_local(project, snapshot, sources)
     }
 
     fn branch_preview(
@@ -134,7 +124,7 @@ impl Runtime {
         ) {
             return Err(branch_confirmation_required());
         }
-        let preview = self.embedded_preview(request, cancellation)?;
+        let preview = self.preview_with_cancel(request, cancellation)?;
         if preview.branch_proposal.is_none() || preview.acceptance_status != "branch_proposal" {
             return Err(branch_confirmation_required());
         }

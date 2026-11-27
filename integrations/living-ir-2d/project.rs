@@ -51,18 +51,20 @@ impl Embedded2dV1 {
         })
     }
 
-    fn successor(
-        document: &str,
-        previous: u64,
-        snapshot: &DocumentSnapshot,
-    ) -> Result<Self, Error> {
-        if previous.checked_add(1) != Some(snapshot.revision.0) {
+    fn successor(&self, document: &str, snapshot: &DocumentSnapshot) -> Result<Self, Error> {
+        if self.revision.checked_add(1) != Some(snapshot.revision.0) {
             return Err(error(
                 "InternalError",
                 "Unexpected provider candidate revision",
             ));
         }
-        Self::new(document, snapshot)
+        let mut next = Self::new(document, snapshot)?;
+        next.recipe = self.recipe.clone();
+        Ok(next)
+    }
+
+    pub(super) fn managed_recipe(&self) -> bool {
+        self.recipe.as_ref().is_some_and(|recipe| !recipe.detached)
     }
 
     fn snapshot(&self, document: &str) -> Result<DocumentSnapshot, Error> {
@@ -104,7 +106,9 @@ impl ProjectStore {
                         "Part already has registered embedded 2D state",
                     ));
                 }
-                CoreReads::new(registry, context).snapshot(&snapshot, true)?;
+                let mut reads = CoreReads::new(registry, context);
+                reads.snapshot(&snapshot, true)?;
+                reads.dependencies(&snapshot)?;
                 registry.embedded_2d.insert(part.to_owned(), record.clone());
                 Ok(head.native_revision)
             },
@@ -150,11 +154,17 @@ impl ProjectStore {
                 let mut reads = CoreReads::new(registry, context);
                 reads.snapshot(&base, false)?;
                 reads.commands(&batch.commands)?;
-                let candidate =
-                    Runtime::prepare_embedded(project, base, &batch, &context.cancellation_flag())
-                        .map_err(|problem| provider_error(&problem))?;
+                let sources = reads.dependencies(&base)?;
+                let candidate = Runtime::prepare_embedded(
+                    project,
+                    base,
+                    &batch,
+                    sources,
+                    &context.cancellation_flag(),
+                )
+                .map_err(|problem| provider_error(&problem))?;
                 reads.snapshot(&candidate, true)?;
-                let staged = Embedded2dV1::successor(part, record.revision, &candidate)?;
+                let staged = record.successor(part, &candidate)?;
                 context
                     .check(native_revision, PreparationStage::Sealing)
                     .map_err(living_hir_facade::overlay_error)?;
@@ -220,7 +230,7 @@ pub(super) fn reject_recipe_edit(registry: &Registry, part: &str) -> Result<(), 
     if registry
         .embedded_2d
         .get(part)
-        .is_some_and(|state| state.recipe.is_some())
+        .is_some_and(Embedded2dV1::managed_recipe)
     {
         return Err(error(
             "ManagedEntityConflict",
@@ -243,16 +253,15 @@ fn check_scope(document: &str, snapshot: &DocumentSnapshot) -> Result<(), Error>
             "Registration requires an embedded snapshot",
         ));
     }
-    if snapshot.dependency_count() != 0
-        || snapshot
-            .sheets()
-            .values()
-            .flat_map(|sheet| &sheet.views)
-            .any(|view| view.core_projection.is_some())
+    if snapshot
+        .sheets()
+        .values()
+        .flat_map(|sheet| &sheet.views)
+        .any(|view| view.core_projection.is_some())
     {
         return Err(error(
             "UnsupportedEmbedded2d",
-            "Cross-authority dependencies require a Core read set",
+            "Embedded sheet Core projections require the drawing publication profile",
         ));
     }
     Ok(())

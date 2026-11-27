@@ -3,7 +3,7 @@ use super::super::{
     luma_cad::{empty_part_graph, PROFILE},
     part_head, seal, unseal, ProjectStore, Receipt, Registry,
 };
-use super::{provider_error, stage_extrusion, unregistered, Embedded2dV1};
+use super::{provider_error, stage_extrusion, unregistered, CoreReads};
 use crate::{checkpoint::unix_seconds, error, json_error, Error};
 use hir_transaction::{PreparationContext, PreparationStage};
 use hir_types::Revision;
@@ -16,7 +16,7 @@ use luma::{
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 const DOMAIN: &[u8] = b"luma-sketch-recipe/1";
 const TTL_SECONDS: i64 = 300;
@@ -31,6 +31,8 @@ pub(super) struct AcceptedRecipe {
     feature_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     parameters: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub(super) detached: bool,
 }
 
 impl AcceptedRecipe {
@@ -217,7 +219,35 @@ impl ProjectStore {
             "embedded_revision":record.revision.to_string(),
             "profile_id":recipe.profile_id,"feature_id":recipe.feature_id,
             "source_digest":recipe.source_digest,"bundle":bundle,"parameters":recipe.parameters()?,
+            "detached":recipe.detached,
         }))
+    }
+
+    pub fn detach_sketch_recipe(
+        &mut self,
+        part: &str,
+        expected_project: u64,
+        operation: &str,
+        context: &PreparationContext,
+    ) -> Result<Receipt, Error> {
+        self.commit(
+            (part, operation, expected_project),
+            &("detach-sketch-recipe/1", expected_project),
+            context,
+            |registry| {
+                let (head, _, _) = part_head(registry, part)?;
+                let state = registry
+                    .embedded_2d
+                    .get_mut(part)
+                    .ok_or_else(unregistered)?;
+                let recipe = state
+                    .recipe
+                    .as_mut()
+                    .ok_or_else(|| error("MissingAcceptedSource", "Part has no Sketch recipe"))?;
+                recipe.detached = true;
+                Ok(head.native_revision)
+            },
+        )
     }
 }
 
@@ -251,6 +281,9 @@ fn stage(
         ));
     }
     let prior = record.recipe.as_ref();
+    if prior.is_some_and(|recipe| recipe.detached) {
+        return Err(error("DetachedRecipe", "The Sketch recipe was detached"));
+    }
     let (source, bundle, inherited) = match mode {
         Mode::Recipe => {
             if prior.is_some_and(|recipe| recipe.source_digest == bundle.source_digest()) {
@@ -312,7 +345,8 @@ fn stage(
                 "solver_policy":"preserve_branch","timeout_ms":5000,"max_memory_bytes":50331648},
         })).map_err(json_error)?,
     ).map_err(|problem| provider_error(&problem))?;
-    let (topology, updates) = reconcile(&batch.commands)?;
+    let changes = reconcile(&batch.commands)?;
+    let topology = topology_digest(&changes)?;
     let recipe = AcceptedRecipe {
         source_digest,
         source: source.into(),
@@ -320,26 +354,62 @@ fn stage(
         profile_id: intent.profile_id.clone(),
         feature_id: intent.feature_id.clone(),
         parameters: Some(serde_json::to_string(&plan.parameters).map_err(json_error)?),
+        detached: false,
     };
     let rebuild = if let Some(prior) = &record.recipe {
-        if prior.topology != recipe.topology
-            || prior.profile_id != recipe.profile_id
-            || prior.feature_id != recipe.feature_id
-        {
-            return Err(error(
-                "SketchRecipeTopologyChanged",
-                "Keep Sketch, Profile, feature and curve identities",
-            ));
+        if prior.profile_id != recipe.profile_id || prior.feature_id != recipe.feature_id {
+            return Err(topology_conflict());
         }
-        batch.commands = updates;
+        batch.commands = if prior.topology == recipe.topology {
+            changes.into_iter().filter_map(|item| item.update).collect()
+        } else {
+            let accepted = read_source(prior.source.as_bytes())?;
+            let previous = luma::cad::prepare_sketch_recipe_with_parameters(
+                &accepted,
+                prior.parameters()?,
+                100_000,
+            )
+            .map_err(plan_error)?;
+            let commands: Vec<Command> =
+                serde_json::from_value(json!(previous.commands)).map_err(json_error)?;
+            let old = reconcile(&commands)?;
+            if topology_digest(&old)? != prior.topology {
+                return Err(error(
+                    "PreparedContextChanged",
+                    "Accepted Sketch topology could not be reproduced",
+                ));
+            }
+            let current: BTreeSet<_> = changes.iter().map(|item| item.identity.as_str()).collect();
+            if !old
+                .iter()
+                .all(|item| current.contains(item.identity.as_str()))
+            {
+                return Err(topology_conflict());
+            }
+            let existing: BTreeSet<_> = old.iter().map(|item| item.identity.as_str()).collect();
+            batch
+                .commands
+                .into_iter()
+                .zip(changes)
+                .filter_map(|(command, item)| {
+                    if existing.contains(item.identity.as_str()) {
+                        item.update
+                    } else {
+                        Some(command)
+                    }
+                })
+                .collect()
+        };
         true
     } else {
         false
     };
     let project = batch.project_id.clone();
-    let candidate = Runtime::prepare_embedded(project, base, &batch, &context.cancellation_flag())
-        .map_err(|problem| provider_error(&problem))?;
-    let mut staged = Embedded2dV1::successor(part, expected_2d, &candidate)?;
+    let sources = CoreReads::new(registry, context).dependencies(&base)?;
+    let candidate =
+        Runtime::prepare_embedded(project, base, &batch, sources, &context.cancellation_flag())
+            .map_err(|problem| provider_error(&problem))?;
+    let mut staged = record.successor(part, &candidate)?;
     staged.recipe = Some(recipe);
     context
         .check(revision, PreparationStage::Sealing)
@@ -349,14 +419,19 @@ fn stage(
     state_digest(registry, part)
 }
 
-fn reconcile(commands: &[Command]) -> Result<(String, Vec<Command>), Error> {
+struct SketchChange {
+    identity: String,
+    update: Option<Command>,
+}
+
+fn reconcile(commands: &[Command]) -> Result<Vec<SketchChange>, Error> {
     let mut points = BTreeMap::<&ObjectId, [Finite; 2]>::new();
     let mut fixed = BTreeMap::new();
-    let mut topology = Vec::with_capacity(commands.len());
-    let mut updates = Vec::new();
+    let mut changes = Vec::with_capacity(commands.len());
     let mut sketches = 0;
     let mut profiles = 0;
     for command in commands {
+        let mut update = None;
         let mut identity = serde_json::to_value(command).map_err(json_error)?;
         match command {
             Command::CreateSketch { .. } => sketches += 1,
@@ -391,7 +466,7 @@ fn reconcile(commands: &[Command]) -> Result<(String, Vec<Command>), Error> {
                     .as_object_mut()
                     .ok_or_else(Error::internal)?
                     .remove("position_m");
-                updates.push(Command::UpdateConstraint {
+                update = Some(Command::UpdateConstraint {
                     constraint_id: constraint.id.clone(),
                     patch: SketchConstraintPatch {
                         enabled: None,
@@ -401,16 +476,28 @@ fn reconcile(commands: &[Command]) -> Result<(String, Vec<Command>), Error> {
             }
             _ => return Err(unsupported()),
         }
-        topology.push(identity.to_string());
+        changes.push(SketchChange {
+            identity: identity.to_string(),
+            update,
+        });
     }
     if sketches != 1 || profiles != 1 || points.is_empty() || fixed != points {
         return Err(unsupported());
     }
-    topology.sort_unstable();
-    Ok((
-        digest(&serde_json::to_vec(&topology).map_err(json_error)?),
-        updates,
-    ))
+    Ok(changes)
+}
+
+fn topology_digest(changes: &[SketchChange]) -> Result<String, Error> {
+    let mut ids: Vec<_> = changes.iter().map(|item| &item.identity).collect();
+    ids.sort_unstable();
+    Ok(digest(&serde_json::to_vec(&ids).map_err(json_error)?))
+}
+
+fn topology_conflict() -> Error {
+    error(
+        "SketchRecipeTopologyChanged",
+        "Existing Sketch, Profile, feature and curve identities must be retained",
+    )
 }
 
 fn state_digest(registry: &Registry, part: &str) -> Result<(u64, String), Error> {
