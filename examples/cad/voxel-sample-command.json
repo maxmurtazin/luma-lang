@@ -1,0 +1,8 @@
+{
+  "bundle_version": 1,
+  "entry": "sample.luma",
+  "files": {
+    "sample.luma": "use voxel\nfield = voxel.pinned_field()\ngrid = voxel.grid()\ntask = voxel.sample(field, grid, voxel.sample_options())\n"
+  },
+  "source_digest": "sha256:60717b2091214cb1e18f2affdd45d4a72adbd074e1525dc352972332b2bcba66"
+}

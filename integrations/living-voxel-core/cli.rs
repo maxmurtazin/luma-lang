@@ -11,11 +11,18 @@ use std::{
     sync::atomic::AtomicBool,
 };
 use voxel_core::{
-    field::{ResidentField, Sample, Value},
-    native::{decode_field, encode_field, hash, hash_reader, BackendFingerprint, Limits},
+    field::{
+        extract_uniform_surface, slice_sample, FieldOperand, GridAxis, ResidentField, Sample,
+        SliceOptions, SlicePlacement, SlicePolicy, SurfaceBudget, SurfaceOptions,
+        UniformSurfaceProfile, Value,
+    },
+    native::{
+        decode_field, encode_field, hash, hash_reader, BackendFingerprint, Digest, EncodedField,
+        Limits,
+    },
     registry::Registry,
     sampling::{sample_field, FieldDescriptor, FieldEvaluator, SamplingRequest},
-    types::{ChannelSemantic, DType, GridSpec, MetricStatus, VersionedId},
+    types::{ChannelSemantic, DType, GridSpec, Layout, MetricStatus, VersionedId},
     Diagnostic, DiagnosticCode,
 };
 
@@ -29,6 +36,8 @@ struct Request {
     radius_m: f64,
     center_m: [f64; 3],
     grid: GridSpec,
+    #[serde(default)]
+    part_source: Option<Json>,
 }
 
 struct Sphere {
@@ -77,7 +86,10 @@ fn main() -> ExitCode {
 fn execute(args: &[String]) -> Result<Json, Diagnostic> {
     match args {
         [action, request, output] if action == "sample" => {
-            sample(Path::new(request), Path::new(output))
+            sample(Path::new(request), Path::new(output), false)
+        }
+        [action, request, output] if action == "sample-pinned" => {
+            sample(Path::new(request), Path::new(output), true)
         }
         [action, path, expected, i, j, k] if action == "inspect" => {
             let mut index = [0; 3];
@@ -99,13 +111,75 @@ fn execute(args: &[String]) -> Result<Json, Diagnostic> {
                 "backend":decoded.backend_fingerprint,"observation":field.lookup(CHANNEL, index)?
             }))
         }
+        [action, path, expected] if action == "surface" => {
+            let registry = Registry::builtin()?;
+            let digest: Digest = expected.parse().map_err(invalid)?;
+            let bytes = read(Path::new(path), Limits::default().max_file_bytes)?;
+            let decoded = decode_field(registry, &bytes, Some(digest), Limits::default())?;
+            let field = ResidentField::accept(decoded.field, registry)?;
+            let surface = extract_uniform_surface(
+                FieldOperand {
+                    field: &field,
+                    channel: CHANNEL,
+                },
+                SurfaceOptions {
+                    source_digest: digest,
+                    level: 0.0,
+                    profile: UniformSurfaceProfile::MonotoneTrilinear,
+                    region: None,
+                    budget: SurfaceBudget {
+                        max_samples: 262_144,
+                        max_cells: 262_144,
+                        max_vertices: 100_000,
+                        max_triangles: 200_000,
+                    },
+                    cancelled: &AtomicBool::new(false),
+                },
+            )?;
+            Ok(
+                json!({"surface":surface, "source":decoded.source_descriptor,
+                "voxel_revision":serde_json::from_str::<Json>(PINS).map_err(invalid)?["voxel"]}),
+            )
+        }
+        [action, path, expected, z] if action == "slice-xy" => {
+            let registry = Registry::builtin()?;
+            let digest = expected.parse().map_err(invalid)?;
+            let bytes = read(Path::new(path), Limits::default().max_file_bytes)?;
+            let decoded = decode_field(registry, &bytes, Some(digest), Limits::default())?;
+            let field = ResidentField::accept(decoded.field, registry)?;
+            let grid = field.grid();
+            let sliced = slice_sample(
+                FieldOperand {
+                    field: &field,
+                    channel: CHANNEL,
+                },
+                SliceOptions {
+                    placement: SlicePlacement::Axis {
+                        axis: GridAxis::Z,
+                        index_coordinate: z.parse().map_err(invalid)?,
+                        index_min: [grid.index_min[0], grid.index_min[1]],
+                        index_max: [grid.index_max[0], grid.index_max[1]],
+                    },
+                    source_digest: digest,
+                    level: 0.0,
+                    unknown: SlicePolicy::Preserve,
+                    outside: SlicePolicy::Preserve,
+                    max_samples: 65_536,
+                    cancelled: &AtomicBool::new(false),
+                },
+            )?;
+            Ok(
+                json!({"slice":sliced.slice,"known":sliced.known,"unknown":sliced.unknown,
+                "outside":sliced.outside,"source":decoded.source_descriptor}),
+            )
+        }
         _ => Err(invalid(
             "luma-cad-voxel sample REQUEST.json OUTPUT.lvx | inspect INPUT.lvx SHA256 I J K",
         )),
     }
 }
 
-fn sample(request_path: &Path, output: &Path) -> Result<Json, Diagnostic> {
+fn sample(request_path: &Path, output: &Path, pinned: bool) -> Result<Json, Diagnostic> {
     let bytes = read(request_path, 16 * 1024)?;
     let request: Request = serde_json::from_slice(&bytes).map_err(invalid)?;
     if request.schema_version != 1 {
@@ -114,9 +188,34 @@ fn sample(request_path: &Path, output: &Path) -> Result<Json, Diagnostic> {
             "Expected sphere request version 1",
         ));
     }
-    let centre = Point3::new(request.center_m).map_err(geometry)?;
+    if request.part_source.is_some() != pinned {
+        return Err(invalid("Expected Part provenance only for sample-pinned"));
+    }
+    let (artifact, report) = sample_sphere(
+        request.center_m,
+        request.radius_m,
+        request.grid,
+        request.part_source.as_ref(),
+    )?;
+    publish(output, &artifact.bytes)?;
+    Ok(report)
+}
+
+fn sample_sphere(
+    center_m: [f64; 3],
+    radius_m: f64,
+    grid: GridSpec,
+    part_source: Option<&Json>,
+) -> Result<(EncodedField, Json), Diagnostic> {
+    if part_source.is_some() && grid.layout != Layout::Node {
+        return Err(Diagnostic::new(
+            DiagnosticCode::UnsupportedCapability,
+            "The project profile requires a Node grid",
+        ));
+    }
+    let centre = Point3::new(center_m).map_err(geometry)?;
     let pose = Pose3::new(centre, [0.0, 0.0, 0.0, 1.0]).map_err(geometry)?;
-    let radius = Quantity::new(request.radius_m, Dimension::LENGTH).map_err(invalid)?;
+    let radius = Quantity::new(radius_m, Dimension::LENGTH).map_err(invalid)?;
     let primitive = GeometryPrimitive::sphere(radius, pose).map_err(geometry)?;
     let pins: Json = serde_json::from_str(PINS).map_err(invalid)?;
     let core = pins["core"]
@@ -124,6 +223,9 @@ fn sample(request_path: &Path, output: &Path) -> Result<Json, Diagnostic> {
         .ok_or_else(|| invalid("Missing Core pin"))?;
     let mut identity = b"luma.cad.core-sphere/1\0".to_vec();
     identity.extend_from_slice(core.as_bytes());
+    if let Some(source) = part_source {
+        identity.extend_from_slice(&serde_json::to_vec(source).map_err(invalid)?);
+    }
     for coordinate in centre.xyz().into_iter().chain([radius.si]) {
         identity.extend_from_slice(&coordinate.to_bits().to_le_bytes());
     }
@@ -150,13 +252,17 @@ fn sample(request_path: &Path, output: &Path) -> Result<Json, Diagnostic> {
     let sampled = sample_field(
         registry,
         SamplingRequest {
-            grid: request.grid,
+            grid,
             numeric_profile: VersionedId {
                 id: "grid-si-v1".into(),
                 version: 1,
             },
             channel_id: CHANNEL.into(),
-            max_samples: 262_144,
+            max_samples: if part_source.is_some() {
+                32_768
+            } else {
+                262_144
+            },
             max_blocks: 512,
             allow_unknown: false,
         },
@@ -170,19 +276,24 @@ fn sample(request_path: &Path, output: &Path) -> Result<Json, Diagnostic> {
         backend()?,
         Limits::default(),
     )?;
+    let report = json!({
+        "profile":"cad3-core-sphere-lvx/1","provider_pins":pins,"part_source":part_source,
+        "source":sampled.source,"known_samples":sampled.known_samples,"unknown_samples":sampled.unknown_samples,
+        "digests":artifact.digests,"bytes":artifact.bytes.len(),
+    });
+    Ok((artifact, report))
+}
+
+fn publish(output: &Path, bytes: &[u8]) -> Result<(), Diagnostic> {
     let parent = output
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or(Path::new("."));
     let mut temp = tempfile::NamedTempFile::new_in(parent).map_err(io_error)?;
-    temp.write_all(&artifact.bytes).map_err(io_error)?;
+    temp.write_all(bytes).map_err(io_error)?;
     temp.as_file().sync_all().map_err(io_error)?;
     temp.persist_noclobber(output).map_err(io_error)?;
-    Ok(json!({
-        "profile":"cad3-core-sphere-lvx/1","provider_pins":pins,
-        "source":sampled.source,"known_samples":sampled.known_samples,"unknown_samples":sampled.unknown_samples,
-        "digests":artifact.digests,"bytes":artifact.bytes.len(),
-    }))
+    Ok(())
 }
 
 fn backend() -> Result<BackendFingerprint, Diagnostic> {

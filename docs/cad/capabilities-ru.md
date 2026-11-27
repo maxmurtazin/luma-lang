@@ -4,7 +4,7 @@
 
 Доступность операций указана для проверенных профилей интеграции.
 
-[CAD](README.md) · [Registry](../../conformance/cad/registry-v1.json) · [CAD-2](brep-project.md)
+[CAD](README.md) · [Registry](../../conformance/cad/registry-v1.json) · [CAD-2](brep-project.md) · [CAD-3](voxel-project.md)
 
 | Операция | Этап | Backend | Адаптер | Binding Luma | Runtime | T0 / T1 | Причина |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -25,7 +25,7 @@
 | `units.mm` | CAD-1 | absent | absent | planned | unavailable | not_run / not_run | Binding в Luma запланирован. |
 | `view.from_body` | CAD-1 | implemented | implemented | planned | unavailable | not_run / not_run | Binding в Luma запланирован. |
 | `view.show` | CAD-1 | implemented | implemented | planned | unavailable | not_run / not_run | Binding в Luma запланирован. |
-| `voxel.sample` | CAD-3 | implemented | absent | planned | unavailable | not_run / not_run | Binding в Luma запланирован. |
+| `voxel.sample` | CAD-3 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Командное семплирование принятой сферы Core на регулярной узловой сетке с публикацией LVX. |
 
 ## Сигнатуры
 

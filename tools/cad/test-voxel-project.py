@@ -36,6 +36,15 @@ def qualify(cli):
             assert sample["metric_status"] == "Estimate"
             assert math.isclose(sample["value"]["value"], x / 1024 - 0.004, abs_tol=1e-15)
         assert call("inspect", output, "00" * 32, 0, 0, 0, status=2)["code"] == "CorruptArtifact"
+        surface = call("surface", output, sha)["surface"]
+        assert surface["source_digest"] == sha and surface["units"] == "m"
+        assert surface["triangles"] and surface["report"]["boundary_edges"] == 0
+        assert surface["report"]["hausdorff_bound"] == "Unavailable"
+        sliced = call("slice-xy", output, sha, 0)
+        assert sliced["known"] == 289 and sliced["unknown"] == sliced["outside"] == 0
+        outside = call("slice-xy", output, sha, 100)
+        assert outside["outside"] == 289 and outside["known"] == 0
+        assert call("surface", output, "00" * 32, status=2)["code"] == "CorruptArtifact"
         assert call("sample", fixture, output, status=2)["code"] == "IoFailure"
         assert hashlib.sha256(output.read_bytes()).hexdigest() == sha
 

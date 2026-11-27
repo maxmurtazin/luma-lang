@@ -138,3 +138,14 @@ pub fn prepare_planar_boolean(
         .map_err(PreparationError::Execution)?;
     session.finish().map_err(PreparationError::Parameters)
 }
+
+/// Check one Voxel sampling declaration against the captured Core Part and grid.
+pub fn prepare_voxel_task(
+    bundle: &host::SourceBundle,
+    expression_budget: usize,
+) -> Result<(), PreparationError> {
+    let session = luma_cad_engine::VoxelTaskHost::new().map_err(PreparationError::Parameters)?;
+    host::run_with_host(bundle, host::Mode::Command, &session, expression_budget)
+        .map_err(PreparationError::Execution)?;
+    session.finish().map_err(PreparationError::Parameters)
+}

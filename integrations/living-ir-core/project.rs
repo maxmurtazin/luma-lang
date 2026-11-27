@@ -1,5 +1,7 @@
 //! Luma recipe adapter for the pinned Core ProjectStore.
 mod bindings;
+mod artifact_jobs;
+pub mod voxel_jobs;
 pub mod brep_jobs;
 mod jobs;
 use super::*;

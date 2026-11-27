@@ -1,0 +1,40 @@
+{
+  "profile": "cad3-regular-sphere-v1",
+  "schema_version": 1,
+  "provider_commits": {
+    "core": "e8d5a465dbc943b746ce9f3607fe526f1b3a93df",
+    "voxel": "c17511db9258c1d06100c21b34ff0c03bb469b41",
+    "view": "a94fe6cca6f1d2982bb85e4cd4170422ba77f7b4"
+  },
+  "targets": {
+    "t0": "Linux x86-64; Rust 1.100.0; Core and Voxel in separate binaries",
+    "t1": "Chromium 159 with software WebGPU; external asset mesh"
+  },
+  "operation": "voxel.sample",
+  "entry_points": [
+    "submit-luma",
+    "work",
+    "export",
+    "slice-xy",
+    "surface",
+    "pack-voxel"
+  ],
+  "evidence": [
+    "integrations/living-voxel-core/project_test.rs",
+    "tools/cad/test-voxel-project.py",
+    "tools/cad/test-view-scene.mjs"
+  ],
+  "acceptance": {
+    "AT-035": "passed",
+    "AT-042": "partial",
+    "AT-043": "passed",
+    "AT-044": "partial",
+    "AT-045": "partial",
+    "AT-046": "partial",
+    "AT-050": "passed",
+    "AT-051": "passed",
+    "AT-052": "not_run",
+    "AT-053": "partial",
+    "AT-067": "partial"
+  }
+}

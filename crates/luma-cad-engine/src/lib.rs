@@ -9,6 +9,7 @@ mod parameters;
 mod planar;
 mod recipe;
 mod sketch;
+mod voxel_tasks;
 
 pub use brep_tasks::{BrepTask, BrepTaskHost, EngineeringQuery};
 pub use command::CommandHost;
@@ -29,3 +30,4 @@ pub use parameters::{Declaration, Kind, ParamValue, Parameter, ParameterSnapshot
 pub use planar::{Operand as PlanarOperand, PlanarHost, PlanarOperation, PlanarPlan};
 pub use recipe::{ParameterHost, ParameterPlan};
 pub use sketch::{ProfileExtrusion, SketchHost, SketchPlan};
+pub use voxel_tasks::VoxelTaskHost;
