@@ -150,6 +150,17 @@ fn write_preview(
     preview: &living_cad_viewer::checkpoint::project::luma_cad::Preview,
     destination: &str,
 ) -> Result<Value, Error> {
+    write_token(destination, &preview.token)?;
+    let mut result = json!({"project_revision":preview.project_revision,
+        "candidate_changed":preview.candidate_changed,"candidate_pin":preview.candidate_pin,
+        "accepted_source_digest":preview.accepted_source_digest});
+    if let Some(report) = &preview.detach {
+        result["detach"] = json!(report);
+    }
+    Ok(result)
+}
+
+fn write_token(destination: &str, bytes: &[u8]) -> Result<(), Error> {
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
     #[cfg(unix)]
@@ -159,15 +170,8 @@ fn write_preview(
     }
     options
         .open(destination)
-        .and_then(|mut file| file.write_all(&preview.token).and_then(|_| file.sync_all()))
-        .map_err(|_| error("OutputFile", "Could not create a new prepared-token file"))?;
-    let mut result = json!({"project_revision":preview.project_revision,
-        "candidate_changed":preview.candidate_changed,"candidate_pin":preview.candidate_pin,
-        "accepted_source_digest":preview.accepted_source_digest});
-    if let Some(report) = &preview.detach {
-        result["detach"] = json!(report);
-    }
-    Ok(result)
+        .and_then(|mut file| file.write_all(bytes).and_then(|_| file.sync_all()))
+        .map_err(|_| error("OutputFile", "Could not create a new prepared-token file"))
 }
 
 fn receipt(store: &ProjectStore, part: &str, operation: &str) -> Result<Receipt, Error> {
