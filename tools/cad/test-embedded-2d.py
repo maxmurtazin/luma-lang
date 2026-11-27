@@ -127,6 +127,84 @@ def qualify_branch(call, fixtures, out, project, part, final, owner_key):
     assert call("2d-accept-branch", alternate, operation(126), status=4)["code"] == "Conflict"
     assert call("2d-accept-branch", alternate, operation(125), status=4)["code"] == "RequestIdReuse"
     print("PASS explicit solver branch proposal, authenticated acceptance, stale rejection and rollback")
+    return setup
+
+
+def qualify_core_length(call, out, setup, part):
+    producer = entity(130)
+    revision = call("2d-inspect", part)["project_revision"]
+    created = call("create-part", producer, revision, operation(130))
+    examples = Path(__file__).resolve().parents[2] / "examples/cad"
+    recipe = out / "length-recipe.token"
+    call("preview", "recipe", producer, created["project_revision"], examples / "plate-geometry.json", recipe)
+    installed = call("apply", recipe, operation(131))
+    instance = uuid.UUID(call("recipe-info", producer)["recipe"])
+    blank = uuid.uuid5(instance, "lowering-v1/feature/blank")
+    width = str(uuid.uuid5(blank, "lowering-v1/parameter/width"))
+    pin = call("2d-length-source", producer, width)
+    assert pin["value_m"] == 0.1 and pin["project_revision"] == installed["project_revision"]
+    missing = call("2d-length-source", producer, entity(131), status=3)
+    assert missing["code"] == "MissingCoreLength"
+    wrong_type = call("2d-length-source", producer, str(blank), status=3)
+    assert wrong_type["code"] == "CoreLengthTypeMismatch"
+
+    parameter = setup["commands"][-1]["constraint"]["relation"]["target"]["parameter_id"]
+    current = call("2d-inspect", part)
+    batch = {**setup, "expected_revision": current["embedded_revision"],
+             "idempotency_key": "core-length-binding"}
+    length = {"type": "parameter.set_literal", "parameter_id": parameter,
+              "quantity_kind": "length", "value_si": pin["value_m"], "core_source": pin["source"]}
+
+    def apply(name, number, commands, status=0):
+        path = write(out / f"{name}.json", {**batch, "idempotency_key": name, "commands": commands})
+        return call("2d-apply", part, current["project_revision"], operation(number), path, status=status)
+
+    spoof = apply("forged-value", 132, [{**length, "value_si": 0.11}], status=3)
+    assert spoof["code"] == "CoreLengthValueMismatch"
+    forged = {**pin["source"], "definition_hash": "00" * 32}
+    assert apply("forged-hash", 133, [{**length, "core_source": forged}], status=4)["code"] == "Conflict"
+    assert call("2d-inspect", part) == current
+    apply("bind-length", 134, [length])
+    current = call("2d-inspect", part)
+    batch["expected_revision"] = current["embedded_revision"]
+
+    sketch = setup["commands"][1]["sketch_id"]
+    segment = setup["commands"][3]["segment"]
+    start, end = segment["start_id"], segment["end_id"]
+    relation = {"kind": "signed_distance_x", "from": start, "to": end,
+                "target": {"kind": "parameter", "parameter_id": parameter}}
+    change = {"type": "constraint.update", "constraint_id": entity(121), "patch": {"relation": relation}}
+    propose = {"type": "sketch.propose_branch", "sketch_id": sketch,
+               "seed": [{"id": start, "initial_m": [0, 0]}, {"id": end, "initial_m": [0.1, 0]}]}
+    proposed = write(out / "length-branch.json", {**batch, "commands": [change, propose]})
+    branch = out / "length-branch.token"
+    report = call("2d-propose-branch", part, current["project_revision"], proposed, branch)
+    assert report["core_read_set"] == [{"parameter_id": parameter, "source": pin["source"], "value_m": 0.1}]
+
+    command = json.loads((examples / "plate-width-command.json").read_bytes())
+    entry = command["entry"]
+    files = command["files"]
+    files[entry] = files[entry].replace("00000000-0000-4000-8000-000000000002", producer)
+    command["source_digest"] = lcan.digest("luma.cad.source", lcan.encode({
+        "bundle_version": {"$u64": "1"}, "entry": entry, "files": files,
+    }))
+    edit = write(out / "edit-core-length.json", command)
+    edit_token = out / "edit-core-length.token"
+    call("preview", "command", producer, current["project_revision"], edit, edit_token)
+    call("apply", edit_token, operation(135))
+    assert call("2d-accept-branch", branch, operation(136), status=4)["code"] == "Conflict"
+    current = call("2d-inspect", part)
+    assert current["embedded_revision"] == batch["expected_revision"]
+    disable = {"type": "constraint.update", "constraint_id": entity(121), "patch": {"enabled": False}}
+    assert apply("keep-stale-length", 137, [disable], status=4)["code"] == "Conflict"
+    assert call("2d-inspect", part) == current
+    updated = call("2d-length-source", producer, width)
+    assert updated["value_m"] == 0.12 and updated["source"] != pin["source"]
+    apply("repin-length", 138,
+          [disable, {**length, "value_si": updated["value_m"], "core_source": updated["source"]}])
+    solved = call("2d-solve-report", part, sketch)["value"]
+    assert math.isclose(abs(solved["points_m"][end][0]), 0.12)
+    print("PASS authenticated Core Length, stale proposal and explicit repin")
 
 
 def qualify(cli, fixtures, lir2d, out, disabled, brep):
@@ -245,7 +323,8 @@ def qualify(cli, fixtures, lir2d, out, disabled, brep):
         volume = evaluate("measure", entity(99))["volume_m3"]
         expected = (0.04 * 0.03 - math.pi * 0.004 ** 2) * 0.004
         assert volume[0] <= expected <= volume[1], volume
-    qualify_branch(call, fixtures, out, project, part, final, key)
+    setup = qualify_branch(call, fixtures, out, project, part, final, key)
+    qualify_core_length(call, out, setup, part)
     print("PASS embedded 2D Core CAS, crash rollback, concurrent conflict, replay and typed Luma extrusion")
 
 

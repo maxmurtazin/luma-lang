@@ -83,7 +83,8 @@ use super::{sqlite""")
     module = crate / "src/checkpoint/project/luma_embedded_2d.rs"
     return {crate / "Cargo.toml": cargo, crate / "src/checkpoint/project.rs": project, sketch: sketch_text,
             module: (INTEGRATION / "project.rs").read_text(encoding="utf-8"),
-            module.with_suffix("") / "branch.rs": (INTEGRATION / "branch.rs").read_text(encoding="utf-8")}
+            **{module.with_suffix("") / name: (INTEGRATION / name).read_text(encoding="utf-8")
+               for name in ("branch.rs", "core_reads.rs")}}
 
 
 def compose_cli(cli, enabled):
@@ -92,7 +93,7 @@ def compose_cli(cli, enabled):
         arms = (INTEGRATION / "cli.rs").read_text(encoding="utf-8")
     else:
         arms = """        ("2d-register" | "2d-apply" | "2d-inspect" | "2d-solve-report" | "2d-luma"
-          | "2d-propose-branch" | "2d-accept-branch", _) =>
+          | "2d-propose-branch" | "2d-accept-branch" | "2d-length-source", _) =>
             Err(error("UnsupportedEmbedded2d", "Core host was built without the registered 2D adapter")),
 """
     return replace(cli, match, match + arms)

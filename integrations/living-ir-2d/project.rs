@@ -1,4 +1,7 @@
 mod branch;
+mod core_reads;
+
+use core_reads::CoreReads;
 
 use super::{part_head, restore_part, PartHead, ProjectStore, Receipt, Registry};
 use crate::{error, json_error, Error};
@@ -97,6 +100,7 @@ impl ProjectStore {
                         "Part already has registered embedded 2D state",
                     ));
                 }
+                CoreReads::new(registry, context).snapshot(&snapshot, true)?;
                 registry.embedded_2d.insert(part.to_owned(), record.clone());
                 Ok(head.native_revision)
             },
@@ -137,13 +141,14 @@ impl ProjectStore {
                 context
                     .check(native_revision, PreparationStage::Validation)
                     .map_err(living_hir_facade::overlay_error)?;
-                let candidate = Runtime::prepare_embedded(
-                    project,
-                    record.snapshot(part)?,
-                    &batch,
-                    &context.cancellation_flag(),
-                )
-                .map_err(|problem| provider_error(&problem))?;
+                let base = record.snapshot(part)?;
+                let mut reads = CoreReads::new(registry, context);
+                reads.snapshot(&base, false)?;
+                reads.commands(&batch.commands)?;
+                let candidate =
+                    Runtime::prepare_embedded(project, base, &batch, &context.cancellation_flag())
+                        .map_err(|problem| provider_error(&problem))?;
+                reads.snapshot(&candidate, true)?;
                 let staged = Embedded2dV1::successor(part, record.revision, &candidate)?;
                 context
                     .check(native_revision, PreparationStage::Sealing)
@@ -218,10 +223,6 @@ fn check_scope(document: &str, snapshot: &DocumentSnapshot) -> Result<(), Error>
         ));
     }
     if snapshot.dependency_count() != 0
-        || snapshot
-            .parameters()
-            .values()
-            .any(|parameter| parameter.core_source().is_some())
         || snapshot
             .sheets()
             .values()

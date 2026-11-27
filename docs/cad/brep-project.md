@@ -180,6 +180,7 @@ cad.query_task(body, brep.volume(), options)
 
 Профиль CAD-2 включает встроенный Core CAS, Luma-команды для Sketch
 и Draft, нативную экструзию из ProfileRef и отдельный исполнитель
-инженерных задач. Расширение на режим recipe, внешние зависимости
-2D и долговечную очередь B-rep задач ещё открыто. [Встроенный 2D](embedded-2d.md)
+инженерных задач и привязки 2D к параметрам Length в Part того же
+проекта. Открыты режим recipe, более широкие внешние зависимости 2D
+и долговечная очередь B-rep задач. [Встроенный 2D](embedded-2d.md)
 [Критерии CAD-2](../../spec/cad/Luma-CAD-Development-Specification-v1.0-RU.md#sec-32)

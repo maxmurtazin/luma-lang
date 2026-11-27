@@ -27,6 +27,8 @@
             Ok(result)
         }
         #[cfg(feature = "luma-embedded-2d")]
+        ("2d-length-source", [document, entity]) => store.embedded_2d_length_source(document, entity, &context),
+        #[cfg(feature = "luma-embedded-2d")]
         ("2d-inspect", [part]) => store.embedded_2d(part, None),
         #[cfg(feature = "luma-embedded-2d")]
         ("2d-solve-report", [part, sketch]) => store.embedded_2d(part, Some(sketch)),
