@@ -57,4 +57,4 @@ python -B tools/cad/validate.py --provider core=/path/to/core --provider view=/p
 ## CAD-2
 
 [Публикация и измерение нормальной B-rep экструзии](brep-project.md) ·
-[Самостоятельный Living IR 2D](standalone-2d.md)
+[Самостоятельный Living IR 2D](standalone-2d.md) · [Встроенный 2D](embedded-2d.md)

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -17,6 +18,7 @@ def main():
     parser.add_argument("core_checkout", type=Path)
     parser.add_argument("brep_checkout", type=Path)
     parser.add_argument("destination", type=Path, help="new directory for the isolated build")
+    parser.add_argument("--ir2d", type=Path, help="pinned Living IR 2D checkout for Core-owned 2D")
     args = parser.parse_args()
     lock = json.loads((ROOT / "luma-cad.lock.json").read_text(encoding="utf-8"))["providers"]
     providers = [
@@ -35,6 +37,10 @@ def main():
                         source, checkout], check=True)
         git(checkout, "checkout", "--quiet", "--detach", commit)
 
+    if args.ir2d:
+        subprocess.run([sys.executable, "-B", ROOT / "tools/cad/prepare-core-project.py",
+                        directory / "living-ir-core", "--ir2d", args.ir2d.resolve()], check=True)
+
     integration = ROOT / "integrations/living-brep-core"
     project = directory / "living-ir-core/crates/living-cad-viewer/src/checkpoint/project.rs"
     text = project.read_text(encoding="utf-8")
@@ -42,7 +48,8 @@ def main():
     if text.count(anchor) != 1:
         parser.error("unexpected ProjectStore source in the pinned Core checkout")
     method = (integration / "project-drawing.rs").read_text(encoding="utf-8")
-    project.write_text(text.replace(anchor, method + "\n" + anchor), encoding="utf-8")
+    text = text.replace(anchor, method + "\n" + anchor)
+    project.write_text(text, encoding="utf-8")
 
     bridge = directory / "native"
     bridge.mkdir()
@@ -59,6 +66,9 @@ path = "cli.rs"
 name = "project"
 path = "cli_test.rs"
 
+[features]
+luma-tasks = ["dep:luma"]
+
 [dependencies]
 brep-core = { path = "../living-brep-core/crates/brep-core" }
 hir-evaluation-api = { path = "../living-ir-core/crates/hir-evaluation-api" }
@@ -72,6 +82,12 @@ serde_json = "=1.0.145"
 sha2 = "=0.10.9"
 tempfile = "=3.27.0"
 """, encoding="utf-8")
+    manifest = bridge / "Cargo.toml"
+    text = manifest.read_text(encoding="utf-8")
+    text += "luma = { path = " + json.dumps(ROOT.as_posix()) + ", optional = true }\n"
+    if args.ir2d:
+        text = text.replace('features = ["trusted-checkpoint"]', 'features = ["luma-cad", "luma-embedded-2d"]')
+    manifest.write_text(text, encoding="utf-8")
     for filename in ("cli.rs", "cli_test.rs", "profile.rs", "artifact.rs", "drawing.rs"):
         shutil.copyfile(integration / filename, bridge / filename)
     shutil.copyfile(directory / "living-brep-core/integrations/living-ir-preview/Cargo.lock",

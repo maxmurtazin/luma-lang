@@ -191,3 +191,72 @@ fn number(text: &str) -> Result<f64> {
         .filter(|value: &f64| value.is_finite())
         .ok_or_else(crate::usage)
 }
+
+#[cfg(feature = "luma-tasks")]
+pub(crate) fn run_tasks(
+    published: &Artifacts,
+    model: &ValidatedBrep,
+    source_bundle: &str,
+    context: &mut KernelContext,
+) -> Result<Value> {
+    use luma::cad_engine::{BrepTask, EngineeringQuery};
+    use std::{fs::File, io::Read};
+
+    let mut bytes = Vec::new();
+    File::open(source_bundle)
+        .and_then(|file| file.take(256 * 1024 + 1).read_to_end(&mut bytes))
+        .map_err(|problem| Failure("SourceInputError", json!(problem.to_string())))?;
+    if bytes.len() > 256 * 1024 {
+        return Err(Failure(
+            "ResourceLimit",
+            json!("Luma bundle exceeds 256 KiB"),
+        ));
+    }
+    let bundle: luma::host::WireSourceBundle =
+        serde_json::from_slice(&bytes).map_err(crate::encoding_error)?;
+    let bundle = bundle.admit().map_err(|problem| {
+        Failure(
+            "InvalidSourceBundle",
+            json!(problem
+                .diagnostics
+                .iter()
+                .map(|(file, diagnostic)| luma::host::diagnostic_json(file, diagnostic))
+                .collect::<Vec<_>>()),
+        )
+    })?;
+    let tasks = luma::cad::prepare_brep_tasks(&bundle, 100_000)
+        .map_err(|problem| Failure("BrepTaskPlanRejected", json!(format!("{problem:?}"))))?;
+    let mut reports = Vec::with_capacity(tasks.len());
+    for task in tasks {
+        let (operation, result) = match task {
+            BrepTask::Mesh => ("cad.mesh", view(published, model, context)?),
+            BrepTask::Section { z_m } => {
+                let frame = json!({"origin_m":[0.0,0.0,z_m], "x_axis":[1,0,0],
+                                   "y_axis":[0,1,0], "z_axis":[0,0,1]});
+                (
+                    "cad.section_task",
+                    section(model, &frame.to_string(), context)?,
+                )
+            }
+            BrepTask::Query(EngineeringQuery::Volume) => (
+                "cad.query_task",
+                json!({"kind":"volume", "volume_m3":interval(model.volume_m3())}),
+            ),
+            BrepTask::Query(EngineeringQuery::BoundaryDistance { point_m }) => (
+                "cad.query_task",
+                distance(
+                    model,
+                    "solid",
+                    &point_m.map(|value| value.to_string()),
+                    context,
+                )?,
+            ),
+        };
+        reports.push(json!({"operation":operation,"result":result}));
+    }
+    Ok(json!({
+        "source_digest":bundle.source_digest(),
+        "geometry_sha256":hex(&model.blob_digest()),
+        "results":reports
+    }))
+}

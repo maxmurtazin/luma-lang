@@ -55,6 +55,13 @@ fn execute(args: &[String]) -> Result<Value> {
         ProjectStore::open(Path::new(database), project, project_key()?).map_err(core_error)?;
     let derived = Path::new(derived);
     match (action.as_str(), args) {
+        #[cfg(feature = "luma-tasks")]
+        ("luma-tasks", [operation, digest, bundle]) => {
+            let mut context = kernel_context();
+            let (published, model) = load_brep(&project, derived, operation, &mut context)?;
+            check_topology_digest(&model, digest)?;
+            artifact::run_tasks(&published, &model, bundle, &mut context)
+        }
         ("sheet-publish", args) => drawing::run(&mut project, args),
         ("source", [document, feature]) => {
             let source = project
@@ -238,5 +245,5 @@ fn id(value: &str) -> Result<EntityId> {
 }
 
 fn usage() -> Failure {
-    Failure("Usage", json!("luma-cad-brep DB PROJECT DERIVED source PART FEATURE | sketch-profile PART FEATURE | publish PART FEATURE REVISION DIGEST OPERATION_UUID | latest PART FEATURE | measure OPERATION_UUID | view OPERATION_UUID | distance OPERATION_UUID GEOMETRY_SHA solid|face:N X Y Z | section OPERATION_UUID GEOMETRY_SHA FRAME_JSON | sheet-publish PART LIR2D INPUT SHEET review|manufacturing OUTPUT [--font FONT]"))
+    Failure("Usage", json!("luma-cad-brep DB PROJECT DERIVED source PART FEATURE | sketch-profile PART FEATURE | publish PART FEATURE REVISION DIGEST OPERATION_UUID | latest PART FEATURE | measure OPERATION_UUID | view OPERATION_UUID | distance OPERATION_UUID GEOMETRY_SHA solid|face:N X Y Z | section OPERATION_UUID GEOMETRY_SHA FRAME_JSON | luma-tasks OPERATION_UUID GEOMETRY_SHA BUNDLE | sheet-publish PART LIR2D INPUT SHEET review|manufacturing OUTPUT [--font FONT]"))
 }
