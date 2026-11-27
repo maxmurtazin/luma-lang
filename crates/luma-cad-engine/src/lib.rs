@@ -1,4 +1,5 @@
 //! Provider-independent CAD planning.
+mod brep_tasks;
 mod command;
 mod dependencies;
 mod expression;
@@ -6,7 +7,9 @@ mod geometry;
 mod ownership;
 mod parameters;
 mod recipe;
+mod sketch;
 
+pub use brep_tasks::{BrepTask, BrepTaskHost, EngineeringQuery};
 pub use command::CommandHost;
 pub use dependencies::{
     AdmittedRecipe, AdmittedRecipes, BindingRevision, ClosureError, PreparedRecipe,
@@ -23,3 +26,4 @@ pub use ownership::{
 };
 pub use parameters::{Declaration, Kind, ParamValue, Parameter, ParameterSnapshot};
 pub use recipe::{ParameterHost, ParameterPlan};
+pub use sketch::{ProfileExtrusion, SketchHost, SketchPlan};

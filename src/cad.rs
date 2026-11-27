@@ -79,3 +79,25 @@ pub fn prepare_command(
         .map_err(PreparationError::Execution)?;
     session.finish().map_err(PreparationError::Parameters)
 }
+
+/// Prepare typed sketch commands for the registered Living IR 2D host.
+pub fn prepare_sketch(
+    bundle: &host::SourceBundle,
+    expression_budget: usize,
+) -> Result<luma_cad_engine::SketchPlan, PreparationError> {
+    let session = luma_cad_engine::SketchHost::new().map_err(PreparationError::Parameters)?;
+    host::run_with_host(bundle, host::Mode::Command, &session, expression_budget)
+        .map_err(PreparationError::Execution)?;
+    session.finish().map_err(PreparationError::Parameters)
+}
+
+/// Declare engineering work for the publication supplied by the native caller.
+pub fn prepare_brep_tasks(
+    bundle: &host::SourceBundle,
+    expression_budget: usize,
+) -> Result<Vec<luma_cad_engine::BrepTask>, PreparationError> {
+    let session = luma_cad_engine::BrepTaskHost::new().map_err(PreparationError::Parameters)?;
+    host::run_with_host(bundle, host::Mode::Command, &session, expression_budget)
+        .map_err(PreparationError::Execution)?;
+    session.finish().map_err(PreparationError::Parameters)
+}

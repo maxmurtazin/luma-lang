@@ -16,10 +16,8 @@ seed и токен ветви, если он задан. Редактирова�
 диагностика при конфликте проходят через команды `lir2d preview` и
 `lir2d apply`. Адаптер сохраняет диагностику провайдера в `Living2dError`.
 
-Embedded-снимки отклоняются с `UnsupportedEmbedded2d`. Для записи
-потребуются зарегистрированное typed state и подготовленный delta с
-единым commit в Core CAS. Нативный `lir2d apply` также отклоняет запись
-embedded-снимка. [Спецификация доменов 2D](../../spec/cad/Luma-CAD-Development-Specification-v1.0-RU.md#sec-19)
+Автономный адаптер и нативный `lir2d apply` отклоняют embedded-снимки.
+Их запись выполняет [встроенный адаптер с Core CAS](embedded-2d.md). [Спецификация доменов 2D](../../spec/cad/Luma-CAD-Development-Specification-v1.0-RU.md#sec-19)
 
 ## Воспроизведение
 

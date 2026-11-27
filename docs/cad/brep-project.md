@@ -113,9 +113,32 @@ python -B "$M7/fixtures/qualify_m7.py" \
 загрузку выбранных нативных тел. M7 квалифицирован отдельно от
 проектной публикации K1. Luma host binding для M7 остаётся запланированным.
 
+## Задачи B-rep из Luma
+
+В сборке с `--features luma-tasks` команда
+`luma-cad-brep DB PROJECT DERIVED luma-tasks OPERATION_UUID GEOMETRY_SHA BUNDLE.json`
+берёт геометрию из проверенной публикации. Luma объявляет задачи, после
+успешной подготовки CLI выполняет их закреплённым провайдером. Поддержаны
+одна задача тесселяции, параллельные сечения XY, интервал объёма и
+расстояние до границы тела. До восьми задач выполняются синхронно
+по отдельному вызову. Перед подготовкой проверяется хеш B-rep.
+
+```luma
+use units
+use brep
+use cad
+body = brep.published_body()
+options = brep.task_options()
+cad.mesh(body, options)
+cad.section_task(body, brep.xy_section(units.mm(2)), options)
+cad.query_task(body, brep.volume(), options)
+```
+
 ## Объём приёмки
 
-Проверки относятся к выбранным CLI-профилям CAD-2. Для полной
-приёмки нужны зарегистрированное 2D-состояние и запись через Core CAS,
-а также привязки операций в Luma host.
+Профиль CAD-2 включает встроенный Core CAS, Luma-команды для Sketch
+и Draft, нативную экструзию из ProfileRef и отдельный исполнитель
+инженерных задач. Расширение на режим recipe, внешние зависимости
+2D, явное принятие новой ветви, долговечную очередь B-rep задач и
+Luma binding для отдельного профиля M7 ещё открыто. [Встроенный 2D](embedded-2d.md)
 [Критерии CAD-2](../../spec/cad/Luma-CAD-Development-Specification-v1.0-RU.md#sec-32)

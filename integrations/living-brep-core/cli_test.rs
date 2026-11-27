@@ -217,6 +217,54 @@ fn publishes_pinned_normal_extrusion_and_measures_historical_brep() {
         fixture.call(&["section", FIRST, digest, &section(0.005)], 0)["kind"],
         "Empty"
     );
+    #[cfg(feature = "luma-tasks")]
+    {
+        let entry = "engineering.luma".to_string();
+        let bundle = luma::host::SourceBundle {
+            entry: entry.clone(),
+            files: [(
+                entry,
+                r#"
+use units
+use brep
+use cad
+body = brep.published_body()
+options = brep.task_options()
+cad.mesh(body, options)
+cad.section_task(body, brep.xy_section(units.mm(2)), options)
+cad.query_task(body, brep.volume(), options)
+cad.query_task(body, brep.distance(units.mm(0), units.mm(0), units.mm(2)), options)
+"#
+                .into(),
+            )]
+            .into(),
+        };
+        let file = fixture.0.join("engineering.json");
+        let wire = json!({"bundle_version":1,"entry":bundle.entry,
+                         "files":bundle.files,"source_digest":bundle.source_digest()});
+        std::fs::write(&file, serde_json::to_vec(&wire).unwrap()).unwrap();
+        let report = fixture.call(&["luma-tasks", FIRST, digest, file.to_str().unwrap()], 0);
+        assert_eq!(report["geometry_sha256"], digest);
+        assert_eq!(report["results"][0]["result"], preview);
+        assert_eq!(report["results"][1]["result"]["kind"], "RegionContours");
+        assert_eq!(
+            report["results"][2]["result"]["volume_m3"],
+            artifact["volume_m3"]
+        );
+        assert_eq!(report["results"][3]["result"], distance);
+        assert_eq!(
+            fixture.call(
+                &[
+                    "luma-tasks",
+                    FIRST,
+                    &"00".repeat(32),
+                    file.to_str().unwrap()
+                ],
+                3
+            )["code"],
+            "StaleTopologyRef"
+        );
+    }
     let oblique = json!({"origin_m":[0.,0.,0.002],"x_axis":[1.,0.,0.],
         "y_axis":[0.,0.,1.],"z_axis":[0.,-1.,0.]})
     .to_string();

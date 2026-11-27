@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 import subprocess
 
+from compose_embedded_2d import compose_cli, compose_core, prepare_provider
+
 ROOT = Path(__file__).resolve().parents[2]
 INTEGRATION = ROOT / "integrations/living-ir-core"
 LOCK = ROOT / "luma-cad.lock.json"
@@ -139,6 +141,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("core_checkout", type=Path)
     parser.add_argument("--view", type=Path, help="pinned View checkout with web assets already built")
+    parser.add_argument("--ir2d", type=Path, help="pinned Living IR 2D checkout for Core-owned 2D")
     args = parser.parse_args()
     core = args.core_checkout.resolve()
     lock = json.loads(LOCK.read_bytes())
@@ -230,8 +233,14 @@ def main():
     pub fn with_observer(mut self, observer: Observer) -> Self {""")
     patches[project], patches[sqlite] = compose_job_commit(text, sqlite.read_text())
 
+    if args.ir2d:
+        provider = core.parent / f"{core.name}-embedded-ir2d"
+        prepare_provider(args.ir2d.resolve(), provider, lock["providers"]["ir-2d"]["commit"])
+        patches.update(compose_core(crate, provider, patches[cargo], patches[project]))
+
     adapter = (INTEGRATION / "project.rs").read_text()
     cli = (INTEGRATION / "cli.rs").read_text()
+    cli = compose_cli(cli, args.ir2d is not None)
     if not args.view:
         adapter = adapter.replace('feature = "living-view-v2"', "any()")
         cli = cli.replace('feature = "living-view-v2"', "any()")
@@ -240,6 +249,10 @@ def main():
                         ROOT / "Cargo.lock", ROOT / "crates/luma-cad-jobs/Cargo.lock",
                         ROOT / "crates/luma-cad-jobs/src/queue.sql", Path(__file__).resolve()]):
         fingerprint.update(hashlib.sha256(path.read_bytes()).digest())
+    if args.ir2d:
+        for path in sorted((ROOT / "integrations/living-ir-2d").glob("*.rs")):
+            fingerprint.update(hashlib.sha256(path.read_bytes()).digest())
+        fingerprint.update(hashlib.sha256((ROOT / "tools/cad/compose_embedded_2d.py").read_bytes()).digest())
     module = crate / "src/checkpoint/project/luma_cad.rs"
     for name in ("jobs.rs", "bindings.rs"):
         content = (INTEGRATION / name).read_text()
