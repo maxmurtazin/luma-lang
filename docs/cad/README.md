@@ -10,9 +10,10 @@
 
 CAD-0 закрепляет исходники и схемы DTO. Выбранный provider-комплект — Core и
 Living IR View с адаптером V2. В нём подтверждается просмотр mesh-сцен Core.
-Программы Luma получат доступ к CAD через host API на CAD-1. Все операции текущего
-[реестра](../../conformance/cad/registry-v1.json) имеют статус `planned/unavailable`.
-Ветка опирается на Luma 0.1.3 и read-only S1. S2 validated edits остаётся отдельным draft.
+Для Luma 0.1.3 доступны локальный маршрут CAD-1 и квалифицированный
+профиль CAD-2. [Реестр](../../conformance/cad/registry-v1.json) указывает
+статусы операций и гранулярность проверки. Структурный экспорт S1
+поддерживает чтение. S2 validated edits остаётся отдельным draft.
 
 ## Закреплённый комплект
 
@@ -20,7 +21,7 @@ Living IR View с адаптером V2. В нём подтверждается 
 | --- | --- |
 | Core | `FeatureSpec::plate`, `FeatureSpec::hole`, `prepare_rebuild`, `prepare_transaction`, `DomainRegistry.schemas`, `living_sketch::build_profiles`. SQLite multi-part хранит исходные определения, ревизии и pins. Маршрутизация из Luma требует нового адаптера. |
 | View | Патч V2 и `integrations/core/render.rs` с projection/picking по source pins, WebAssembly `create_mesh_viewport`, `scripts/check-v2.mjs`. V2 выбирает mesh по текущему принятому снимку. |
-| 2D | `lir2d-runtime` выполняет команды автономных документов. Embedded writes ожидают согласованной регистрации и CAS. |
+| 2D | `lir2d-runtime` выполняет автономные команды и встроенные команды с регистрацией и Core CAS. |
 | B-rep | `brep-core` и `integrations/living-ir-preview` предоставляют normal extrusion и пилот публикации. M7 planar Boolean имеет отдельные ограничения. |
 | Voxel | `schemas/capabilities-v1.json` и `FieldEvaluator` задают ограничения sampling. View V2 использует mesh; volume renderer отсутствует. |
 | Simulation | Интеграционный Cargo manifest закрепляет Core `dce28055d404c7fad21749636554acf8b7a0d0b2`. Для выбранного Core `e8d5a46` совместимость этого адаптера не подтверждена. |
@@ -56,5 +57,6 @@ python -B tools/cad/validate.py --provider core=/path/to/core --provider view=/p
 
 ## CAD-2
 
+[Манифест выпуска профиля](../../conformance/cad/cad2-profile-v1.json) ·
 [Публикация и измерение нормальной B-rep экструзии](brep-project.md) ·
 [Самостоятельный Living IR 2D](standalone-2d.md) · [Встроенный 2D](embedded-2d.md)

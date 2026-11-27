@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "profile": "cad2-profile-v1",
+  "implementation_commit": "11e7ceebdf1ddd34a45da59bbc901dacfc21066e",
+  "provider_commits": {
+    "core": "e8d5a465dbc943b746ce9f3607fe526f1b3a93df",
+    "ir-2d": "1a39445c84c3585dd39c3992f256ce86f1da62c6",
+    "brep": "e1c266a18d77259b50f9269279e6a48559e5db08",
+    "view": "a94fe6cca6f1d2982bb85e4cd4170422ba77f7b4"
+  },
+  "targets": {
+    "t0": "Linux x86-64, Rust 1.100.0, pinned native providers",
+    "t1": "Chromium 159.0.8154.6, WebGPU SwiftShader, B-rep render and face picking"
+  },
+  "acceptance": {
+    "AT-037": "integrations/living-brep-core/cli_test.rs",
+    "AT-044": "integrations/living-brep-core/cli_test.rs",
+    "AT-049": "integrations/living-brep-core/cli_test.rs",
+    "AT-054": "tools/cad/test-embedded-2d.py",
+    "AT-057": "tools/cad/test-embedded-2d.py",
+    "AT-058": "tools/cad/test-standalone-2d.py",
+    "AT-068": "tools/cad/test-view-scene.mjs"
+  },
+  "operations": {
+    "brep.extrude": {
+      "entry_points": [
+        "2d-luma",
+        "2d-recipe-preview",
+        "2d-recipe-apply",
+        "publish"
+      ],
+      "checks": [
+        "AT-049",
+        "AT-054"
+      ],
+      "target": "t0"
+    },
+    "brep.planar_union": {
+      "entry_points": [
+        "luma-m7"
+      ],
+      "checks": [
+        "AT-044",
+        "AT-049"
+      ],
+      "target": "t0"
+    },
+    "draft.create": {
+      "entry_points": [
+        "2d-luma"
+      ],
+      "checks": [
+        "AT-057"
+      ],
+      "target": "t0"
+    },
+    "sketch.profile": {
+      "entry_points": [
+        "2d-luma",
+        "2d-recipe-preview",
+        "2d-recipe-apply"
+      ],
+      "checks": [
+        "AT-054",
+        "AT-057"
+      ],
+      "target": "t0"
+    }
+  }
+}
