@@ -1,4 +1,8 @@
 //! Durable Core scheduler for the separately linked Voxel provider.
+mod blocks;
+mod paged;
+mod provider;
+
 use living_cad_viewer::checkpoint::project::ProjectStore;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -22,7 +26,10 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(error) => {
-            let code = if error["code"] == "Conflict" || error["code"] == "RequestIdReuse" {
+            let code = if matches!(
+                error["code"].as_str(),
+                Some("Conflict" | "RequestIdReuse" | "InputChanged" | "Superseded")
+            ) {
                 4
             } else {
                 2
@@ -44,8 +51,21 @@ fn execute(args: &[String]) -> Result<Value> {
             hex::decode_to_slice(value, &mut key).ok().map(|()| key)
         })
         .ok_or_else(|| json!({"code":"ProjectKey","message":"Expected a 32-byte hex key"}))?;
-    let store = ProjectStore::open(Path::new(database), project, key).map_err(core_error)?;
+    let mut store = ProjectStore::open(Path::new(database), project, key).map_err(core_error)?;
     match (action.as_str(), args) {
+        ("mask", [publications, provider, args @ ..]) => blocks::execute(
+            &mut store,
+            Path::new(publications),
+            Path::new(provider),
+            args,
+        ),
+        ("paged", [publications, provider, directory, args @ ..]) => paged::execute(
+            &store,
+            Path::new(publications),
+            Path::new(provider),
+            Path::new(directory),
+            args,
+        ),
         ("source", [part]) => encode(store.voxel_sphere_source(part, None).map_err(core_error)?),
         (
             "submit" | "submit-luma",
@@ -137,19 +157,60 @@ fn execute(args: &[String]) -> Result<Value> {
             )
         }
         ("export", [id, output]) => {
-            let result = store.voxel_job_result(number(id)?).map_err(core_error)?;
-            let artifact = &result["result"];
-            let report = &artifact["report"];
-            let bytes = hex::decode(artifact["lvx_hex"].as_str().ok_or_else(corrupt)?)
-                .map_err(|_| corrupt())?;
-            if !verify_lvx(report, &bytes) {
-                return Err(corrupt());
-            }
+            let (bytes, provenance) = historical_lvx(&store, id)?;
             publish(Path::new(output), &bytes)?;
-            Ok(json!({"report":report,"manifest":result["manifest"]}))
+            Ok(provenance)
+        }
+        ("field-csg", [provider, operation, left, right, metric]) => {
+            if metric != "implicit" {
+                return Err(json!({"code":"UnsupportedCapability",
+                    "message":"Grid min/max CSG supports an implicit field with no distance guarantee"}));
+            }
+            let operation = match operation.as_str() {
+                "union" => "Union",
+                "intersection" => "Intersection",
+                "difference" => "Difference",
+                _ => return Err(usage()),
+            };
+            let provider_path = Path::new(provider);
+            let directory = tempfile::tempdir().map_err(io_error)?;
+            let operand = |name: &str, id: &str| -> Result<(Value, Value)> {
+                let (bytes, provenance) = historical_lvx(&store, id)?;
+                let digest: [u8; 32] = Sha256::digest(&bytes).into();
+                let field = provider::decode(provider_path, &bytes, &digest)?;
+                let path = directory.path().join(name);
+                std::fs::write(&path, field.to_string()).map_err(io_error)?;
+                Ok((json!({"path":path,"channel":"distance"}), provenance))
+            };
+            let (left, left_source) = operand("left.json", left)?;
+            let (right, right_source) = operand("right.json", right)?;
+            let field = provider::operate(
+                provider_path,
+                "living.voxel.field.csg",
+                &json!({
+                    "left":left,"right":right,"operation":operation,
+                    "output_channel":"csg","max_visited_blocks":512
+                }),
+            )?;
+            Ok(json!({"result":field,"sources":[left_source,right_source]}))
         }
         _ => Err(usage()),
     }
+}
+
+fn historical_lvx(store: &ProjectStore, id: &str) -> Result<(Vec<u8>, Value)> {
+    let result = store.voxel_job_result(number(id)?).map_err(core_error)?;
+    let artifact = &result["result"];
+    let report = &artifact["report"];
+    let bytes =
+        hex::decode(artifact["lvx_hex"].as_str().ok_or_else(corrupt)?).map_err(|_| corrupt())?;
+    if !verify_lvx(report, &bytes) {
+        return Err(corrupt());
+    }
+    Ok((
+        bytes,
+        json!({"report":report,"manifest":result["manifest"]}),
+    ))
 }
 
 fn verify_lvx(report: &Value, bytes: &[u8]) -> bool {
@@ -259,5 +320,5 @@ fn corrupt() -> Value {
 }
 
 fn usage() -> Value {
-    json!({"code":"Usage","message":"DB PROJECT source PART | submit PROVIDER REQUEST PART REVISION HASH GRID.json | submit-luma PROVIDER REQUEST PART REVISION HASH GRID.json BUNDLE.json | work PROVIDER | receipt REQUEST | status JOB | cancel JOB | retry JOB ATTEMPT | export JOB FILE.lvx"})
+    json!({"code":"Usage","message":"DB PROJECT source PART | submit PROVIDER REQUEST PART REVISION HASH GRID.json | submit-luma PROVIDER REQUEST PART REVISION HASH GRID.json BUNDLE.json | work PROVIDER | receipt REQUEST | status JOB | cancel JOB | retry JOB ATTEMPT | export JOB FILE.lvx | field-csg VOXEL_CLI OP LEFT_JOB RIGHT_JOB implicit | mask PUBLICATIONS VOXEL_CLI COMMAND ... | paged PUBLICATIONS VOXEL_CLI DIRECTORY COMMAND ..."})
 }

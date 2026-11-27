@@ -1,0 +1,65 @@
+{
+  "profile": "cad3-voxel-project-v1",
+  "schema_version": 1,
+  "provider_commits": {
+    "core": "e8d5a465dbc943b746ce9f3607fe526f1b3a93df",
+    "voxel": "c17511db9258c1d06100c21b34ff0c03bb469b41",
+    "view": "a94fe6cca6f1d2982bb85e4cd4170422ba77f7b4"
+  },
+  "targets": {
+    "t0": "Linux x86-64; Rust 1.100.0; Core and Voxel in separate binaries",
+    "t1": "Chromium 159 with software WebGPU; external asset mesh; stale-delta rejection, unresolved pick and device recovery"
+  },
+  "entry_points": [
+    "submit-luma",
+    "work",
+    "export",
+    "slice-xy",
+    "surface",
+    "pack-voxel",
+    "field-csg",
+    "mask seed",
+    "mask patch",
+    "mask undo",
+    "mask boolean",
+    "paged pack",
+    "paged query",
+    "paged gc"
+  ],
+  "evidence": [
+    "integrations/living-voxel-core/project_test.rs",
+    "tools/cad/test-voxel-project.py",
+    "tools/cad/test-view-scene.mjs",
+    "integrations/living-ir-core/project.rs",
+    "integrations/living-brep-core/cli_test.rs",
+    "docs/cad/core-project.md",
+    "docs/cad/standalone-2d.md"
+  ],
+  "acceptance": {
+    "AT-035": "passed",
+    "AT-042": "passed",
+    "AT-043": "passed",
+    "AT-044": "passed",
+    "AT-045": "passed",
+    "AT-046": "passed",
+    "AT-050": "passed",
+    "AT-051": "passed",
+    "AT-052": "passed",
+    "AT-053": "passed",
+    "AT-067": "passed"
+  },
+  "builds_on": "cad3-regular-sphere-v1",
+  "scope": [
+    "Core analytic sphere on a regular Node grid and historical LVX job recovery",
+    "Resident Bool mask slots with whole-block replacement and face-copy, layer-preserving Undo",
+    "Paged storage and quarantine GC for retained project publications on Linux",
+    "Resident Bool and scalar CSG on matching grids; scalar result has no distance guarantee",
+    "Shared plate and B-rep negative cases from the qualified native routes",
+    "Living View mesh rendering and WebGPU recovery; sampled-field unresolved pick from pinned View fixture"
+  ],
+  "independent_profiles": [
+    "adaptive grids",
+    "authored lattice sampling and exact lattice export",
+    "volume rendering"
+  ]
+}
