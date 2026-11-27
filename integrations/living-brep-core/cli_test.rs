@@ -52,14 +52,18 @@ impl Fixture {
     }
 
     fn apply(&self, store: &mut ProjectStore, action: DocumentAction) {
+        self.apply_part(store, PART, action);
+    }
+
+    fn apply_part(&self, store: &mut ProjectStore, part: &str, action: DocumentAction) {
         let registry = store.registry().unwrap();
         store
             .apply_document(
                 &DocumentCommand {
                     request_id: format!("{:032x}", registry.revision + 1),
-                    document_id: PART.into(),
+                    document_id: part.into(),
                     expected_project_revision: registry.revision,
-                    expected_document_revision: registry.documents[PART].revision,
+                    expected_document_revision: registry.documents[part].revision,
                     action,
                 },
                 &self.0,
@@ -535,4 +539,234 @@ fi
         "UnsupportedDrawingSource"
     );
     assert!(!blocked.exists());
+}
+
+#[cfg(all(
+    feature = "luma-tasks",
+    target_os = "linux",
+    target_arch = "x86_64",
+    target_env = "gnu"
+))]
+#[test]
+#[ignore = "requires the qualified M7 binary at LUMA_CAD2_M7"]
+fn evaluates_luma_m7_using_two_pinned_native_publications() {
+    let provider = std::env::var("LUMA_CAD2_M7").expect("set LUMA_CAD2_M7");
+    let fixture = Fixture::new();
+    let mut store = ProjectStore::create(&fixture.model(), PROJECT, KEY).unwrap();
+
+    let publish = |part: &str, operation: &str| {
+        let pin = fixture.call(&["source", part, FEATURE], 0);
+        let view = fixture.call(
+            &[
+                "publish",
+                part,
+                FEATURE,
+                pin["revision"].as_str().unwrap(),
+                pin["definition_hash"].as_str().unwrap(),
+                operation,
+            ],
+            0,
+        );
+        assert_eq!(view["state"], "published");
+        fixture.call(&["view", operation], 0)["source"]["geometry_sha256"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+
+    let shape = |store: &mut ProjectStore,
+                 part: &str,
+                 operation: &str,
+                 plane: &str,
+                 min: [f64; 2],
+                 max: [f64; 2],
+                 round: bool| {
+        let registry = store.registry().unwrap();
+        store
+            .create_document(
+                &CreateDocument {
+                    request_id: format!("{:032x}", registry.revision + 1),
+                    document_id: part.into(),
+                    expected_project_revision: registry.revision,
+                    kind: DocumentKind::Part,
+                    name: "M7 operand".into(),
+                },
+                &PreparationContext::default(),
+            )
+            .unwrap();
+        let element = if round {
+            json!({"kind":"circle","center":{"xy":min},"radius_m":max[0]})
+        } else {
+            json!({"kind":"rectangle","a":{"xy":min},"b":{"xy":max}})
+        };
+        for action in [
+            json!({"op":"create","plane":plane}),
+            json!({"op":"add","element":element}),
+        ] {
+            fixture.apply_part(store, part, DocumentAction::Sketch(action));
+        }
+        let source = store.part_sketch_digest(part).unwrap().unwrap();
+        fixture.apply_part(
+            store,
+            part,
+            DocumentAction::Extrude(json!({
+                "op":"create_extrude","feature_id":FEATURE,
+                "source_digest":source,"length_m":"0.005","direction":"one_sided"
+            })),
+        );
+        publish(part, operation)
+    };
+
+    let bundle_file = fixture.0.join("m7-plan.json");
+    let plan = |operation: &str, reversed: bool| {
+        let entry = "boolean-plan.luma".to_string();
+        let args = if reversed {
+            "right, left"
+        } else {
+            "left, right"
+        };
+        let source = format!("use brep\nleft = brep.left_operand()\nright = brep.right_operand()\nresult = brep.{operation}(\"result\", {args})\n");
+        let bundle = luma::host::SourceBundle {
+            entry: entry.clone(),
+            files: [(entry, source)].into(),
+        };
+        let wire = json!({"bundle_version":1,"entry":bundle.entry,"files":bundle.files,
+            "source_digest":bundle.source_digest()});
+        std::fs::write(&bundle_file, serde_json::to_vec(&wire).unwrap()).unwrap();
+    };
+    let run = |left: &str, digest: &str, right: &str, other: &str, code| {
+        fixture.call(
+            &[
+                "luma-m7",
+                &provider,
+                left,
+                digest,
+                right,
+                other,
+                bundle_file.to_str().unwrap(),
+            ],
+            code,
+        )
+    };
+    let expect_volume = |report: &Value, expected: f64| {
+        let interval = &report["result"]["volume_m3"];
+        assert!(
+            interval[0].as_f64().unwrap() <= expected && expected <= interval[1].as_f64().unwrap(),
+            "{expected} not in {interval}"
+        );
+        assert_eq!(report["result"]["validation"]["level"], "L3K1Solid");
+        assert_eq!(report["result"]["validation"]["complete"], true);
+        assert_eq!(report["result"]["native"]["format"], "brep-cbor-v1");
+    };
+
+    const RIGHT_PART: &str = "00000000-0000-4000-8000-000000000010";
+    const ISLAND_PART: &str = "00000000-0000-4000-8000-000000000011";
+    const ISLAND: &str = "00000000-0000-4000-8000-000000000012";
+    const OBLIQUE_PART: &str = "00000000-0000-4000-8000-000000000013";
+    const OBLIQUE: &str = "00000000-0000-4000-8000-000000000014";
+    const TALL: &str = "00000000-0000-4000-8000-000000000015";
+    const DISK_PART: &str = "00000000-0000-4000-8000-000000000016";
+    const DISK: &str = "00000000-0000-4000-8000-000000000017";
+
+    let left = shape(&mut store, PART, FIRST, "XY", [0., 0.], [0.04, 0.03], false);
+    let right = shape(
+        &mut store,
+        RIGHT_PART,
+        SECOND,
+        "XY",
+        [0.03, 0.01],
+        [0.05, 0.04],
+        false,
+    );
+    let original = store.registry().unwrap();
+    for (operation, selector, reversed, area) in [
+        ("planar_union", "union", false, 0.0016),
+        ("planar_intersection", "intersection", false, 0.0002),
+        ("planar_difference", "difference", false, 0.001),
+        ("planar_difference", "difference", true, 0.0004),
+    ] {
+        plan(operation, reversed);
+        let report = run(FIRST, &left, SECOND, &right, 0);
+        assert_eq!(
+            report["operation_id"],
+            format!("living.brep.boolean.planar.{selector}")
+        );
+        assert_eq!(
+            report["operands"][0]["operation"],
+            if reversed { SECOND } else { FIRST }
+        );
+        assert_eq!(
+            report["operands"][0]["geometry_sha256"],
+            if reversed {
+                right.as_str()
+            } else {
+                left.as_str()
+            }
+        );
+        assert_eq!(report["request_sha256"], report["result"]["request_sha256"]);
+        expect_volume(&report, area * 0.005);
+        assert_eq!(report, run(FIRST, &left, SECOND, &right, 0));
+    }
+    assert_eq!(store.registry().unwrap(), original);
+
+    plan("planar_union", false);
+    let island = shape(
+        &mut store,
+        ISLAND_PART,
+        ISLAND,
+        "XY",
+        [0.2, 0.2],
+        [0.24, 0.23],
+        false,
+    );
+    let rejected = run(FIRST, &left, ISLAND, &island, 3);
+    assert_eq!(rejected["code"], "UnsupportedM7Operation");
+    assert_eq!(
+        rejected["details"]["provider_code"],
+        "UnsupportedResultTopology"
+    );
+    assert!(rejected["details"]["native"].is_null());
+
+    let oblique = shape(
+        &mut store,
+        OBLIQUE_PART,
+        OBLIQUE,
+        "XZ",
+        [0.03, 0.01],
+        [0.05, 0.04],
+        false,
+    );
+    assert_eq!(
+        run(FIRST, &left, OBLIQUE, &oblique, 3)["code"],
+        "UnsupportedM7Operands"
+    );
+    fixture.apply_part(
+        &mut store,
+        RIGHT_PART,
+        DocumentAction::Extrude(json!({
+            "op":"update_extrude_length","feature_id":FEATURE,"length_m":"0.01"
+        })),
+    );
+    let tall = publish(RIGHT_PART, TALL);
+    assert_eq!(
+        run(FIRST, &left, TALL, &tall, 3)["code"],
+        "UnsupportedM7Operands"
+    );
+    assert_eq!(
+        run(FIRST, &tall, SECOND, &right, 3)["code"],
+        "StaleTopologyRef"
+    );
+
+    plan("planar_intersection", true);
+    let disk = shape(
+        &mut store,
+        DISK_PART,
+        DISK,
+        "XY",
+        [0.02, 0.015],
+        [0.005, 0.],
+        true,
+    );
+    let mixed = run(FIRST, &left, DISK, &disk, 0);
+    expect_volume(&mixed, PI * 0.005 * 0.005 * 0.005);
 }

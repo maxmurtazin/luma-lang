@@ -101,3 +101,14 @@ pub fn prepare_brep_tasks(
         .map_err(PreparationError::Execution)?;
     session.finish().map_err(PreparationError::Parameters)
 }
+
+/// Plan one M7 operation against two captured native publications.
+pub fn prepare_planar_boolean(
+    bundle: &host::SourceBundle,
+    expression_budget: usize,
+) -> Result<luma_cad_engine::PlanarPlan, PreparationError> {
+    let session = luma_cad_engine::PlanarHost::new().map_err(PreparationError::Parameters)?;
+    host::run_with_host(bundle, host::Mode::Command, &session, expression_budget)
+        .map_err(PreparationError::Execution)?;
+    session.finish().map_err(PreparationError::Parameters)
+}

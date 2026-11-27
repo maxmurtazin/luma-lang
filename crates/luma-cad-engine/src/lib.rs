@@ -6,6 +6,7 @@ mod expression;
 mod geometry;
 mod ownership;
 mod parameters;
+mod planar;
 mod recipe;
 mod sketch;
 
@@ -25,5 +26,6 @@ pub use ownership::{
     ReconciledRegion, Reconciliation,
 };
 pub use parameters::{Declaration, Kind, ParamValue, Parameter, ParameterSnapshot};
+pub use planar::{Operand as PlanarOperand, PlanarHost, PlanarOperation, PlanarPlan};
 pub use recipe::{ParameterHost, ParameterPlan};
 pub use sketch::{ProfileExtrusion, SketchHost, SketchPlan};

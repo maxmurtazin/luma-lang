@@ -200,30 +200,7 @@ pub(crate) fn run_tasks(
     context: &mut KernelContext,
 ) -> Result<Value> {
     use luma::cad_engine::{BrepTask, EngineeringQuery};
-    use std::{fs::File, io::Read};
-
-    let mut bytes = Vec::new();
-    File::open(source_bundle)
-        .and_then(|file| file.take(256 * 1024 + 1).read_to_end(&mut bytes))
-        .map_err(|problem| Failure("SourceInputError", json!(problem.to_string())))?;
-    if bytes.len() > 256 * 1024 {
-        return Err(Failure(
-            "ResourceLimit",
-            json!("Luma bundle exceeds 256 KiB"),
-        ));
-    }
-    let bundle: luma::host::WireSourceBundle =
-        serde_json::from_slice(&bytes).map_err(crate::encoding_error)?;
-    let bundle = bundle.admit().map_err(|problem| {
-        Failure(
-            "InvalidSourceBundle",
-            json!(problem
-                .diagnostics
-                .iter()
-                .map(|(file, diagnostic)| luma::host::diagnostic_json(file, diagnostic))
-                .collect::<Vec<_>>()),
-        )
-    })?;
+    let bundle = read_luma_bundle(source_bundle)?;
     let tasks = luma::cad::prepare_brep_tasks(&bundle, 100_000)
         .map_err(|problem| Failure("BrepTaskPlanRejected", json!(format!("{problem:?}"))))?;
     let mut reports = Vec::with_capacity(tasks.len());
@@ -259,4 +236,32 @@ pub(crate) fn run_tasks(
         "geometry_sha256":hex(&model.blob_digest()),
         "results":reports
     }))
+}
+
+#[cfg(feature = "luma-tasks")]
+pub(crate) fn read_luma_bundle(path: &str) -> Result<luma::host::SourceBundle> {
+    use std::{fs::File, io::Read};
+
+    let mut bytes = Vec::new();
+    File::open(path)
+        .and_then(|file| file.take(256 * 1024 + 1).read_to_end(&mut bytes))
+        .map_err(|problem| Failure("SourceInputError", json!(problem.to_string())))?;
+    if bytes.len() > 256 * 1024 {
+        return Err(Failure(
+            "ResourceLimit",
+            json!("Luma bundle exceeds 256 KiB"),
+        ));
+    }
+    let bundle: luma::host::WireSourceBundle =
+        serde_json::from_slice(&bytes).map_err(crate::encoding_error)?;
+    bundle.admit().map_err(|problem| {
+        Failure(
+            "InvalidSourceBundle",
+            json!(problem
+                .diagnostics
+                .iter()
+                .map(|(file, diagnostic)| luma::host::diagnostic_json(file, diagnostic))
+                .collect::<Vec<_>>()),
+        )
+    })
 }

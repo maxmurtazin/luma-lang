@@ -1,6 +1,8 @@
 //! Owner-only bridge for derived artifacts from an accepted Core Part.
 mod artifact;
 mod drawing;
+#[cfg(feature = "luma-tasks")]
+mod m7;
 mod profile;
 
 use brep_core::{
@@ -61,6 +63,15 @@ fn execute(args: &[String]) -> Result<Value> {
             let (published, model) = load_brep(&project, derived, operation, &mut context)?;
             check_topology_digest(&model, digest)?;
             artifact::run_tasks(&published, &model, bundle, &mut context)
+        }
+        #[cfg(feature = "luma-tasks")]
+        ("luma-m7", [provider, left, left_digest, right, right_digest, bundle]) => {
+            let mut context = kernel_context();
+            let (_, a) = load_brep(&project, derived, left, &mut context)?;
+            check_topology_digest(&a, left_digest)?;
+            let (_, b) = load_brep(&project, derived, right, &mut context)?;
+            check_topology_digest(&b, right_digest)?;
+            m7::run(provider, bundle, [(left, &a), (right, &b)], &mut context)
         }
         ("sheet-publish", args) => drawing::run(&mut project, args),
         ("source", [document, feature]) => {
@@ -245,5 +256,5 @@ fn id(value: &str) -> Result<EntityId> {
 }
 
 fn usage() -> Failure {
-    Failure("Usage", json!("luma-cad-brep DB PROJECT DERIVED source PART FEATURE | sketch-profile PART FEATURE | publish PART FEATURE REVISION DIGEST OPERATION_UUID | latest PART FEATURE | measure OPERATION_UUID | view OPERATION_UUID | distance OPERATION_UUID GEOMETRY_SHA solid|face:N X Y Z | section OPERATION_UUID GEOMETRY_SHA FRAME_JSON | luma-tasks OPERATION_UUID GEOMETRY_SHA BUNDLE | sheet-publish PART LIR2D INPUT SHEET review|manufacturing OUTPUT [--font FONT]"))
+    Failure("Usage", json!("luma-cad-brep DB PROJECT DERIVED source PART FEATURE | sketch-profile PART FEATURE | publish PART FEATURE REVISION DIGEST OPERATION_UUID | latest PART FEATURE | measure OPERATION_UUID | view OPERATION_UUID | distance OPERATION_UUID GEOMETRY_SHA solid|face:N X Y Z | section OPERATION_UUID GEOMETRY_SHA FRAME_JSON | luma-tasks OPERATION_UUID GEOMETRY_SHA BUNDLE | luma-m7 M7_PROVIDER LEFT_OP LEFT_SHA RIGHT_OP RIGHT_SHA BUNDLE | sheet-publish PART LIR2D INPUT SHEET review|manufacturing OUTPUT [--font FONT]"))
 }
