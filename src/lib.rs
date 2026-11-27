@@ -1,5 +1,6 @@
 //! Syntax frontend. Spans are half-open UTF-8 byte offsets in one source file.
 pub mod cad;
+pub mod living_ir;
 pub use luma_cad_engine as cad_engine;
 pub mod host;
 pub use luma_host_api as host_api;
