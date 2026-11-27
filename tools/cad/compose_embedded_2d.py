@@ -103,7 +103,7 @@ def compose_cli(cli, enabled):
     else:
         arms = """        ("2d-register" | "2d-apply" | "2d-inspect" | "2d-solve-report" | "2d-luma"
           | "2d-propose-branch" | "2d-accept-branch" | "2d-length-source"
-          | "2d-recipe-preview" | "2d-recipe-apply" | "2d-recipe-info", _) =>
+          | "2d-recipe-preview" | "2d-command-preview" | "2d-recipe-apply" | "2d-recipe-info", _) =>
             Err(error("UnsupportedEmbedded2d", "Core host was built without the registered 2D adapter")),
 """
     return replace(cli, match, match + arms)

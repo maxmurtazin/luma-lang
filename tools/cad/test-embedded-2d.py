@@ -61,11 +61,15 @@ def source(path, complete, height=4, *, width=40, recipe=False, feature=80):
             'draft.transform(edge, units.mm(5), units.mm(2))',
             f'body = brep.extrude("{entity(feature)}", profile, units.mm({height}))',
         ])
-    files = {"draw-part.luma": "\n".join(program) + "\n"}
+    return bundle(path, "draw-part.luma", program)
+
+
+def bundle(path, entry, program):
+    files = {entry: "\n".join(program) + "\n"}
     digest = lcan.digest("luma.cad.source", lcan.encode({
-        "bundle_version": {"$u64": "1"}, "entry": "draw-part.luma", "files": files,
+        "bundle_version": {"$u64": "1"}, "entry": entry, "files": files,
     }))
-    return write(path, {"bundle_version": 1, "entry": "draw-part.luma", "files": files, "source_digest": digest})
+    return write(path, {"bundle_version": 1, "entry": entry, "files": files, "source_digest": digest})
 
 
 def qualify_branch(call, fixtures, out, project, part, final, owner_key):
@@ -228,9 +232,9 @@ def qualify_recipe(call, evaluate, out, seed, setup, parent):
     call("2d-register", part, created["project_revision"], operation(141), initial)
     state = call("2d-inspect", part)
 
-    def preview(bundle, name, status=0):
+    def preview(bundle, name, status=0, action="2d-recipe-preview"):
         token = out / f"{name}.token"
-        report = call("2d-recipe-preview", part, state["project_revision"], state["embedded_revision"],
+        report = call(action, part, state["project_revision"], state["embedded_revision"],
                       bundle, token, status=status)
         assert token.exists() == (status == 0)
         return report, token
@@ -299,7 +303,74 @@ def qualify_recipe(call, evaluate, out, seed, setup, parent):
     if evaluate:
         publish(148, 0.05, 0.006)
         assert evaluate("measure", entity(143)) == prior
-    print("PASS Sketch recipe preview, CAS, identity-preserving rebuild and receipt replay")
+    state = call("2d-inspect", part)
+
+    def command(name, edits, target=part):
+        return bundle(out / f"{name}.json", "dimensions.luma", [
+            "use project", "use param", "use units",
+            f'p = project.part("{target}")', 'width = project.parameter(p, "width")',
+            *edits,
+        ])
+
+    invalid = command("invalid-edit", ["param.set(width, units.mm(10))"])
+    assert preview(invalid, "invalid-edit", 3, "2d-command-preview")[0]["code"] == "Embedded2dRejected"
+    foreign = command("foreign-edit", ["param.set(width, units.mm(60))"], target=parent)
+    assert preview(foreign, "foreign-edit", 3, "2d-command-preview")[0]["code"] == "Embedded2dCommandRejected"
+    assert call("2d-inspect", part) == state
+
+    edit = command("edit-width", [
+        "param.set(width, units.mm(60))",
+        'height = project.parameter(p, "height")',
+        "param.set(height, units.mm(7))",
+    ])
+    report, edit_token = preview(edit, "edit-width", action="2d-command-preview")
+    assert report["candidate_changed"] and report["source_digest"] == json.loads(newer.read_bytes())["source_digest"]
+    assert report["command_digest"] == json.loads(edit.read_bytes())["source_digest"]
+    assert report["parameters"]["width"]["override_value"] == {"Length": 0.06}
+    call("2d-recipe-apply", edit_token, operation(149), status=73, crash="command-before-receipt")
+    assert call("2d-inspect", part) == state
+    assert call("2d-recipe-info", part)["parameters"]["width"]["override_value"] is None
+    receipt = call("2d-recipe-apply", edit_token, operation(149))
+    assert call("2d-recipe-apply", edit_token, operation(149)) == receipt
+    assert call("2d-recipe-apply", edit_token, operation(150), status=4)["code"] == "Conflict"
+    state = call("2d-inspect", part)
+    info = call("2d-recipe-info", part)
+    assert info["bundle"] == json.loads(newer.read_bytes())
+    assert info["parameters"]["width"]["override_value"] == {"Length": 0.06}
+    assert info["parameters"]["height"]["override_value"] == {"Length": 0.007}
+    assert not preview(edit, "repeated-edit", action="2d-command-preview")[0]["candidate_changed"]
+    if evaluate:
+        publish(151, 0.06, 0.007)
+
+    new_defaults = source(out / "new-defaults.json", complete=True, recipe=True, width=55, height=8)
+    wire = json.loads(new_defaults.read_bytes())
+    entry = wire["entry"]
+    lines = wire["files"][entry].replace("param.value(width)", "units.mm(55)").splitlines()
+    removed_width = bundle(out / "removed-width.json", entry,
+                           [line for line in lines if not line.startswith("width = ")])
+    assert preview(removed_width, "removed-width", 3)[0]["code"] == "Embedded2dPlanRejected"
+    assert call("2d-inspect", part) == state
+    _, defaults_token = preview(new_defaults, "new-defaults")
+    call("2d-recipe-apply", defaults_token, operation(152))
+    state = call("2d-inspect", part)
+    info = call("2d-recipe-info", part)
+    assert info["parameters"]["width"]["declaration"]["default"] == {"Length": 0.055}
+    assert info["parameters"]["width"]["override_value"] == {"Length": 0.06}
+    assert info["parameters"]["height"]["override_value"] == {"Length": 0.007}
+    assert call("2d-solve-report", part, entity(10))["value"]["points_m"][entity(22)] == [0.06, 0.03]
+    reset = command("reset-dimensions", [
+        "param.reset(width)",
+        'height = project.parameter(p, "height")',
+        "param.reset(height)",
+    ])
+    _, reset_token = preview(reset, "reset-dimensions", action="2d-command-preview")
+    call("2d-recipe-apply", reset_token, operation(153))
+    info = call("2d-recipe-info", part)
+    assert info["parameters"]["width"]["override_value"] is None
+    assert info["parameters"]["height"]["override_value"] is None
+    if evaluate:
+        publish(154, 0.055, 0.008)
+    print("PASS Sketch recipe rebuild, command overrides and reset, Core CAS and receipt replay")
 
 
 def qualify(cli, fixtures, lir2d, out, disabled, brep):

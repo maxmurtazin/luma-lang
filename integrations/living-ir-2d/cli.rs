@@ -1,10 +1,13 @@
         #[cfg(feature = "luma-embedded-2d")]
-        ("2d-recipe-preview", [part, project_revision, embedded_revision, source, destination]) => {
+        ("2d-recipe-preview" | "2d-command-preview", [part, project_revision, embedded_revision, source, destination]) => {
             let expected = project_revision.parse().map_err(|_| usage())?;
             let embedded = embedded_revision.parse().map_err(|_| usage())?;
-            let (preview, token) = store.preview_sketch_recipe(
-                part, expected, embedded, &read(source, 256 * 1024)?, &context,
-            )?;
+            let bytes = read(source, 256 * 1024)?;
+            let (preview, token) = if action == "2d-command-preview" {
+                store.preview_sketch_command(part, expected, embedded, &bytes, &context)?
+            } else {
+                store.preview_sketch_recipe(part, expected, embedded, &bytes, &context)?
+            };
             write_token(destination, &token)?;
             Ok(preview)
         }
