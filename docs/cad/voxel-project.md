@@ -192,3 +192,51 @@ cargo test --manifest-path "$BUILD/core/Cargo.toml" -p living-cad-viewer \
 отражает область приёмки. В этой конфигурации семплирование авторской
 геометрии поддерживает сферу. Авторские lattice, adaptive-сетки и
 точный экспорт B-rep требуют отдельно квалифицированных профилей.
+
+## Авторская решётка Gyroid
+
+Профиль `cad3-gyroid-regular-v1` принимает активную решётку Gyroid из
+зафиксированной ревизии Part с прямым основанием CreatePlate. Core
+передаёт каноническое поле с параметрами решётки, подложкой, оболочкой
+и исключениями. Living Voxel семплирует его на регулярной узловой
+сетке F64 с лимитом 32 768 отсчётов. LVX хранит `ImplicitScalar` с
+нулевым изоуровнем и статусом `NotDistance`. Изменение Part после
+приёма команды сохраняет исходную ревизию задачи.
+
+```sh
+"$PROJECT_CLI" "$DB" "$PROJECT" lattice-source "$PART"
+"$PROJECT_CLI" "$DB" "$PROJECT" lattice-submit-luma "$CLI" "$REQUEST" \
+  "$PART" "$PART_REV" "$DEFINITION_HASH" grid.json examples/cad/voxel-sample-command.json
+"$PROJECT_CLI" "$DB" "$PROJECT" lattice-work "$CLI"
+"$PROJECT_CLI" "$DB" "$PROJECT" lattice-export "$JOB" gyroid.lvx
+"$CLI" inspect gyroid.lvx "$LVX_SHA" 17 12 8
+"$CLI" slice-xy gyroid.lvx "$LVX_SHA" 8
+```
+
+`lattice-source` возвращает номер ревизии и хеш определения для
+постановки задачи. `lattice-receipt`, `lattice-status`,
+`lattice-cancel` и `lattice-retry` работают с квитанцией и попытками
+задачи Gyroid. Идентификатор `JOB` берётся из ответа подачи, `LVX_SHA`
+из `report.digests.blob_digest` ответа экспорта.
+
+Команда `surface` принимает явное окно узлов в виде JSON с
+`index_min` и исключительной границей `index_max`. Поставщик
+отклоняет ячейки за пределами профиля MonotoneTrilinear. Контрольный
+Gyroid даёт такую диагностику для полного объёма и строит открытую
+сетку в окне `[4,6,5]…[6,12,11]`. Living View показывает это окно с
+привязкой к исходному LVX. Верхние границы позиционной ошибки и
+расстояния Хаусдорфа имеют статус `Unavailable`.
+
+```sh
+printf '%s\n' '{"index_min":[4,6,5],"index_max":[6,12,11]}' > region.json
+"$CLI" surface gyroid.lvx "$LVX_SHA" region.json | jq -e .result > gyroid-surface.json
+"$VIEW_BUILD/target/debug/pack-voxel" < gyroid-surface.json > gyroid-scene.json
+VIEW_FIT=1 VIEW_EXPECTED_REVISION=1 WEBGPU_SOFTWARE=1 \
+  node tools/cad/test-view-scene.mjs "$VIEW" gyroid-scene.json
+```
+
+Для воспроизведения контрольной геометрии задайте
+`LUMA_VOXEL_GYROID_EVIDENCE` как путь к пустому каталогу и запустите
+проектный тест `publishes_pinned_gyroid_with_implicit_metric_and_historical_provenance`.
+Он создаёт Part и сохраняет LVX, его SHA‑256 и вход для `pack-voxel`.
+[Манифест Gyroid](../../conformance/cad/cad3-gyroid-regular-v1.json)

@@ -25,7 +25,7 @@ Runtime availability is scoped to the verified integration profiles.
 | `units.mm` | CAD-1 | absent | absent | planned | unavailable | not_run / not_run | The Luma host binding is planned. |
 | `view.from_body` | CAD-1 | implemented | implemented | planned | unavailable | not_run / not_run | The Luma host binding is planned. |
 | `view.show` | CAD-1 | implemented | implemented | planned | unavailable | not_run / not_run | The Luma host binding is planned. |
-| `voxel.sample` | CAD-3 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Command sampling of a pinned Core sphere on a regular node grid with LVX publication. |
+| `voxel.sample` | CAD-3 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Command sampling of a pinned Core sphere or Gyroid lattice on a regular node grid with LVX publication. |
 
 ## Signatures
 

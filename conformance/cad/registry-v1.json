@@ -1341,11 +1341,11 @@
       "required_grants": [
         "job-submit"
       ],
-      "limits": "Accepted Core editor sphere, F64 Node grid, at most 32768 samples per historical job",
+      "limits": "Accepted Core sphere or Gyroid on a direct CreatePlate base, F64 Node grid, at most 32768 samples per historical job",
       "numerical_profile": "si-f64-v1",
       "reason": {
-        "ru": "Командное семплирование принятой сферы Core на регулярной узловой сетке с публикацией LVX.",
-        "en": "Command sampling of a pinned Core sphere on a regular node grid with LVX publication."
+        "ru": "Командное семплирование принятой сферы или решётки Gyroid из Core на регулярной узловой сетке с публикацией LVX.",
+        "en": "Command sampling of a pinned Core sphere or Gyroid lattice on a regular node grid with LVX publication."
       }
     }
   }

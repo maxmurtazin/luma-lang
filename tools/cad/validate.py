@@ -396,6 +396,27 @@ def verify_cad3_profile(lock, registry):
             and project["scope"] and project["independent_profiles"],
             "Missing CAD-3 project acceptance evidence")
 
+    path = FIXTURES / "cad3-gyroid-regular-v1.json"
+    gyroid = read(path)
+    require(path.relative_to(ROOT).as_posix() in lock["contract"]["inputs"]
+            and gyroid["profile"] == path.stem and gyroid["schema_version"] == 1
+            and gyroid["builds_on"] == project["profile"]
+            and gyroid["provider_commits"] == project["provider_commits"]
+            and set(gyroid["targets"]) == set(lock["targets"]),
+            "Invalid CAD-3 Gyroid profile")
+    require(gyroid["field"]["layout"] == "Node"
+            and gyroid["field"]["max_samples"] == 32_768
+            and gyroid["field"]["semantic_kind"] == "ImplicitScalar"
+            and gyroid["field"]["metric_status"] == "NotDistance"
+            and gyroid["surface"] == {
+                "profile": "MonotoneTrilinear", "window_required_for_fixture": True,
+                "position_error_bound": "Unavailable", "hausdorff_bound": "Unavailable"
+            }, "Invalid CAD-3 Gyroid field or surface guarantees")
+    require({"lattice-submit-luma", "lattice-work", "lattice-export", "slice-xy", "surface"}
+            <= set(gyroid["entry_points"]) and gyroid["evidence"]
+            and all((ROOT / file).is_file() for file in gyroid["evidence"]),
+            "Missing CAD-3 Gyroid evidence")
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)

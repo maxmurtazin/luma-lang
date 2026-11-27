@@ -67,8 +67,11 @@ fn execute(args: &[String]) -> Result<Value> {
             args,
         ),
         ("source", [part]) => encode(store.voxel_sphere_source(part, None).map_err(core_error)?),
+        ("lattice-source", [part]) => {
+            encode(store.voxel_lattice_source(part, None).map_err(core_error)?)
+        }
         (
-            "submit" | "submit-luma",
+            "submit" | "submit-luma" | "lattice-submit" | "lattice-submit-luma",
             [provider, request, part, revision, hash, grid, bundle @ ..],
         ) => {
             let revision = revision.parse().map_err(|_| usage())?;
@@ -80,25 +83,36 @@ fn execute(args: &[String]) -> Result<Value> {
                 );
             }
             let command_digest = match (action.as_str(), bundle) {
-                ("submit", []) => None,
-                ("submit-luma", [bundle]) => Some(check_bundle(Path::new(bundle))?),
+                ("submit" | "lattice-submit", []) => None,
+                ("submit-luma" | "lattice-submit-luma", [bundle]) => {
+                    Some(check_bundle(Path::new(bundle))?)
+                }
                 _ => return Err(usage()),
             };
-            let fingerprint = provider_fingerprint(Path::new(provider))?;
-            encode(
-                store
-                    .admit_voxel_job(
-                        request,
-                        &fingerprint,
-                        part,
-                        (revision, hash),
-                        grid,
-                        command_digest,
-                    )
-                    .map_err(core_error)?,
-            )
+            let lattice = action.starts_with("lattice-");
+            let fingerprint = provider_fingerprint(Path::new(provider), lattice)?;
+            let admitted = if lattice {
+                store.admit_lattice_voxel_job(
+                    request,
+                    &fingerprint,
+                    part,
+                    (revision, hash),
+                    grid,
+                    command_digest,
+                )
+            } else {
+                store.admit_voxel_job(
+                    request,
+                    &fingerprint,
+                    part,
+                    (revision, hash),
+                    grid,
+                    command_digest,
+                )
+            };
+            encode(admitted.map_err(core_error)?)
         }
-        ("work", [provider]) => {
+        ("work" | "lattice-work", [provider]) => {
             let directory = tempfile::tempdir().map_err(io_error)?;
             let executable =
                 directory
@@ -112,52 +126,68 @@ fn execute(args: &[String]) -> Result<Value> {
                 std::fs::metadata(provider).map_err(io_error)?.permissions(),
             )
             .map_err(io_error)?;
-            let fingerprint = build_fingerprint(&bytes);
-            encode(store.run_voxel_job(&fingerprint, |input, current| {
-                let compute = || -> Result<Value> {
-                    let request = directory.path().join("request.json");
-                    let artifact = directory.path().join("sphere.lvx");
-                    let source = encode(&input.source)?;
-                    let wire = json!({
-                        "schema_version":1,"center_m":input.source.center_m,"radius_m":input.source.radius_m,
-                        "grid":input.grid,"part_source":source,
-                    });
-                    std::fs::write(&request, wire.to_string()).map_err(io_error)?;
-                    let stdout = tempfile::tempfile().map_err(io_error)?;
-                    let child = Command::new(&executable).arg("sample-pinned").arg(request).arg(&artifact)
-                        .env_remove("LUMA_CAD_PROJECT_KEY").env_remove("LUMA_CAD_TEST_CRASH_AT")
-                        .stdin(Stdio::null()).stderr(Stdio::null()).stdout(stdout.try_clone().map_err(io_error)?)
-                        .spawn().map_err(io_error)?;
-                    let response = read_response(child, stdout, current)?;
-                    let mut report = response["result"].clone();
-                    let bytes = read(&artifact, MAX_LVX)?;
-                    if report["part_source"] != source || !verify_lvx(&report, &bytes) {
-                        return Err(corrupt());
-                    }
-                    report["command_digest"] = json!(input.command_digest);
-                    Ok(json!({"report":report,"lvx_hex":hex::encode(bytes)}))
-                };
-                compute().map_err(|_| "VoxelProviderRejected")
-            }).map_err(core_error)?)
+            let lattice = action == "lattice-work";
+            let fingerprint = build_fingerprint(&bytes, lattice);
+            let worker = SamplingWorker {
+                executable: &executable,
+                directory: directory.path(),
+            };
+            let result = if lattice {
+                store.run_lattice_voxel_job(&fingerprint, |input, current| {
+                    worker.sample(
+                        "lattice-pinned",
+                        json!({"schema_version":1,"grid":input.grid,"part_source":input.source}),
+                        input.command_digest.as_deref(),
+                        current,
+                    )
+                })
+            } else {
+                store.run_voxel_job(&fingerprint, |input, current| {
+                    worker.sample(
+                        "sample-pinned",
+                        json!({"schema_version":1,"grid":input.grid,"part_source":input.source,
+                        "center_m":input.source.center_m,"radius_m":input.source.radius_m}),
+                        input.command_digest.as_deref(),
+                        current,
+                    )
+                })
+            };
+            encode(result.map_err(core_error)?)
         }
         ("receipt", [request]) => encode(store.voxel_job_receipt(request).map_err(core_error)?),
-        ("status", [id]) => encode(store.voxel_job_status(number(id)?).map_err(core_error)?),
-        ("cancel", [id]) => {
+        ("lattice-receipt", [request]) => encode(
+            store
+                .lattice_voxel_job_receipt(request)
+                .map_err(core_error)?,
+        ),
+        ("status" | "lattice-status" | "cancel" | "lattice-cancel", [id]) => {
             let id = number(id)?;
-            store.voxel_job_status(id).map_err(core_error)?;
-            encode(store.cancel_luma_job(id).map_err(core_error)?)
+            let status = if action.starts_with("lattice-") {
+                store.lattice_voxel_job_status(id)
+            } else {
+                store.voxel_job_status(id)
+            }
+            .map_err(core_error)?;
+            if action.ends_with("cancel") {
+                return encode(store.cancel_luma_job(id).map_err(core_error)?);
+            }
+            encode(status)
         }
-        ("retry", [id, attempt]) => {
+        ("retry" | "lattice-retry", [id, attempt]) => {
             let id = number(id)?;
-            store.voxel_job_status(id).map_err(core_error)?;
+            if action == "lattice-retry" {
+                store.lattice_voxel_job_status(id).map_err(core_error)?;
+            } else {
+                store.voxel_job_status(id).map_err(core_error)?;
+            }
             encode(
                 store
                     .retry_luma_job(id, number(attempt)?)
                     .map_err(core_error)?,
             )
         }
-        ("export", [id, output]) => {
-            let (bytes, provenance) = historical_lvx(&store, id)?;
+        ("export" | "lattice-export", [id, output]) => {
+            let (bytes, provenance) = historical_lvx(&store, id, action == "lattice-export")?;
             publish(Path::new(output), &bytes)?;
             Ok(provenance)
         }
@@ -175,7 +205,7 @@ fn execute(args: &[String]) -> Result<Value> {
             let provider_path = Path::new(provider);
             let directory = tempfile::tempdir().map_err(io_error)?;
             let operand = |name: &str, id: &str| -> Result<(Value, Value)> {
-                let (bytes, provenance) = historical_lvx(&store, id)?;
+                let (bytes, provenance) = historical_lvx(&store, id, false)?;
                 let digest: [u8; 32] = Sha256::digest(&bytes).into();
                 let field = provider::decode(provider_path, &bytes, &digest)?;
                 let path = directory.path().join(name);
@@ -198,8 +228,56 @@ fn execute(args: &[String]) -> Result<Value> {
     }
 }
 
-fn historical_lvx(store: &ProjectStore, id: &str) -> Result<(Vec<u8>, Value)> {
-    let result = store.voxel_job_result(number(id)?).map_err(core_error)?;
+struct SamplingWorker<'a> {
+    executable: &'a Path,
+    directory: &'a Path,
+}
+
+impl SamplingWorker<'_> {
+    fn sample(
+        &self,
+        command: &str,
+        wire: Value,
+        command_digest: Option<&str>,
+        current: &dyn Fn() -> bool,
+    ) -> std::result::Result<Value, &'static str> {
+        let compute = || -> Result<Value> {
+            let request = self.directory.join("request.json");
+            let artifact = self.directory.join("sample.lvx");
+            std::fs::write(&request, wire.to_string()).map_err(io_error)?;
+            let stdout = tempfile::tempfile().map_err(io_error)?;
+            let child = Command::new(self.executable)
+                .arg(command)
+                .arg(request)
+                .arg(&artifact)
+                .env_remove("LUMA_CAD_PROJECT_KEY")
+                .env_remove("LUMA_CAD_TEST_CRASH_AT")
+                .stdin(Stdio::null())
+                .stderr(Stdio::null())
+                .stdout(stdout.try_clone().map_err(io_error)?)
+                .spawn()
+                .map_err(io_error)?;
+            let response = read_response(child, stdout, current)?;
+            let mut report = response["result"].clone();
+            let bytes = read(&artifact, MAX_LVX)?;
+            if report["part_source"] != wire["part_source"] || !verify_lvx(&report, &bytes) {
+                return Err(corrupt());
+            }
+            report["command_digest"] = json!(command_digest);
+            Ok(json!({"report":report,"lvx_hex":hex::encode(bytes)}))
+        };
+        compute().map_err(|_| "VoxelProviderRejected")
+    }
+}
+
+fn historical_lvx(store: &ProjectStore, id: &str, lattice: bool) -> Result<(Vec<u8>, Value)> {
+    let id = number(id)?;
+    let result = if lattice {
+        store.lattice_voxel_job_result(id)
+    } else {
+        store.voxel_job_result(id)
+    }
+    .map_err(core_error)?;
     let artifact = &result["result"];
     let report = &artifact["report"];
     let bytes =
@@ -268,13 +346,19 @@ fn read_response(
     serde_json::from_slice(&limit(stdout, 64 * 1024)?).map_err(|_| corrupt())
 }
 
-fn provider_fingerprint(path: &Path) -> Result<String> {
-    Ok(build_fingerprint(&read(path, MAX_PROVIDER)?))
+fn provider_fingerprint(path: &Path, lattice: bool) -> Result<String> {
+    Ok(build_fingerprint(&read(path, MAX_PROVIDER)?, lattice))
 }
 
-fn build_fingerprint(bytes: &[u8]) -> String {
+fn build_fingerprint(bytes: &[u8], lattice: bool) -> String {
     let mut hash = Sha256::new();
-    hash.update(b"luma.voxel.provider/1\0");
+    // The queue claims by provider fingerprint. Keep the two sealed payload types isolated.
+    let domain: &[u8] = if lattice {
+        b"luma.voxel.gyroid.provider/1\0"
+    } else {
+        b"luma.voxel.provider/1\0"
+    };
+    hash.update(domain);
     hash.update(bytes);
     format!("sha256:{:x}", hash.finalize())
 }
@@ -320,5 +404,5 @@ fn corrupt() -> Value {
 }
 
 fn usage() -> Value {
-    json!({"code":"Usage","message":"DB PROJECT source PART | submit PROVIDER REQUEST PART REVISION HASH GRID.json | submit-luma PROVIDER REQUEST PART REVISION HASH GRID.json BUNDLE.json | work PROVIDER | receipt REQUEST | status JOB | cancel JOB | retry JOB ATTEMPT | export JOB FILE.lvx | field-csg VOXEL_CLI OP LEFT_JOB RIGHT_JOB implicit | mask PUBLICATIONS VOXEL_CLI COMMAND ... | paged PUBLICATIONS VOXEL_CLI DIRECTORY COMMAND ..."})
+    json!({"code":"Usage","message":"DB PROJECT source PART | lattice-source PART | lattice-submit[-luma] PROVIDER REQUEST PART REVISION HASH GRID.json [BUNDLE.json] | lattice-work PROVIDER | lattice-receipt REQUEST | lattice-status JOB | lattice-cancel JOB | lattice-retry JOB ATTEMPT | lattice-export JOB FILE.lvx | submit PROVIDER REQUEST PART REVISION HASH GRID.json | submit-luma PROVIDER REQUEST PART REVISION HASH GRID.json BUNDLE.json | work PROVIDER | receipt REQUEST | status JOB | cancel JOB | retry JOB ATTEMPT | export JOB FILE.lvx | field-csg VOXEL_CLI OP LEFT_JOB RIGHT_JOB implicit | mask PUBLICATIONS VOXEL_CLI COMMAND ... | paged PUBLICATIONS VOXEL_CLI DIRECTORY COMMAND ..."})
 }
