@@ -72,7 +72,7 @@ def bundle(path, entry, program):
     return write(path, {"bundle_version": 1, "entry": entry, "files": files, "source_digest": digest})
 
 
-def qualify_branch(call, fixtures, out, project, part, final, owner_key):
+def qualify_branch(call, fixtures, out, project, part, final, owner_key, expected_sources=()):
     setup = json.loads((fixtures / "sketch/create-length-segment.json").read_bytes())
     setup.update(project_id=project, document_id=part, expected_revision=final["embedded_revision"])
     first = write(out / "branch-setup.json", setup)
@@ -103,6 +103,7 @@ def qualify_branch(call, fixtures, out, project, part, final, owner_key):
     assert "sketch.branch_confirmation_required" in refused["details"]["provider_diagnostic"]
     token = out / "branch-token.json"
     preview = call("2d-propose-branch", part, revision, proposal, token)
+    assert sorted((source["guard"], source["revision"]) for source in preview["source_read_set"]) == sorted(expected_sources)
     branch_id = preview["branch"]["branch_token"]
     assert preview["sketch_solutions"][sketch]["points_m"][end][0] == -0.1
     assert call("2d-inspect", part) == stable
@@ -222,6 +223,38 @@ def qualify_core_length(call, out, setup, part):
     solved = call("2d-solve-report", part, sketch)["value"]
     assert math.isclose(abs(solved["points_m"][end][0]), 0.12)
     print("PASS authenticated Core Length, stale proposal and explicit repin")
+    return producer, blank, pin, updated
+
+
+def qualify_dependencies(call, fixtures, out, project, parent, seed, key, sources):
+    producer, blank, old, new = sources
+    part = entity(170)
+    revision = call("2d-inspect", parent)["project_revision"]
+    created = call("create-part", part, revision, operation(170))
+    common = {"provider_id": "luma.core.part/1", "project_id": project, "document_id": producer}
+    pinned = {**common, "object_id": old["source"]["entity_id"], "revision_policy": "pinned_revision",
+              "pinned_revision": old["source"]["native_revision"], "content_digest": old["source"]["definition_hash"]}
+    follow = {**common, "object_id": str(blank), "revision_policy": "follow_latest"}
+    seed = {**seed, "document_id": part, "dependencies": [pinned, follow]}
+    forged = write(out / "forged-dependency.json", {
+        **seed, "dependencies": [{**pinned, "content_digest": "00" * 32}],
+    })
+    failure = call("2d-register", part, created["project_revision"], operation(171), forged, status=4)
+    assert failure["code"] == "Conflict"
+    unsupported = write(out / "unsupported-dependency.json", {
+        **seed, "dependencies": [{**pinned, "provider_id": "external"}],
+    })
+    failure = call("2d-register", part, created["project_revision"], operation(172), unsupported, status=3)
+    assert failure["code"] == "UnsupportedEmbedded2d"
+    path = write(out / "dependency-seed.json", seed)
+    state = call("2d-register", part, created["project_revision"], operation(173), path)
+    out = out / "dependency-branch"
+    out.mkdir()
+    qualify_branch(call, fixtures, out, project, part, state, key, expected_sources=[
+        ("expect_pinned_version", old["source"]["native_revision"]),
+        ("expect_head", new["source"]["native_revision"]),
+    ])
+    print("PASS project-local Core entity dependency guards")
 
 
 def qualify_recipe(call, evaluate, out, seed, setup, parent):
@@ -239,16 +272,19 @@ def qualify_recipe(call, evaluate, out, seed, setup, parent):
         assert token.exists() == (status == 0)
         return report, token
 
-    def publish(number, width, height):
+    def publish(number, width, height, extra=False):
         pin = evaluate("source", part, entity(80))
         assert pin["sketch"] == entity(10)
         wire = evaluate("sketch-profile", part, entity(80))
-        assert {curve["id"] for curve in wire["sketch"]["curves"]} == {entity(40 + i) for i in range(5)}
+        expected = {entity(40 + i) for i in range(5)}
+        if extra:
+            expected.add(entity(164))
+        assert {curve["id"] for curve in wire["sketch"]["curves"]} == expected
         op = entity(number)
         result = evaluate("publish", part, entity(80), pin["revision"], pin["definition_hash"], op)
         assert result["state"] == "published"
         measure = evaluate("measure", op)
-        volume = (width * 0.03 - math.pi * 0.004 ** 2) * height
+        volume = (width * 0.03 - math.pi * (0.004 ** 2 + (0.003 ** 2 if extra else 0))) * height
         assert measure["volume_m3"][0] <= volume <= measure["volume_m3"][1]
         return measure
 
@@ -370,6 +406,43 @@ def qualify_recipe(call, evaluate, out, seed, setup, parent):
     assert info["parameters"]["height"]["override_value"] is None
     if evaluate:
         publish(154, 0.055, 0.008)
+    state = call("2d-inspect", part)
+    wire = json.loads(new_defaults.read_bytes())
+    entry = wire["entry"]
+    lines = wire["files"][entry].splitlines()
+    profile_index = lines.index("profile = sketch.profile(s)")
+    lines[profile_index:profile_index] = [
+        f'c2 = sketch.point(s, "{entity(160)}", units.mm(40), units.mm(15))',
+        f'r2 = sketch.point(s, "{entity(161)}", units.mm(43), units.mm(15))',
+        f'sketch.fix(s, "{entity(162)}", c2, units.mm(40), units.mm(15))',
+        f'sketch.fix(s, "{entity(163)}", r2, units.mm(43), units.mm(15))',
+        f'sketch.circle(s, "{entity(164)}", c2, r2)',
+    ]
+    expanded = bundle(out / "two-holes.json", entry, lines)
+    _, token = preview(expanded, "two-holes")
+    call("2d-recipe-apply", token, operation(155))
+    state = call("2d-inspect", part)
+    assert preview(new_defaults, "remove-hole", 3)[0]["code"] == "SketchRecipeTopologyChanged"
+    if evaluate:
+        expanded_artifact = publish(156, 0.055, 0.008, extra=True)
+
+    detach = ("2d-recipe-detach", part, state["project_revision"], operation(157))
+    call(*detach, status=73, crash="command-before-receipt")
+    assert not call("2d-recipe-info", part)["detached"]
+    detached = call(*detach)
+    assert detached == call(*detach)
+    assert int(detached["project_revision"]) == int(state["project_revision"]) + 1
+    assert detached["document_revision"] == state["part_revision"]
+    assert detached["embedded_revision"] == state["embedded_revision"]
+    state = call("2d-inspect", part)
+    assert call("2d-recipe-info", part)["detached"]
+    assert preview(expanded, "detached-recipe", 3)[0]["code"] == "DetachedRecipe"
+    raw = write(out / "after-detach.json", {**setup, "document_id": part, "expected_revision": state["embedded_revision"]})
+    call("2d-apply", part, state["project_revision"], operation(158), raw)
+    assert call("2d-recipe-info", part)["detached"]
+    if evaluate:
+        assert evaluate("measure", entity(156)) == expanded_artifact
+    print("PASS additive recipe topology, frozen B-rep and detach replay")
     print("PASS Sketch recipe rebuild, command overrides and reset, Core CAS and receipt replay")
 
 
@@ -491,8 +564,10 @@ def qualify(cli, fixtures, lir2d, out, disabled, brep):
         expected = (0.04 * 0.03 - math.pi * 0.004 ** 2) * 0.004
         assert volume[0] <= expected <= volume[1], volume
     setup = qualify_branch(call, fixtures, out, project, part, final, key)
-    qualify_core_length(call, out, setup, part)
-    qualify_recipe(call, evaluate, out, json.loads(seed.read_bytes()), setup, part)
+    sources = qualify_core_length(call, out, setup, part)
+    initial_seed = json.loads(seed.read_bytes())
+    qualify_dependencies(call, fixtures, out, project, part, initial_seed, key, sources)
+    qualify_recipe(call, evaluate, out, initial_seed, setup, part)
     print("PASS embedded 2D Core CAS, crash rollback, concurrent conflict, replay and typed Luma extrusion")
 
 

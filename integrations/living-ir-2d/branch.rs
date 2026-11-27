@@ -1,8 +1,6 @@
 //! Prepared branch files are authority tokens, never persisted previews.
 use super::super::{luma_cad::PROFILE, part_head, seal, unseal, ProjectStore, Receipt};
-use super::{
-    check_scope, provider_error, reject_recipe_edit, unregistered, CoreReads, Embedded2dV1,
-};
+use super::{check_scope, provider_error, reject_recipe_edit, unregistered, CoreReads};
 use crate::{checkpoint::unix_seconds, error, Error};
 use hir_transaction::{PreparationContext, PreparationStage};
 use hir_types::Revision;
@@ -58,10 +56,12 @@ impl ProjectStore {
         let mut reads = CoreReads::new(&registry, context);
         reads.snapshot(&base, false)?;
         reads.commands(&batch.commands)?;
+        let sources = reads.dependencies(&base)?;
         let (preview, proposal) = Runtime::propose_embedded_branch(
             batch.project_id.clone(),
             base,
             &batch,
+            sources,
             &context.cancellation_flag(),
         )
         .map_err(|problem| provider_error(&problem))?;
@@ -87,6 +87,7 @@ impl ProjectStore {
                 "project_revision":expected_project.to_string(),"embedded_revision":preview.base_revision,
                 "document_id":part, "branch":branch, "candidate_digest":token.candidate_digest,
                 "sketch_solutions":preview.sketch_solutions,"core_read_set":read_set,"expires_at":preview.expires_at.unix_timestamp().to_string(),
+                "source_read_set":preview.source_read_set,
             }),
             seal(&self.key, TOKEN_DOMAIN, &token)?,
         ))
@@ -129,17 +130,19 @@ impl ProjectStore {
                 let mut reads = CoreReads::new(registry, context);
                 reads.snapshot(&base, false)?;
                 reads.commands(&token.batch.commands)?;
+                let sources = reads.dependencies(&base)?;
                 let snapshot = Runtime::accept_embedded_branch(
                     token.batch.project_id.clone(),
                     base,
                     &token.batch,
                     &token.candidate_digest,
                     &token.branch_token,
+                    sources,
                     &context.cancellation_flag(),
                 )
                 .map_err(|problem| provider_error(&problem))?;
                 reads.snapshot(&snapshot, true)?;
-                let accepted = Embedded2dV1::successor(part, state.revision, &snapshot)?;
+                let accepted = state.successor(part, &snapshot)?;
                 context
                     .check(revision, PreparationStage::Sealing)
                     .map_err(living_hir_facade::overlay_error)?;

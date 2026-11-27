@@ -22,6 +22,15 @@
         #[cfg(feature = "luma-embedded-2d")]
         ("2d-recipe-info", [part]) => store.sketch_recipe_info(part),
         #[cfg(feature = "luma-embedded-2d")]
+        ("2d-recipe-detach", [part, project_revision, operation]) => {
+            let expected = project_revision.parse().map_err(|_| usage())?;
+            validate_operation(operation)?;
+            let receipt = store.detach_sketch_recipe(part, expected, operation, &context)?;
+            let mut result = receipt_json(&receipt);
+            result["embedded_revision"] = json!(store.embedded_2d_revision_at(&receipt)?.to_string());
+            Ok(result)
+        }
+        #[cfg(feature = "luma-embedded-2d")]
         ("2d-propose-branch", [part, project_revision, batch, destination]) => {
             let expected = project_revision.parse().map_err(|_| usage())?;
             let (preview, token) = store.propose_2d_branch(part, expected, &read(batch, 256 * 1024)?, &context)?;

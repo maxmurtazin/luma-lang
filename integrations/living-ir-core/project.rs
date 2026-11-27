@@ -400,7 +400,7 @@ impl ProjectStore {
             return Err(error("DetachedRecipe", "The Part's recipe was detached"));
         }
         let old: Value = serde_json::from_str(native_bytes).map_err(json_error)?;
-        if previous.is_none() && !empty_part_graph(&old) {
+        if previous.is_none() && (!empty_part_graph(&old) || crate::sketch::read(&old)?.is_some()) {
             return Err(error(
                 "ManagedEntityConflict",
                 "A new Luma recipe requires an empty Part",

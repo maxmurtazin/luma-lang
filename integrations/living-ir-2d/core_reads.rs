@@ -1,15 +1,17 @@
 //! Resolve Core-backed literal Lengths from the registry used by ProjectStore CAS.
 use super::super::{part_head, restore_part, ProjectStore, Registry};
 use crate::{error, uuid, Error};
-use hir_transaction::{DefinitionStore, PreparationContext};
+use hir_transaction::{DefinitionStore, PreparationContext, Snapshot};
 use hir_types::Revision;
-use lir2d_runtime::Command;
+use lir2d_runtime::{Command, FixtureSources, SourceKey};
 use lir2d_types::{
-    CoreParameterPin, Digest, DocumentSnapshot, Literal, ObjectId, ParameterDef, ValueSource,
+    CoreParameterPin, Digest, DocumentSnapshot, Literal, ObjectId, ParameterDef, RevisionPolicy,
+    ValueSource,
 };
 use living_symbolic::{Dimension, Node};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 const MAX_PINS: usize = 64;
 
@@ -26,6 +28,62 @@ impl<'a> CoreReads<'a> {
             context,
             stores: BTreeMap::new(),
         }
+    }
+
+    pub(super) fn dependencies(
+        &mut self,
+        source: &DocumentSnapshot,
+    ) -> Result<FixtureSources, Error> {
+        let mut captured = FixtureSources::default();
+        if source.dependency_count() > MAX_PINS {
+            return Err(error(
+                "ResourceLimit",
+                "Embedded 2D has too many Core entity dependencies",
+            ));
+        }
+        for dependency in source.dependencies() {
+            if dependency.provider_id != "luma.core.part/1"
+                || dependency.project_id.as_str() != self.registry.project_id
+                || dependency.document_id == source.document_id
+            {
+                return Err(error(
+                    "UnsupportedEmbedded2d",
+                    "Expected a dependency on another Part in the same Core project",
+                ));
+            }
+            let revision = match dependency.revision_policy {
+                RevisionPolicy::FollowLatest => None,
+                RevisionPolicy::PinnedRevision => {
+                    dependency.pinned_revision.map(|rev| Revision(rev.0))
+                }
+            };
+            let (snapshot, hash) =
+                self.native_snapshot(dependency.document_id.as_str(), revision)?;
+            if revision.is_some() && dependency.content_digest.as_ref() != Some(&hash) {
+                return Err(error(
+                    "Conflict",
+                    "Core entity dependency definition hash differs",
+                ));
+            }
+            if !snapshot
+                .definition
+                .entities
+                .contains_key(&uuid(dependency.object_id.as_str())?)
+            {
+                return Err(error(
+                    "MissingCoreSource",
+                    "Pinned Part does not contain the required entity",
+                ));
+            }
+            captured
+                .retain(
+                    SourceKey::from(dependency),
+                    lir2d_types::Revision(snapshot.revision.0),
+                    hash,
+                )
+                .map_err(|problem| super::provider_error(&problem))?;
+        }
+        Ok(captured)
     }
 
     pub(super) fn snapshot(
@@ -123,30 +181,11 @@ impl<'a> CoreReads<'a> {
         entity: &str,
         revision: Option<Revision>,
     ) -> Result<(CoreParameterPin, f64), Error> {
-        let (head, part, _) = part_head(self.registry, document)?;
-        let revision = revision.unwrap_or(Revision(head.native_revision));
-        let definition_hash = part
-            .snapshots
-            .iter()
-            .find(|record| record.0 == revision.0)
-            .map(|record| record.1.clone())
-            .ok_or_else(|| error("Conflict", "Core Length revision is no longer retained"))?;
-        let store = match self.stores.entry(document.to_owned()) {
-            std::collections::btree_map::Entry::Occupied(found) => found.into_mut(),
-            std::collections::btree_map::Entry::Vacant(missing) => {
-                let (_, store) = restore_part(part, document, head.native_revision, self.context)?;
-                missing.insert(store)
-            }
-        };
-        let snapshot = store
-            .revision(revision)
-            .map_err(living_hir_facade::commit_error)?
-            .ok_or_else(|| error("Conflict", "Core Length revision is no longer retained"))?;
-        let entity_id = uuid(entity)?;
+        let (snapshot, definition_hash) = self.native_snapshot(document, revision)?;
         let node = snapshot
             .definition
             .entities
-            .get(&entity_id)
+            .get(&uuid(entity)?)
             .ok_or_else(|| {
                 error(
                     "MissingCoreLength",
@@ -164,11 +203,40 @@ impl<'a> CoreReads<'a> {
                 document_id: ObjectId::try_from(document.to_owned())
                     .map_err(|_| Error::internal())?,
                 entity_id: ObjectId::try_from(entity.to_owned()).map_err(|_| Error::internal())?,
-                native_revision: lir2d_types::Revision(revision.0),
-                definition_hash: Digest::try_from(definition_hash)
-                    .map_err(|_| Error::internal())?,
+                native_revision: lir2d_types::Revision(snapshot.revision.0),
+                definition_hash,
             },
             length.si,
+        ))
+    }
+
+    fn native_snapshot(
+        &mut self,
+        document: &str,
+        revision: Option<Revision>,
+    ) -> Result<(Arc<Snapshot>, Digest), Error> {
+        let (head, part, _) = part_head(self.registry, document)?;
+        let revision = revision.unwrap_or(Revision(head.native_revision));
+        let definition_hash = part
+            .snapshots
+            .iter()
+            .find(|record| record.0 == revision.0)
+            .map(|record| record.1.clone())
+            .ok_or_else(|| error("Conflict", "Core Part revision is no longer retained"))?;
+        let store = match self.stores.entry(document.to_owned()) {
+            std::collections::btree_map::Entry::Occupied(found) => found.into_mut(),
+            std::collections::btree_map::Entry::Vacant(missing) => {
+                let (_, store) = restore_part(part, document, head.native_revision, self.context)?;
+                missing.insert(store)
+            }
+        };
+        let snapshot = store
+            .revision(revision)
+            .map_err(living_hir_facade::commit_error)?
+            .ok_or_else(|| error("Conflict", "Core Part revision is no longer retained"))?;
+        Ok((
+            snapshot,
+            Digest::try_from(definition_hash).map_err(|_| Error::internal())?,
         ))
     }
 }
