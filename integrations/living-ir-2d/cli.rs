@@ -1,4 +1,19 @@
         #[cfg(feature = "luma-embedded-2d")]
+        ("2d-propose-branch", [part, project_revision, batch, destination]) => {
+            let expected = project_revision.parse().map_err(|_| usage())?;
+            let (preview, token) = store.propose_2d_branch(part, expected, &read(batch, 256 * 1024)?, &context)?;
+            write_token(destination, &token)?;
+            Ok(preview)
+        }
+        #[cfg(feature = "luma-embedded-2d")]
+        ("2d-accept-branch", [token, operation]) => {
+            validate_operation(operation)?;
+            let receipt = store.accept_2d_branch(&read(token, 2 * 1024 * 1024)?, operation, &context)?;
+            let mut result = receipt_json(&receipt);
+            result["embedded_revision"] = json!(store.embedded_2d_revision_at(&receipt)?.to_string());
+            Ok(result)
+        }
+        #[cfg(feature = "luma-embedded-2d")]
         ("2d-register" | "2d-apply", [part, project_revision, operation, file]) => {
             let expected = project_revision.parse().map_err(|_| usage())?;
             validate_operation(operation)?;

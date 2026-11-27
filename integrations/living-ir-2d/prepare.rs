@@ -8,6 +8,92 @@ impl Runtime {
         request: &CommandEnvelope,
         cancellation: &AtomicBool,
     ) -> Result<DocumentSnapshot, ErrorEnvelope> {
+        if request.commands.iter().any(|item| {
+            matches!(
+                item,
+                Command::ProposeSketchBranch { .. } | Command::AcceptSketchBranch { .. }
+            )
+        }) {
+            return Err(branch_confirmation_required());
+        }
+        let runtime = Self::embedded_evaluator(project, snapshot, request)?;
+        let preview = runtime.embedded_preview(request, cancellation)?;
+        runtime.preview_snapshot(&preview.preview_id)
+    }
+
+    pub fn propose_embedded_branch(
+        project: ObjectId,
+        snapshot: DocumentSnapshot,
+        request: &CommandEnvelope,
+        cancellation: &AtomicBool,
+    ) -> Result<(Preview, DocumentSnapshot), ErrorEnvelope> {
+        let runtime = Self::embedded_evaluator(project, snapshot, request)?;
+        let preview = runtime.branch_preview(request, cancellation)?;
+        let candidate = runtime.preview_snapshot(&preview.preview_id)?;
+        Ok((preview, candidate))
+    }
+
+    /// The caller must authenticate the archived proposal and enforce its original expiry.
+    pub fn accept_embedded_branch(
+        project: ObjectId,
+        snapshot: DocumentSnapshot,
+        proposal: &CommandEnvelope,
+        candidate_digest: &Digest,
+        branch_token: &ObjectId,
+        cancellation: &AtomicBool,
+    ) -> Result<DocumentSnapshot, ErrorEnvelope> {
+        let runtime = Self::embedded_evaluator(project, snapshot, proposal)?;
+        let preview = runtime.branch_preview(proposal, cancellation)?;
+        if &preview.candidate_digest != candidate_digest {
+            return Err(ErrorEnvelope::new(
+                ErrorCode::SourceRevisionConflict,
+                "sketch.branch_proposal_changed",
+                "preview",
+                "recomputed branch does not match the accepted proposal",
+            ));
+        }
+        let branch = preview
+            .branch_proposal
+            .ok_or_else(branch_confirmation_required)?;
+        // Rebind only this already revalidated proposal in the transient runtime.
+        // Normal acceptance still runs the provider's final validation.
+        {
+            let mut state = runtime.lock()?;
+            let saved = state
+                .previews
+                .get_mut(&proposal.idempotency_key)
+                .ok_or_else(branch_confirmation_required)?;
+            let saved_branch = saved
+                .preview
+                .branch_proposal
+                .as_mut()
+                .ok_or_else(branch_confirmation_required)?;
+            saved_branch.branch_token = branch_token.clone();
+            saved.preview.preview_id = branch_token.clone();
+        }
+        let mut acceptance = proposal.clone();
+        acceptance.idempotency_key = if proposal.idempotency_key == "luma-branch-accept" {
+            "luma-accept-branch"
+        } else {
+            "luma-branch-accept"
+        }
+        .into();
+        acceptance.commands = vec![Command::AcceptSketchBranch {
+            sketch_id: branch.sketch_id,
+            branch_token: branch_token.clone(),
+        }];
+        let accepted = runtime.embedded_preview(&acceptance, cancellation)?;
+        if accepted.acceptance_status != "ready" || accepted.branch_proposal.is_some() {
+            return Err(branch_confirmation_required());
+        }
+        runtime.preview_snapshot(&accepted.preview_id)
+    }
+
+    fn embedded_evaluator(
+        project: ObjectId,
+        snapshot: DocumentSnapshot,
+        request: &CommandEnvelope,
+    ) -> Result<Self, ErrorEnvelope> {
         if snapshot.is_standalone() || snapshot.dependency_count() != 0 {
             return Err(unsupported(
                 "expected Core-owned state without external dependencies",
@@ -22,19 +108,45 @@ impl Runtime {
                 "embedded history commands require Core history",
             ));
         }
-        let runtime = Self::new_local(project, snapshot, FixtureSources::default())?;
-        let preview = runtime.preview_with_cancel(request, cancellation)?;
-        if preview.branch_proposal.is_some() {
-            return Err(ErrorEnvelope::new(
-                ErrorCode::BranchChangeRequired,
-                "sketch.branch_confirmation_required",
-                "preview",
-                "the accepted branch must be retained by the Core host",
-            ));
-        }
+        Self::new_local(project, snapshot, FixtureSources::default())
+    }
+
+    fn embedded_preview(
+        &self,
+        request: &CommandEnvelope,
+        cancellation: &AtomicBool,
+    ) -> Result<Preview, ErrorEnvelope> {
+        let preview = self.preview_with_cancel(request, cancellation)?;
         if !preview.source_read_set.is_empty() {
             return Err(unsupported("embedded source reads require a Core read set"));
         }
-        runtime.preview_snapshot(&preview.preview_id)
+        Ok(preview)
     }
+
+    fn branch_preview(
+        &self,
+        request: &CommandEnvelope,
+        cancellation: &AtomicBool,
+    ) -> Result<Preview, ErrorEnvelope> {
+        if !matches!(
+            request.commands.last(),
+            Some(Command::ProposeSketchBranch { .. })
+        ) {
+            return Err(branch_confirmation_required());
+        }
+        let preview = self.embedded_preview(request, cancellation)?;
+        if preview.branch_proposal.is_none() || preview.acceptance_status != "branch_proposal" {
+            return Err(branch_confirmation_required());
+        }
+        Ok(preview)
+    }
+}
+
+fn branch_confirmation_required() -> ErrorEnvelope {
+    ErrorEnvelope::new(
+        ErrorCode::BranchChangeRequired,
+        "sketch.branch_confirmation_required",
+        "preview",
+        "embedded branch changes require the Core proposal and acceptance commands",
+    )
 }

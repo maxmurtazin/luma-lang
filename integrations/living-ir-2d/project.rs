@@ -1,3 +1,5 @@
+mod branch;
+
 use super::{part_head, restore_part, PartHead, ProjectStore, Receipt, Registry};
 use crate::{error, json_error, Error};
 use hir_evaluation_api::Cancellation;
@@ -40,6 +42,20 @@ impl Embedded2dV1 {
             revision: snapshot.revision.0,
             snapshot_json,
         })
+    }
+
+    fn successor(
+        document: &str,
+        previous: u64,
+        snapshot: &DocumentSnapshot,
+    ) -> Result<Self, Error> {
+        if previous.checked_add(1) != Some(snapshot.revision.0) {
+            return Err(error(
+                "InternalError",
+                "Unexpected provider candidate revision",
+            ));
+        }
+        Self::new(document, snapshot)
     }
 
     fn snapshot(&self, document: &str) -> Result<DocumentSnapshot, Error> {
@@ -128,13 +144,7 @@ impl ProjectStore {
                     &context.cancellation_flag(),
                 )
                 .map_err(|problem| provider_error(&problem))?;
-                if batch.expected_revision.0.checked_add(1) != Some(candidate.revision.0) {
-                    return Err(error(
-                        "InternalError",
-                        "Unexpected provider candidate revision",
-                    ));
-                }
-                let staged = Embedded2dV1::new(part, &candidate)?;
+                let staged = Embedded2dV1::successor(part, record.revision, &candidate)?;
                 context
                     .check(native_revision, PreparationStage::Sealing)
                     .map_err(living_hir_facade::overlay_error)?;

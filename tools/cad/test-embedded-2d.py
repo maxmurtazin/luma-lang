@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise the embedded solver and the Core registry's atomic commit and replay."""
 import argparse
+import hmac
 import json
 import math
 import os
@@ -52,6 +53,80 @@ def source(path, complete, height=4):
         "bundle_version": {"$u64": "1"}, "entry": "draw-part.luma", "files": files,
     }))
     return write(path, {"bundle_version": 1, "entry": "draw-part.luma", "files": files, "source_digest": digest})
+
+
+def qualify_branch(call, fixtures, out, project, part, final, owner_key):
+    setup = json.loads((fixtures / "sketch/create-length-segment.json").read_bytes())
+    setup.update(project_id=project, document_id=part, expected_revision=final["embedded_revision"])
+    first = write(out / "branch-setup.json", setup)
+    initialized = call("2d-apply", part, final["project_revision"], operation(120), first)
+    revision = initialized["project_revision"]
+    embedded = initialized["embedded_revision"]
+    sketch = setup["commands"][1]["sketch_id"]
+    start = setup["commands"][3]["segment"]["start_id"]
+    end = setup["commands"][3]["segment"]["end_id"]
+    stable = call("2d-inspect", part)
+    solution = lambda: call("2d-solve-report", part, sketch)["value"]
+    assert solution()["points_m"][end][0] == 0.1
+
+    reverse = {"type": "constraint.create", "sketch_id": sketch, "constraint": {
+        "id": entity(121), "enabled": True, "relation": {"kind": "signed_distance_x",
+        "from": start, "to": end, "target": {"kind": "literal", "value_m": -0.1}},
+    }}
+    batch = {**setup, "expected_revision": embedded, "commands": [reverse],
+             "idempotency_key": "luma-branch-accept"}
+    bare = write(out / "branch-bare.json", batch)
+    refused = call("2d-apply", part, revision, operation(122), bare, status=3)
+    assert "sketch.branch_change_required" in refused["details"]["provider_diagnostic"]
+    batch["commands"].append({"type": "sketch.propose_branch", "sketch_id": sketch,
+                              "seed": [{"id": start, "initial_m": [0.0, 0.0]},
+                                       {"id": end, "initial_m": [-0.1, 0.0]}]})
+    proposal = write(out / "branch-batch.json", batch)
+    refused = call("2d-apply", part, revision, operation(123), proposal, status=3)
+    assert "sketch.branch_confirmation_required" in refused["details"]["provider_diagnostic"]
+    token = out / "branch-token.json"
+    preview = call("2d-propose-branch", part, revision, proposal, token)
+    branch_id = preview["branch"]["branch_token"]
+    assert preview["sketch_solutions"][sketch]["points_m"][end][0] == -0.1
+    assert call("2d-inspect", part) == stable
+    assert solution()["branch_token"] is None
+    alternate = out / "branch-alternate.json"
+    call("2d-propose-branch", part, revision, proposal, alternate)
+    original = token.read_bytes()
+    call("2d-propose-branch", part, revision, proposal, token, status=2)
+    assert token.read_bytes() == original
+
+    # Exercise the expiry and recomputation checks with tokens for this fixture's test key.
+    envelope = json.loads(original)
+    payload = json.loads(envelope["payload"])
+    domain = b"living-ir.multi-part-checkpoint/2\0luma-embedded-2d-branch/1\0"
+    for name, change, code, status in (
+        ("tampered", {"expires_at": 0}, "CheckpointAuthentication", 5),
+        ("expired", {"expires_at": 0}, "PreparedExpired", 3),
+        ("different-candidate", {"candidate_digest": "00" * 32}, "Embedded2dRejected", 3),
+        ("different-build", {"integration": "unexpected"}, "PreparedContextChanged", 3),
+    ):
+        altered = json.dumps({**payload, **change}, separators=(",", ":"))
+        auth = envelope["authentication"] if name == "tampered" else list(
+            hmac.digest(bytes.fromhex(owner_key), domain + altered.encode(), "sha256")
+        )
+        wrong = write(out / f"branch-{name}.json", {"payload": altered, "authentication": auth})
+        assert call("2d-accept-branch", wrong, operation(124), status=status)["code"] == code
+        assert call("2d-inspect", part) == stable
+
+    accept = ("2d-accept-branch", token, operation(125))
+    call(*accept, status=73, crash="command-before-receipt")
+    assert call("2d-inspect", part) == stable
+    accepted = call(*accept)
+    assert int(accepted["project_revision"]) == int(revision) + 1
+    assert int(accepted["embedded_revision"]) == int(embedded) + 1
+    assert accepted["document_revision"] == initialized["document_revision"]
+    assert solution()["branch_token"] == branch_id
+    assert solution()["points_m"][end][0] == -0.1
+    assert call(*accept) == accepted
+    assert call("2d-accept-branch", alternate, operation(126), status=4)["code"] == "Conflict"
+    assert call("2d-accept-branch", alternate, operation(125), status=4)["code"] == "RequestIdReuse"
+    print("PASS explicit solver branch proposal, authenticated acceptance, stale rejection and rollback")
 
 
 def qualify(cli, fixtures, lir2d, out, disabled, brep):
@@ -170,6 +245,7 @@ def qualify(cli, fixtures, lir2d, out, disabled, brep):
         volume = evaluate("measure", entity(99))["volume_m3"]
         expected = (0.04 * 0.03 - math.pi * 0.004 ** 2) * 0.004
         assert volume[0] <= expected <= volume[1], volume
+    qualify_branch(call, fixtures, out, project, part, final, key)
     print("PASS embedded 2D Core CAS, crash rollback, concurrent conflict, replay and typed Luma extrusion")
 
 

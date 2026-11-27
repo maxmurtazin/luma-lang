@@ -19,7 +19,7 @@ use std::{
 };
 
 const TOKEN_DOMAIN: &[u8] = b"luma-prepared-recipe/1";
-const PROFILE: &str = "__LUMA_CAD_INTEGRATION_PIN__";
+pub(super) const PROFILE: &str = "__LUMA_CAD_INTEGRATION_PIN__";
 const TTL_SECONDS: u64 = 300;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
