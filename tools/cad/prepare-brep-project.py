@@ -88,10 +88,12 @@ tempfile = "=3.27.0"
     if args.ir2d:
         text = text.replace('features = ["trusted-checkpoint"]', 'features = ["luma-cad", "luma-embedded-2d"]')
     manifest.write_text(text, encoding="utf-8")
-    for filename in ("cli.rs", "cli_test.rs", "profile.rs", "artifact.rs", "drawing.rs"):
+    for filename in ("cli.rs", "cli_test.rs", "profile.rs", "artifact.rs", "drawing.rs", "m7.rs"):
         shutil.copyfile(integration / filename, bridge / filename)
     shutil.copyfile(directory / "living-brep-core/integrations/living-ir-preview/Cargo.lock",
                     bridge / "Cargo.lock")
+    shutil.copyfile(directory / "living-brep-core/experimental/rectangle-union/planar-boolean-v1.json",
+                    bridge / "m7-contract.json")
     (bridge / "brep-pin.txt").write_text(lock["brep"]["commit"] + "\n", encoding="utf-8")
     print(bridge / "Cargo.toml")
 

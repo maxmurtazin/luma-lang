@@ -111,7 +111,49 @@ python -B "$M7/fixtures/qualify_m7.py" \
 
 Корпус прошёл 2200 сценариев, восемь проверок отклонения и повторную
 загрузку выбранных нативных тел. M7 квалифицирован отдельно от
-проектной публикации K1. Luma host binding для M7 остаётся запланированным.
+проектной публикации K1.
+
+### Запуск M7 из Luma
+
+Соберите `luma-cad-brep` с `--features luma-tasks`.
+Команда `luma-m7` берёт две существующие публикации проекта.
+Для каждой передаются UUID операции и хеш геометрии из `view`.
+`M7_PROVIDER` указывает на доверенный `brep-planar-boolean`, собранный
+из закреплённого в CAD lock B-rep. CLI сверяет контракт, целевую
+платформу и SHA-256 исполняемого файла. Ключ проекта остаётся у CLI.
+
+```sh
+luma-cad-brep "$DB" "$PROJECT" "$DERIVED" \
+  luma-m7 "$M7_PROVIDER" "$LEFT_OP" "$LEFT_SHA" "$RIGHT_OP" "$RIGHT_SHA" "$BUNDLE"
+```
+
+Командный bundle объявляет одну операцию. Для пересечения и
+разности используются соответственно `brep.planar_intersection` и
+`brep.planar_difference`. Разность вычитает второй аргумент из первого.
+
+```luma
+use brep
+left = brep.left_operand()
+right = brep.right_operand()
+result = brep.planar_union("result", left, right)
+```
+
+Операнды должны иметь одинаковую систему координат и знаковую высоту.
+Два диска и пара «диск + прямолинейный многоугольник без отверстий»
+передаются в соответствующие режимы M7. Для пары явных профилей
+допускаются отрезки и дуги. Цельная окружность в контуре отверстия
+отклоняется провайдером.
+
+CLI возвращает результат и нативные байты B-rep в JSON после проверки
+хеша запроса, повторной загрузки и валидации L3. В ответе остаются
+порядок операндов, их UUID и хеши геометрии, версия контракта и
+fingerprint сборки. Вычисление выдаёт отдельный артефакт. Core и база
+публикаций сохраняют прежнее состояние.
+
+```sh
+LUMA_CAD2_M7="$M7_PROVIDER" cargo test --locked --manifest-path "$BUILD/native/Cargo.toml" \
+  --features luma-tasks --test project evaluates_luma_m7_using_two_pinned_native_publications -- --ignored
+```
 
 ## Задачи B-rep из Luma
 
@@ -139,6 +181,6 @@ cad.query_task(body, brep.volume(), options)
 Профиль CAD-2 включает встроенный Core CAS, Luma-команды для Sketch
 и Draft, нативную экструзию из ProfileRef и отдельный исполнитель
 инженерных задач. Расширение на режим recipe, внешние зависимости
-2D, явное принятие новой ветви, долговечную очередь B-rep задач и
-Luma binding для отдельного профиля M7 ещё открыто. [Встроенный 2D](embedded-2d.md)
+2D, явное принятие новой ветви и долговечную очередь B-rep задач
+ещё открыто. [Встроенный 2D](embedded-2d.md)
 [Критерии CAD-2](../../spec/cad/Luma-CAD-Development-Specification-v1.0-RU.md#sec-32)
