@@ -391,8 +391,6 @@ impl ProjectStore {
             bindings,
             inputs,
         } = request;
-        #[cfg(feature = "luma-embedded-2d")]
-        super::luma_embedded_2d::reject_recipe_edit(registry, document)?;
         let (head, part, native_bytes) = part_head(registry, document)?;
         let revision = Revision(head.native_revision);
         ctx.check(revision, PreparationStage::Validation)
