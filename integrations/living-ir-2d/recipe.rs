@@ -9,7 +9,10 @@ use hir_transaction::{PreparationContext, PreparationStage};
 use hir_types::Revision;
 use lir2d_runtime::{Command, CommandEnvelope, Runtime, SketchConstraintPatch};
 use lir2d_types::{Finite, ObjectId, SketchRelation};
-use luma::host::{SourceBundle, WireSourceBundle};
+use luma::{
+    cad_engine::ParameterSnapshot,
+    host::{Mode, SourceBundle, WireSourceBundle},
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -26,6 +29,31 @@ pub(super) struct AcceptedRecipe {
     topology: String,
     profile_id: String,
     feature_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    parameters: Option<String>,
+}
+
+impl AcceptedRecipe {
+    fn parameters(&self) -> Result<ParameterSnapshot, Error> {
+        match &self.parameters {
+            Some(json) => {
+                let parameters = serde_json::from_str(json).map_err(json_error)?;
+                ParameterSnapshot::new(parameters).map_err(|problem| {
+                    error(
+                        "CheckpointCorrupt",
+                        &format!("Invalid Sketch parameters: {problem:?}"),
+                    )
+                })
+            }
+            // Earlier snapshots retained the source and could not carry overrides.
+            None => Ok(luma::cad::prepare_sketch_recipe(
+                &read_source(self.source.as_bytes())?,
+                100_000,
+            )
+            .map_err(plan_error)?
+            .parameters),
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize)]
@@ -36,9 +64,15 @@ struct Prepared {
     integration: String,
     expected_project: u64,
     expected_2d: u64,
+    #[serde(default = "recipe_mode")]
+    mode: Mode,
     source: String,
     candidate_digest: String,
     expires_at: i64,
+}
+
+fn recipe_mode() -> Mode {
+    Mode::Recipe
 }
 
 impl ProjectStore {
@@ -48,6 +82,43 @@ impl ProjectStore {
         expected_project: u64,
         expected_2d: u64,
         source: &[u8],
+        context: &PreparationContext,
+    ) -> Result<(Value, Vec<u8>), Error> {
+        self.preview_sketch_edit(
+            part,
+            expected_project,
+            expected_2d,
+            source,
+            Mode::Recipe,
+            context,
+        )
+    }
+
+    pub fn preview_sketch_command(
+        &self,
+        part: &str,
+        expected_project: u64,
+        expected_2d: u64,
+        source: &[u8],
+        context: &PreparationContext,
+    ) -> Result<(Value, Vec<u8>), Error> {
+        self.preview_sketch_edit(
+            part,
+            expected_project,
+            expected_2d,
+            source,
+            Mode::Command,
+            context,
+        )
+    }
+
+    fn preview_sketch_edit(
+        &self,
+        part: &str,
+        expected_project: u64,
+        expected_2d: u64,
+        source: &[u8],
+        mode: Mode,
         context: &PreparationContext,
     ) -> Result<(Value, Vec<u8>), Error> {
         let mut registry = self.registry()?;
@@ -60,30 +131,35 @@ impl ProjectStore {
             "bundle_version":1,"entry":bundle.entry,"files":bundle.files,"source_digest":source_digest,
         }))
         .map_err(json_error)?;
-        let (native, digest) = stage(&mut registry, part, expected_2d, &source, context)?;
+        let (native, digest) = stage(&mut registry, part, expected_2d, &source, mode, context)?;
         let token = Prepared {
             project: self.project_id.clone(),
             part: part.into(),
             integration: PROFILE.into(),
             expected_project,
             expected_2d,
+            mode,
             source,
             candidate_digest: digest,
             expires_at: unix_seconds()? + TTL_SECONDS,
         };
         let record = &registry.embedded_2d[part];
-        Ok((
-            json!({
+        let recipe = record.recipe.as_ref().ok_or_else(Error::internal)?;
+        let mut preview = json!({
                 "project_revision":expected_project.to_string(),
                 "candidate_part_revision":native.to_string(),
                 "candidate_embedded_revision":record.revision.to_string(),
                 "candidate_changed":expected_2d != record.revision,
-                "source_digest":source_digest,
+                "source_digest":recipe.source_digest,
                 "candidate_digest":token.candidate_digest,
                 "expires_at":token.expires_at.to_string(),
-            }),
-            seal(&self.key, DOMAIN, &token)?,
-        ))
+        });
+        if mode == Mode::Command {
+            preview["command_digest"] = json!(source_digest);
+            preview["parameters"] =
+                serde_json::to_value(recipe.parameters()?).map_err(json_error)?;
+        }
+        Ok((preview, seal(&self.key, DOMAIN, &token)?))
     }
 
     pub fn apply_sketch_recipe(
@@ -112,6 +188,7 @@ impl ProjectStore {
                     &token.part,
                     token.expected_2d,
                     &token.source,
+                    token.mode,
                     context,
                 )?;
                 if digest != token.candidate_digest {
@@ -139,7 +216,7 @@ impl ProjectStore {
             "part_revision":head.native_revision.to_string(),
             "embedded_revision":record.revision.to_string(),
             "profile_id":recipe.profile_id,"feature_id":recipe.feature_id,
-            "source_digest":recipe.source_digest,"bundle":bundle,
+            "source_digest":recipe.source_digest,"bundle":bundle,"parameters":recipe.parameters()?,
         }))
     }
 }
@@ -149,6 +226,7 @@ fn stage(
     part: &str,
     expected_2d: u64,
     source: &str,
+    mode: Mode,
     context: &PreparationContext,
 ) -> Result<(u64, String), Error> {
     let (head, _, native_bytes) = part_head(registry, part)?;
@@ -161,7 +239,6 @@ fn stage(
         .check(revision, PreparationStage::Validation)
         .map_err(living_hir_facade::overlay_error)?;
     let bundle = read_source(source.as_bytes())?;
-    let source_digest = bundle.source_digest();
     let base = record.snapshot(part)?;
     if base
         .parameters()
@@ -173,13 +250,34 @@ fn stage(
             "Sketch recipe requires 2D state without external parameter bindings",
         ));
     }
-    if record
-        .recipe
-        .as_ref()
-        .is_some_and(|recipe| recipe.source_digest == source_digest)
-    {
-        return state_digest(registry, part);
-    }
+    let prior = record.recipe.as_ref();
+    let (source, bundle, inherited) = match mode {
+        Mode::Recipe => {
+            if prior.is_some_and(|recipe| recipe.source_digest == bundle.source_digest()) {
+                return state_digest(registry, part);
+            }
+            let inherited = prior
+                .map(AcceptedRecipe::parameters)
+                .transpose()?
+                .unwrap_or_default();
+            (source, bundle, inherited)
+        }
+        Mode::Command => {
+            let prior =
+                prior.ok_or_else(|| error("MissingAcceptedSource", "Part has no Sketch recipe"))?;
+            let inherited = prior.parameters()?;
+            let edited = luma::cad::prepare_command(&bundle, part.into(), &inherited, 100_000)
+                .map_err(|problem| error("Embedded2dCommandRejected", &format!("{problem:?}")))?;
+            if edited == inherited {
+                return state_digest(registry, part);
+            }
+            (
+                prior.source.as_str(),
+                read_source(prior.source.as_bytes())?,
+                edited,
+            )
+        }
+    };
     if record.recipe.is_none()
         && !(base.sketches().is_empty()
             && base.workplanes().is_empty()
@@ -201,8 +299,9 @@ fn stage(
             "Sketch recipe requires an empty native Part",
         ));
     }
-    let plan = luma::cad::prepare_sketch_recipe(&bundle, 100_000)
-        .map_err(|problem| error("Embedded2dPlanRejected", &format!("{problem:?}")))?;
+    let source_digest = bundle.source_digest();
+    let plan = luma::cad::prepare_sketch_recipe_with_parameters(&bundle, inherited, 100_000)
+        .map_err(plan_error)?;
     let intent = plan.extrusion.ok_or_else(unsupported)?;
     let mut batch = CommandEnvelope::from_json(
         &serde_json::to_vec(&json!({
@@ -220,6 +319,7 @@ fn stage(
         topology,
         profile_id: intent.profile_id.clone(),
         feature_id: intent.feature_id.clone(),
+        parameters: Some(serde_json::to_string(&plan.parameters).map_err(json_error)?),
     };
     let rebuild = if let Some(prior) = &record.recipe {
         if prior.topology != recipe.topology
@@ -326,6 +426,10 @@ fn read_source(bytes: &[u8]) -> Result<SourceBundle, Error> {
         .map_err(|_| error("InvalidSourceBundle", "Expected a Luma source bundle"))?
         .admit()
         .map_err(|problem| error("InvalidSourceBundle", &format!("{:?}", problem.diagnostics)))
+}
+
+fn plan_error(problem: luma::cad::PreparationError) -> Error {
+    error("Embedded2dPlanRejected", &format!("{problem:?}"))
 }
 
 fn unsupported() -> Error {

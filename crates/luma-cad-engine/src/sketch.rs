@@ -1,5 +1,5 @@
 //! Lowering for the registered Living IR 2D document.
-use crate::{Kind, ParamValue, ParameterHost};
+use crate::{Kind, ParamValue, ParameterHost, ParameterSnapshot};
 use luma_cad_contract::SEALED_MODULES;
 use luma_host_api::{
     CallSite, Descriptor, Dispatch, Effect, Error, Mode, Parameter, Registry, ResultType, Type,
@@ -7,7 +7,10 @@ use luma_host_api::{
 };
 use serde::Serialize;
 use serde_json::{json, Value as Json};
-use std::{collections::BTreeSet, sync::Mutex};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Mutex,
+};
 
 const SKETCH: &str = "SketchRef";
 const POINT: &str = "SketchPointRef";
@@ -38,6 +41,7 @@ pub struct ProfileExtrusion {
 pub struct SketchPlan {
     pub commands: Vec<Json>,
     pub extrusion: Option<ProfileExtrusion>,
+    pub parameters: ParameterSnapshot,
 }
 
 fn opaque(name: &str) -> Type {
@@ -50,7 +54,15 @@ impl SketchHost {
     }
 
     pub fn for_mode(mode: Mode) -> Result<Self, Error> {
-        let handles = ParameterHost::new(Default::default())?;
+        Self::with_parameters(mode, ParameterSnapshot::default())
+    }
+
+    pub fn for_recipe(inherited: ParameterSnapshot) -> Result<Self, Error> {
+        Self::with_parameters(Mode::Recipe, inherited)
+    }
+
+    fn with_parameters(mode: Mode, inherited: ParameterSnapshot) -> Result<Self, Error> {
+        let handles = ParameterHost::new(inherited)?;
         let length = Kind::Length.value_type();
         let specs = [
             ("sketch", "create", vec![Type::Text; 3], opaque(SKETCH)),
@@ -192,6 +204,7 @@ impl SketchHost {
         Ok(SketchPlan {
             commands: plan.commands,
             extrusion: plan.extrusion,
+            parameters: self.handles.finish(&BTreeMap::new())?.parameters,
         })
     }
 
