@@ -34,7 +34,8 @@ def main():
     native = destination / "native"
     native.mkdir()
     integration = ROOT / "integrations/living-voxel-core"
-    shutil.copyfile(integration / "cli.rs", native / "cli.rs")
+    for file in ("cli.rs", "mask_surface.rs"):
+        shutil.copyfile(integration / file, native / file)
     shutil.copyfile(ROOT / "integrations/living-voxel-core/Cargo.lock", native / "Cargo.lock")
     (native / "provider-pins.json").write_text(json.dumps(pins) + "\n", encoding="utf-8")
     (native / "build.rs").write_text(
