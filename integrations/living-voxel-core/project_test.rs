@@ -664,6 +664,7 @@ fn publishes_pinned_gyroid_with_implicit_metric_and_historical_provenance() {
     let reference =
         ((x.sin() * y.cos() + y.sin() * z.cos() + z.sin() * x.cos()).abs() - 0.2) / angle;
     assert!((observation["sample"]["value"]["value"].as_f64().unwrap() - reference).abs() < 1e-14);
+    check_adaptive_gyroid(&fixture, &provider, &pin);
     let slice = sample(&["slice-xy", "8"]);
     assert_eq!(slice["known"], 33 * 25);
     assert_eq!(slice["unknown"], 0);
@@ -700,6 +701,89 @@ fn publishes_pinned_gyroid_with_implicit_metric_and_historical_provenance() {
         )
         .unwrap();
     }
+}
+
+fn check_adaptive_gyroid(fixture: &Fixture, provider: &str, pin: &Value) {
+    let grid = fixture.dir.path().join("adaptive-grid.json");
+    let grid_wire = include_bytes!("adaptive-gyroid.json");
+    fs::write(&grid, grid_wire).unwrap();
+    let output = fixture.dir.path().join("gyroid.lvxadap");
+    let revision = pin["revision"].to_string();
+    let command = [
+        "adaptive-gyroid",
+        provider,
+        PART,
+        &revision,
+        pin["definition_hash"].as_str().unwrap(),
+        grid.to_str().unwrap(),
+        output.to_str().unwrap(),
+    ];
+    let result = fixture.call(&command, 0);
+    assert_eq!(result["part_source"], *pin);
+    assert_eq!(result["semantic_kind"], "CellUnionMask");
+    assert_eq!(result["metric_status"], "NotDistance");
+    assert_eq!(result["geometry_error_bound"], "Unavailable");
+    assert_eq!(result["checked_cells"], 4096);
+    assert_eq!(result["report"]["balance"], "StrongTwoToOne");
+    assert_eq!(result["report"]["unknown_leaves"], 0);
+    let cli = std::env::var_os("LUMA_VOXEL_CLI").unwrap();
+    let digest = result["digests"]["blob_digest"].as_str().unwrap();
+    let decoded = Command::new(&cli)
+        .args(["decode-adaptive", output.to_str().unwrap(), digest])
+        .output()
+        .unwrap();
+    assert!(
+        decoded.status.success(),
+        "{}",
+        String::from_utf8_lossy(&decoded.stdout)
+    );
+    let wire: Value = serde_json::from_slice(&decoded.stdout).unwrap();
+    let artifact = &wire["result"]["artifact"];
+    assert_eq!(artifact["source_digest"], result["source_digest"]);
+    let leaves = artifact["leaves"].as_array().unwrap();
+    let mut levels = std::collections::BTreeSet::new();
+    let mut covered = 0;
+    let mut occupied = 0;
+    let angle = std::f64::consts::TAU / 0.005;
+    for leaf in leaves {
+        levels.insert(leaf["level"].as_u64().unwrap());
+        let [x, y, z]: [i32; 3] = serde_json::from_value(leaf["anchor"].clone()).unwrap();
+        let width = leaf["finest_cells_per_axis"].as_u64().unwrap() as i32;
+        let expected = leaf["sample"]["value"]["value"].as_bool().unwrap();
+        assert_eq!(leaf["sample"]["metric_status"], "NotDistance");
+        for i in x..x + width {
+            for j in y..y + width {
+                for k in z..z + width {
+                    let p = [i, j, k].map(|index| -0.01 + (f64::from(index) + 0.5) * 0.00125);
+                    let [dx, dy, dz] = p.map(f64::abs);
+                    let stock = (dx - 0.008).max(dy - 0.006).max(dz - 0.004);
+                    let interior = dx < 0.007 && dy < 0.005 && dz < 0.004;
+                    let [a, b, c] = p.map(|coordinate| coordinate * angle);
+                    let periodic =
+                        (a.sin() * b.cos() + b.sin() * c.cos() + c.sin() * a.cos()).abs();
+                    let oracle = stock <= 0.0 && (!interior || stock >= -0.001 || periodic <= 0.2);
+                    assert_eq!(expected, oracle, "cell [{i},{j},{k}]");
+                    covered += 1;
+                    occupied += u32::from(expected);
+                }
+            }
+        }
+    }
+    assert!(levels.len() > 1 && leaves.len() < 4096);
+    assert_eq!(covered, 4096);
+    assert_eq!(result["occupied_cells"], occupied);
+    let bytes = fs::read(&output).unwrap();
+    assert_eq!(fixture.call(&command, 2)["code"], "IoFailure");
+    assert_eq!(fs::read(&output).unwrap(), bytes);
+
+    let mut invalid: Value = serde_json::from_slice(grid_wire).unwrap();
+    invalid["layout"] = json!("Node");
+    fs::write(&grid, invalid.to_string()).unwrap();
+    let refused = fixture.dir.path().join("refused-gyroid.lvxadap");
+    let mut command = command;
+    command[6] = refused.to_str().unwrap();
+    assert_eq!(fixture.call(&command, 2)["code"], "UnsupportedCapability");
+    assert!(!refused.exists());
 }
 
 #[test]
