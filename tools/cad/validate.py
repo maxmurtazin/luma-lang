@@ -353,7 +353,7 @@ def verify_cad2_profile(lock, registry):
                     and entry["target"] == "t0" and entry["entry_points"]
                     and entry["checks"] and set(entry["checks"]) <= set(checks)
                     and targets == {"t0": "passed", "t1": "not_run"}, f"Unqualified CAD-2 status for {name}")
-        elif name not in {"voxel.sample", "sim.solve", "sim.query", "elements.find", "elements.resolve", "render.still"}:
+        elif name not in {"voxel.sample", "sim.solve", "sim.query", "elements.find", "elements.resolve", "render.still", "render.video"}:
             require(row["binding"] == "planned" and row["availability"] == "unavailable"
                     and set(targets.values()) == {"not_run"}, f"Unsupported status inflation for {name}")
 
@@ -529,16 +529,17 @@ def verify_elements_catalog(lock, registry):
                 f"Invalid CAD-5 Elements catalog binding {name}")
 
 
-def verify_studio_still(lock, registry):
-    row = registry["capabilities"]["render.still"]
-    require("examples/cad/studio-still-command.json" in lock["contract"]["inputs"]
-            and row["stage"] == "CAD-6" and row["provider"] == "studio"
-            and row["descriptor"]["modes"] == ["command"]
-            and row["descriptor"]["effects"] == ["DeclareTask"]
-            and row["binding"] == row["adapter"] == "qualified_profile"
-            and row["availability"] == "available"
-            and row["target_verification"] == {"t0": "passed", "t1": "not_run"},
-            "Invalid CAD-6 Studio still binding")
+def verify_studio_render(lock, registry):
+    for target in ("still", "video"):
+        row = registry["capabilities"][f"render.{target}"]
+        require(f"examples/cad/studio-{target}-command.json" in lock["contract"]["inputs"]
+                and row["stage"] == "CAD-6" and row["provider"] == "studio"
+                and row["descriptor"]["modes"] == ["command"]
+                and row["descriptor"]["effects"] == ["DeclareTask"]
+                and row["binding"] == row["adapter"] == "qualified_profile"
+                and row["availability"] == "available"
+                and row["target_verification"] == {"t0": "passed", "t1": "not_run"},
+                f"Invalid CAD-6 Studio {target} binding")
 
 
 def main():
@@ -570,7 +571,7 @@ def main():
     verify_cad3_profile(lock, registry)
     verify_cad4_profiles(lock, registry)
     verify_elements_catalog(lock, registry)
-    verify_studio_still(lock, registry)
+    verify_studio_render(lock, registry)
     operations = {}
     for name, row in registry["capabilities"].items():
         descriptor = row["descriptor"]

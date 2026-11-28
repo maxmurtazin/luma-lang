@@ -20,7 +20,8 @@
 | `param.length` | CAD-1 | implemented | absent | planned | unavailable | not_run / not_run | Binding в Luma запланирован. |
 | `param.set` | CAD-1 | implemented | absent | planned | unavailable | not_run / not_run | Binding в Luma запланирован. |
 | `project.parameter` | CAD-1 | implemented | absent | planned | unavailable | not_run / not_run | Binding в Luma запланирован. |
-| `render.still` | CAD-6 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Подготовка или постановка в очередь одного PNG WebGL2 по закреплённой презентации Studio с долговечной квитанцией. |
+| `render.still` | CAD-6 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Подготовка или постановка в очередь одного PNG WebGL2 или Cycles CPU по закреплённой презентации Studio. |
+| `render.video` | CAD-6 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Постановка закреплённого клипа Studio в очередь с PNG-мастером и проверенным видео H.264. |
 | `sim.query` | CAD-4 | experimental | qualified_profile | qualified_profile | available | passed / not_run | Команда Luma читает архивное значение ячейки или грани с физической величиной, единицами и адресом. |
 | `sim.solve` | CAD-4 | experimental | qualified_profile | qualified_profile | available | passed / not_run | Команда Luma объявляет стационарное исследование Box с закреплёнными материалом и границами. Очередь Core публикует проверенный архив Living Simulation. |
 | `sketch.profile` | CAD-2 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Замкнутый встроенный эскиз XY с полным набором ограничений и проверкой закреплённым решателем. |
@@ -45,6 +46,7 @@
 - `param.set(ref: ParamRef<T>, value: T) → Unit` · `BuildPlan`
 - `project.parameter(part: PartRef, key: StableKey) → ParamRef<T>` · `ReadPinned`
 - `render.still(presentation: PresentationRef, time: Time, options: RenderOptionsRef) → TaskSpecRef<PNGMaster>` · `DeclareTask`
+- `render.video(presentation: PresentationRef, clip: ClipRef, options: RenderOptionsRef) → TaskSpecRef<Video>` · `DeclareTask`
 - `sim.query(result: SimulationResultRef, quantity: SimulationQuantity, selector: SimulationSelector) → SimulationObservation` · `ReadPinned`
 - `sim.solve(study: StudyRef, options: SolveOptionsRef) → TaskSpecRef<SimulationResult>` · `DeclareTask`
 - `sketch.profile(sketch: SketchRef) → ProfileRef` · `BuildPlan`

@@ -44,10 +44,17 @@ def verify_master(delivered, task):
     assert delivered["frame_recipe_hash"] == task["frame_recipe_hash"]
     output = Path(delivered["output"])
     master = read(output / "master.json")
-    assert master["format"] == "studio-raster-master/1" and master["mode"] == "still"
+    if task["profile"] == "final-pathtrace":
+        assert master["format"] == "studio-pathtrace-master/1"
+        assert master["blender"]["engine"] == "CYCLES" and master["blender"]["device"] == "CPU"
+        for key in ("samples", "threads"):
+            assert master["blender"][key] == task["cycles"][key]
+    else:
+        assert master["format"] == "studio-raster-master/1" and master["chromium"]
+    assert master["mode"] == "still"
     for field in ("presentation_id", "revision", "source_snapshot_digest", "inputs", "width", "height"):
         assert master[field] == task[field], field
-    assert master["png"] == "RGB8/sRGB/full" and master["chromium"]
+    assert master["png"] == "RGB8/sRGB/full"
     assert len(master["frames"]) == 1 and not (output / "video").exists()
     frame = master["frames"][0]
     assert frame["exact_time"] == task["time"] and frame["index"] == 0
@@ -66,6 +73,7 @@ def main():
     parser.add_argument("studio", type=Path, help="pinned Studio checkout with npm dependencies")
     parser.add_argument("adapter", type=lambda path: Path(path).resolve())
     parser.add_argument("--capture", type=Path, help="historical Living IR assembly capture")
+    parser.add_argument("--extended", action="store_true", help="also exercise Cycles CPU and FFmpeg")
     args = parser.parse_args()
     studio = args.studio.resolve()
     queue_cli = studio / "apps/standalone/tools/render-queue.mjs"
@@ -116,6 +124,71 @@ def main():
         verify_master(delivered, task)
         assert len(status("list")) == 1
 
+        if args.extended:
+            initial = read(edit)
+            fps = {"numerator": 24000, "denominator": 1001}
+            timeline = write(scratch / "timeline.json", {
+                **initial, "command_id": "70000000-0000-4000-8000-000000000097",
+                "expected_revision": "2", "idempotency_key": "luma-cad6-video-test",
+                "operations": [{"type": "SetTimeline", "timeline": {
+                    "frame_count": 3, "fps": fps,
+                    "active_camera_id": "50000000-0000-4000-8000-000000000001",
+                }}],
+            })
+            run(native, "apply", project, timeline)
+            video = ROOT / "examples/cad/studio-video-command.json"
+            video_options = write(scratch / "video.json", {
+                "presentation_id": presentation, "revision": 3, "height": 144,
+            })
+            video_key = REQUEST[:-1] + "2"
+            plan = adapter("prepare", video_options, video)["result"]["task"]
+            admitted = adapter("submit", video_key, video_options, video)["result"]
+            assert plan == admitted["task"]
+            assert plan["operation"] == "render.video"
+            assert plan["frames"] == 3 and plan["fps"] == fps and plan["outputs"] == ["png", "mp4"]
+            job = admitted["receipt"]["id"]
+            run("node", queue_cli, "--root", queue, "run")
+            delivered = status("status", job)
+            assert delivered["status"] == "succeeded", delivered
+            output = Path(delivered["output"])
+            master_file = output / "master.json"
+            master = read(master_file)
+            assert master["inputs"] == plan["inputs"] and master["fps"] == fps
+            assert master["revision"] == "3" and master["mode"] == "sequence"
+            for index, frame in enumerate(master["frames"]):
+                time = frame["exact_time"]
+                assert int(time["ticks"]) * 24000 == index * 1001 * time["scale"]
+                assert hashlib.sha256((output / frame["path"]).read_bytes()).hexdigest() == frame["digest"].removeprefix("sha256:")
+            validation = read(output / "video/validation.json")
+            stream = validation["stream"]
+            assert validation["decoded_frames"] == 3
+            assert stream["codec_name"] == "h264" and stream["color_space"] == "bt709"
+            assert stream["time_base"] == "1/24000" and stream["duration_ts"] == 3003
+            video_path = output / "video/studio.mp4"
+            media = json.loads(run("ffprobe", "-v", "error", "-show_entries",
+                                   "stream=codec_type:frame=pts", "-of", "json", video_path))
+            assert media["streams"] == [{"codec_type": "video"}]
+            assert [frame["pts"] for frame in media["frames"]] == [0, 1001, 2002]
+
+            reencoded = status("reencode", job, "--crf", "23")
+            recovered = Path(reencoded["output"])
+            assert (recovered / "master.json").read_bytes() == master_file.read_bytes()
+            assert (recovered / master["frames"][0]["path"]).samefile(output / master["frames"][0]["path"])
+            assert read(recovered / "video/validation.json")["crf"] == 23
+
+            project = scratch / "pathtrace.sqlite"
+            queue = scratch / "cycles-queue"
+            run(native, "init-mock", project)
+            for path in ("s1/apply.json", "s3/look.json", "s4/dolly.json", "s5/final-orbit-light.json"):
+                run(native, "apply", project, studio / "fixtures" / path)
+            cycles = write(scratch / "cycles.json", {
+                **opts, "revision": 5, "profile": "final-pathtrace", "samples": 2, "threads": 2,
+            })
+            still = adapter("submit", REQUEST, cycles, command)["result"]
+            run("node", queue_cli, "--root", queue, "run")
+            verify_master(status("status", still["receipt"]["id"]), still["task"])
+            print("PASS Studio render: Cycles CPU, rational MP4 and PNG master reencode")
+
         if args.capture:
             project = scratch / "imported.sqlite"
             queue = scratch / "cad-queue"
@@ -130,6 +203,13 @@ def main():
             assert pinned["capture"]["cad_revision"] == source["cad_revision"]
             assert pinned["capture"]["cad_geometry"] == "preview"
             assert pinned["task"]["source_snapshot_digest"] == source["snapshot_digest"]
+            if source["adapter_contract"] == "living-ir-capture/1":
+                final_options = write(scratch / "legacy-final.json", {
+                    **read(options), "profile": "final-pathtrace",
+                })
+                rejected = adapter("submit", REQUEST[:-1] + "2", final_options, command, code=2)
+                assert rejected["error"]["diagnostic"]["code"] == "CAD_FINAL_MESH_UNAVAILABLE"
+                assert len(status("list")) == 1
             run("node", queue_cli, "--root", queue, "run")
             verify_master(status("status", pinned["receipt"]["id"]), pinned["task"])
             print("PASS Studio still: imported historical Core assembly capture")

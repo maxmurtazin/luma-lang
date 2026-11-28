@@ -1,4 +1,4 @@
-# CAD‑6 · Закреплённый кадр Studio
+# CAD‑6 · Закреплённый кадр и видео Studio
 
 Команда Luma `render.still` готовит один PNG по принятой ревизии
 презентации, точному времени и камере. `prepare` показывает размеры,
@@ -14,10 +14,11 @@
 формат цвета, версию Chromium и хеш PNG. Камера закреплена в `scene.json`,
 хеш которого входит в план и манифест.
 
-Профиль проверен на Linux x86‑64 с Rust 1.100.0, Node.js 24 и Chromium.
-Он использует `preview-raster` и RGB8 sRGB. Автономные операции
-редактирования презентации остаются в Studio. Cycles CPU, MP4 и
-перепривязка через Luma относятся к следующим профилям CAD‑6.
+Профили проверены на Linux x86‑64 с Rust 1.100.0 и Node.js 24.
+`preview-raster` использует Chromium, `final-pathtrace` — Blender Cycles
+на CPU. Для финального рендера импортированной CAD-сборки Studio
+требует закреплённую финальную сетку. Перепривязка и редактирование
+презентации доступны в автономном Studio.
 [Ревизии провайдеров](../../luma-cad.lock.json) ·
 [Контракт очереди](https://github.com/maxmurtazin/illusion-maker-product-studio/blob/938eafee7a6b1f0c2a9a00d98814a33b457dd33d/docs/S5-RASTER-EXPORT.md)
 
@@ -57,6 +58,28 @@ COMMAND=examples/cad/studio-still-command.json
 node "$BUILD/apps/standalone/tools/render-queue.mjs" --root "$QUEUE" run
 node "$BUILD/apps/standalone/tools/render-queue.mjs" --root "$QUEUE" status "$JOB"
 ```
+
+Для Cycles добавьте в JSON `"profile": "final-pathtrace"`. Параметры
+`samples` и `threads` задают от 1 до 128 выборок и от 1 до 16 потоков.
+По умолчанию используются 16 выборок и 4 потока.
+
+Для видео используйте `examples/cad/studio-video-command.json` и JSON с
+ID, ревизией, высотой и профилем. `render.video` читает весь принятый
+клип с его рациональным FPS. Studio публикует PNG-мастер RGB8 sRGB и
+MP4 H.264 в ограниченном диапазоне BT.709. FFmpeg проверяет кадры и PTS.
+В видео один поток изображения, аудиодорожка отсутствует.
+
+```sh
+"$ADAPTER" submit "$BUILD" "$PROJECT_DB" "$QUEUE" "$REQUEST" "$VIDEO" \
+  examples/cad/studio-video-command.json
+node "$BUILD/apps/standalone/tools/render-queue.mjs" --root "$QUEUE" run
+node "$BUILD/apps/standalone/tools/render-queue.mjs" --root "$QUEUE" reencode "$JOB" --crf 23
+python3 -B tools/cad/test-studio-still.py "$BUILD" "$ADAPTER" --extended
+```
+
+Команды `pause`, `resume` и `recover` используют тот же ID задания.
+Studio проверяет сохранённые кадры при возобновлении. `reencode`
+создаёт новый MP4 из проверенного PNG-мастера.
 
 Для реальной сборки используйте автономный пробник Studio
 `integration/probes/living_ir_studio_capture.rs` с Core из CAD lock.
