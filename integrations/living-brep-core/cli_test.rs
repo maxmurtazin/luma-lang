@@ -478,7 +478,7 @@ fn publishes_associative_sheet_only_at_current_part_revision() {
     fixture.apply(&mut store, DocumentAction::Primitive(plate(100.0)));
     let outline =
         living_cad_features::derived_id(FEATURE.parse().unwrap(), "drawing/v1/top/bottom");
-    let prepare_layout = |part: &str, output: &Path| {
+    let prepare_layout = |part: &str, output: &Path, anchor: &str| {
         let mut batch: Value = serde_json::from_slice(
             &fs::read(fixtures.join("sheet/create-core-plate-a4.json")).unwrap(),
         )
@@ -490,7 +490,7 @@ fn publishes_associative_sheet_only_at_current_part_revision() {
             view["core_projection"]["document_id"] = json!(part);
             view["core_projection"]["feature_id"] = json!(FEATURE);
         }
-        views[0]["projection_dimensions"] = json!([{"source_entity_id":outline.to_string()}]);
+        views[0]["projection_dimensions"] = json!([{"source_entity_id":anchor}]);
         let batch_path = output.with_extension("json");
         fs::write(&batch_path, serde_json::to_vec(&batch).unwrap()).unwrap();
         let applied = Command::new(&renderer)
@@ -509,7 +509,57 @@ fn publishes_associative_sheet_only_at_current_part_revision() {
         );
     };
     let layout = fixture.0.join("layout.lir2d");
-    prepare_layout(PART, &layout);
+    prepare_layout(PART, &layout, &outline.to_string());
+    let validate = |layout: &Path, code| {
+        fixture.call(
+            &[
+                "sheet-validate",
+                PART,
+                renderer.to_str().unwrap(),
+                layout.to_str().unwrap(),
+                SHEET,
+                "review",
+                "--font",
+                font.to_str().unwrap(),
+            ],
+            code,
+        )
+    };
+    let publish_checked = |layout: &Path, output: &Path, source: &Value, code| {
+        fixture.call(
+            &[
+                "sheet-publish",
+                PART,
+                renderer.to_str().unwrap(),
+                layout.to_str().unwrap(),
+                SHEET,
+                "review",
+                output.to_str().unwrap(),
+                "--expect-source",
+                source["native_revision"].as_str().unwrap(),
+                source["definition_hash"].as_str().unwrap(),
+                source["drawing_sha256"].as_str().unwrap(),
+                "--font",
+                font.to_str().unwrap(),
+            ],
+            code,
+        )
+    };
+    let validated = validate(&layout, 0);
+    assert_eq!(validated["published"], false);
+    assert_eq!(validated["page_mm"], json!([297.0, 210.0]));
+    assert_eq!(
+        validated["views"][1]["scale"],
+        json!({"numerator": 1, "denominator": 2})
+    );
+    assert_eq!(
+        validated["revision_policy"],
+        "require_current_at_validation"
+    );
+    assert_eq!(
+        validated["views"][0]["projection_dimensions"][0]["label"],
+        "100 mm"
+    );
     let run = |layout: &Path, policy: &str, output: &Path, code| {
         fixture.call(
             &[
@@ -528,6 +578,8 @@ fn publishes_associative_sheet_only_at_current_part_revision() {
     };
     let first = fixture.0.join("first.svg");
     let before = run(&layout, "review", &first, 0);
+    assert_eq!(before["validated_source"], validated["validated_source"]);
+    assert_eq!(before["published"], true);
     assert_eq!(before["core_source_status"], "verified_current");
     assert_eq!(before["revision_policy"], "require_current_at_publish");
     assert_eq!(
@@ -600,8 +652,26 @@ fi
     assert_eq!(fs::read(&first).unwrap(), first_bytes);
     drop(store);
 
+    assert_eq!(
+        publish_checked(&layout, &stale, &validated["validated_source"], 4)["code"],
+        "Conflict"
+    );
+    assert!(!stale.exists());
+    let rebound = validate(&layout, 0);
+    assert_eq!(
+        rebound["views"][0]["projection_dimensions"][0]["label"],
+        "120 mm"
+    );
+    assert_ne!(
+        rebound["validated_source"]["definition_hash"],
+        validated["validated_source"]["definition_hash"]
+    );
+    assert_eq!(
+        rebound["validated_source"]["drawing_sha256"],
+        validated["validated_source"]["drawing_sha256"]
+    );
     let updated = fixture.0.join("updated.pdf");
-    let after = run(&layout, "review", &updated, 0);
+    let after = publish_checked(&layout, &updated, &rebound["validated_source"], 0);
     assert!(fs::read(updated).unwrap().starts_with(b"%PDF-"));
     assert_eq!(after["core_project_id"], PROJECT);
     let before_view = &before["views"][0];
@@ -616,6 +686,31 @@ fi
     );
     assert_eq!(after_view["projection_dimensions"][0]["label"], "120 mm");
 
+    let changed = fixture.0.join("changed.lir2d");
+    let left = living_cad_features::derived_id(FEATURE.parse().unwrap(), "drawing/v1/top/left");
+    prepare_layout(PART, &changed, &left.to_string());
+    assert_eq!(
+        validate(&changed, 0)["views"][0]["projection_dimensions"][0]["label"],
+        "60 mm"
+    );
+    assert_eq!(
+        publish_checked(&changed, &stale, &rebound["validated_source"], 4)["code"],
+        "Conflict"
+    );
+    assert!(!stale.exists());
+    let missing = fixture.0.join("missing.lir2d");
+    prepare_layout(PART, &missing, OTHER);
+    let unresolved = validate(&missing, 3);
+    assert_eq!(unresolved["code"], "UnresolvedDrawingReference");
+    assert_eq!(
+        unresolved["details"]["message_key"],
+        "projection.anchor_missing"
+    );
+    assert_eq!(
+        run(&missing, "review", &stale, 3)["code"],
+        "UnresolvedDrawingReference"
+    );
+    assert!(!stale.exists());
     let blocked = fixture.0.join("manufacturing.svg");
     let denied = run(&layout, "manufacturing", &blocked, 3);
     assert_eq!(denied["code"], "DrawingRenderer");
@@ -625,7 +720,7 @@ fi
         .contains("projection.quality_unproven"));
     assert!(!blocked.exists());
     let foreign = fixture.0.join("foreign.lir2d");
-    prepare_layout(OTHER, &foreign);
+    prepare_layout(OTHER, &foreign, &outline.to_string());
     assert_eq!(
         run(&foreign, "review", &blocked, 3)["code"],
         "UnsupportedDrawingSource"

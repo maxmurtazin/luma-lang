@@ -81,7 +81,9 @@ fn execute(args: &[String]) -> Result<Value> {
             check_topology_digest(&b, right_digest)?;
             m7::run(provider, bundle, [(left, &a), (right, &b)], &mut context)
         }
-        ("sheet-publish", args) => drawing::run(&mut project, args),
+        (action @ ("sheet-validate" | "sheet-publish"), args) => {
+            drawing::run(&mut project, action, args)
+        }
         ("source", [document, feature]) => {
             let source = project
                 .extrusion_source(document, id(feature)?, &PreparationContext::default())
@@ -267,5 +269,5 @@ fn id(value: &str) -> Result<EntityId> {
 }
 
 fn usage() -> Failure {
-    Failure("Usage", json!("luma-cad-brep DB PROJECT DERIVED source PART FEATURE | sketch-profile PART FEATURE | publish PART FEATURE REVISION DIGEST OPERATION_UUID | latest PART FEATURE | measure OPERATION_UUID | view OPERATION_UUID | distance OPERATION_UUID GEOMETRY_SHA solid|face:N X Y Z | section OPERATION_UUID GEOMETRY_SHA FRAME_JSON | luma-tasks OPERATION_UUID GEOMETRY_SHA BUNDLE | jobs-submit REQUEST_UUID OPERATION_UUID GEOMETRY_SHA BUNDLE | jobs-work | jobs-receipt REQUEST_UUID | jobs-status JOB | jobs-result JOB | jobs-cancel JOB | jobs-retry JOB ATTEMPT | luma-m7 M7_PROVIDER LEFT_OP LEFT_SHA RIGHT_OP RIGHT_SHA BUNDLE | sheet-publish PART LIR2D INPUT SHEET review|manufacturing OUTPUT [--font FONT]"))
+    Failure("Usage", json!("luma-cad-brep DB PROJECT DERIVED source PART FEATURE | sketch-profile PART FEATURE | publish PART FEATURE REVISION DIGEST OPERATION_UUID | latest PART FEATURE | measure OPERATION_UUID | view OPERATION_UUID | distance OPERATION_UUID GEOMETRY_SHA solid|face:N X Y Z | section OPERATION_UUID GEOMETRY_SHA FRAME_JSON | luma-tasks OPERATION_UUID GEOMETRY_SHA BUNDLE | jobs-submit REQUEST_UUID OPERATION_UUID GEOMETRY_SHA BUNDLE | jobs-work | jobs-receipt REQUEST_UUID | jobs-status JOB | jobs-result JOB | jobs-cancel JOB | jobs-retry JOB ATTEMPT | luma-m7 M7_PROVIDER LEFT_OP LEFT_SHA RIGHT_OP RIGHT_SHA BUNDLE | sheet-validate PART LIR2D INPUT SHEET review|manufacturing [--font FONT] | sheet-publish PART LIR2D INPUT SHEET review|manufacturing OUTPUT [--expect-source REV HASH DRAWING_SHA] [--font FONT]"))
 }

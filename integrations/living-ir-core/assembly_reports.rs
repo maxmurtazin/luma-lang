@@ -96,6 +96,9 @@ mod tests {
     const GROUP: &str = "00000000-0000-4000-8000-000000000004";
     const FIRST: &str = "00000000-0000-4000-8000-000000000005";
     const SECOND: &str = "00000000-0000-4000-8000-000000000006";
+    const OTHER_PART: &str = "00000000-0000-4000-8000-000000000007";
+    const THIRD: &str = "00000000-0000-4000-8000-000000000008";
+    const FEATURE: &str = "00000000-0000-4000-8000-000000000009";
 
     #[test]
     fn cad5_bom_counts_nested_occurrences_and_explicit_repins() {
@@ -107,6 +110,7 @@ mod tests {
         for (revision, (document, kind)) in [
             (PART, DocumentKind::Part),
             (ASSEMBLY, DocumentKind::Assembly),
+            (OTHER_PART, DocumentKind::Part),
         ]
         .into_iter()
         .enumerate()
@@ -140,12 +144,22 @@ mod tests {
                 )
                 .unwrap();
         };
-        edit(
-            &mut store,
-            PART,
-            DocumentAction::Editor(json!({"op":"add","kind":"box"})),
-        );
+        let plate = |part, width| {
+            serde_json::from_value(json!({
+                "document_id": part, "feature_id": FEATURE,
+                "geometry": {"kind": "create_plate", "width": width, "height": 60.0, "thickness": 8.0}
+            })).unwrap()
+        };
+        for part in [PART, OTHER_PART] {
+            edit(
+                &mut store,
+                part,
+                DocumentAction::Primitive(plate(part, 100.0)),
+            );
+        }
         let original = store.source_pin(PART, 2).unwrap();
+        let separate = store.source_pin(OTHER_PART, 2).unwrap();
+        assert_eq!(original.output_ref, separate.output_ref);
         let translation = |x| LocalTransform {
             translation_m: [x, 0.0, 0.0],
             ..Default::default()
@@ -158,13 +172,17 @@ mod tests {
                 local: translation(10.0),
             },
         );
-        for (id, x) in [(FIRST, 1.0), (SECOND, 2.0)] {
+        for (id, x, source) in [
+            (FIRST, 1.0, &original),
+            (SECOND, 2.0, &original),
+            (THIRD, 3.0, &separate),
+        ] {
             edit(
                 &mut store,
                 ASSEMBLY,
                 DocumentAction::AddExistingPart {
                     instance_id: id.into(),
-                    source: original.clone(),
+                    source: source.clone(),
                     local: translation(x),
                 },
             );
@@ -179,8 +197,10 @@ mod tests {
         );
 
         let before = store.assembly_bom(ASSEMBLY, None, &context).unwrap();
-        assert_eq!(before["rows"].as_array().unwrap().len(), 1);
+        assert_eq!(before["rows"].as_array().unwrap().len(), 2);
         assert_eq!(before["rows"][0]["quantity"], 2);
+        assert_eq!(before["rows"][1]["quantity"], 1);
+        assert_eq!(before["rows"][1]["source"]["document"], OTHER_PART);
         assert_eq!(
             before["rows"][0]["source"]["definition_hash"],
             original.definition_hash
@@ -206,9 +226,7 @@ mod tests {
         edit(
             &mut store,
             PART,
-            DocumentAction::Editor(json!({
-                "op":"properties","node":original.output_ref.entity_id,"values":{"depth":19.0}
-            })),
+            DocumentAction::UpdatePrimitive(plate(PART, 120.0)),
         );
         let replacement = store.source_pin(PART, 3).unwrap();
         drop(store);
@@ -229,7 +247,8 @@ mod tests {
         );
         let after = store.assembly_bom(ASSEMBLY, None, &context).unwrap();
         assert_ne!(before["assembly"]["digest"], after["assembly"]["digest"]);
-        assert_eq!(after["rows"].as_array().unwrap().len(), 2);
+        assert_eq!(after["rows"].as_array().unwrap().len(), 3);
+        assert_eq!(after["rows"][2], before["rows"][1]);
         assert_eq!(after["rows"][0]["quantity"], 1);
         assert_eq!(
             after["rows"][0]["source"]["definition_hash"],
@@ -249,5 +268,6 @@ mod tests {
             replacement.definition_hash
         );
         assert_eq!(after["occurrences"][1], before["occurrences"][1]);
+        assert_eq!(after["occurrences"][2], before["occurrences"][2]);
     }
 }
