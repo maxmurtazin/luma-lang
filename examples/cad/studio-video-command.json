@@ -1,0 +1,8 @@
+{
+  "bundle_version": 1,
+  "entry": "video.luma",
+  "files": {
+    "video.luma": "use studio\nuse render\npresentation = studio.presentation()\nvideo = render.video(presentation, render.clip(), render.options())\n"
+  },
+  "source_digest": "sha256:8121040ac7bd0ef54f909d4b65ea0f89d4bac184abf1f9632faad04758bbf462"
+}

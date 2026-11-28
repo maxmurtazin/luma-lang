@@ -20,10 +20,13 @@ Runtime availability is scoped to the verified integration profiles.
 | `param.length` | CAD-1 | implemented | absent | planned | unavailable | not_run / not_run | The Luma host binding is planned. |
 | `param.set` | CAD-1 | implemented | absent | planned | unavailable | not_run / not_run | The Luma host binding is planned. |
 | `project.parameter` | CAD-1 | implemented | absent | planned | unavailable | not_run / not_run | The Luma host binding is planned. |
-| `render.still` | CAD-6 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Prepare or queue one pinned Studio presentation as a WebGL2 PNG with a durable receipt. |
+| `render.still` | CAD-6 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Prepare or queue one pinned Studio presentation as a WebGL2 or Cycles CPU PNG with a durable receipt. |
+| `render.video` | CAD-6 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Queue a pinned Studio clip with a PNG master and a validated H.264 video. |
 | `sim.query` | CAD-4 | experimental | qualified_profile | qualified_profile | available | passed / not_run | A Luma command reads an archived cell or face observation with its physical quantity, units and address. |
 | `sim.solve` | CAD-4 | experimental | qualified_profile | qualified_profile | available | passed / not_run | A Luma command declares a stationary Box study with captured material and boundaries. The Core queue publishes its verified Living Simulation archive. |
 | `sketch.profile` | CAD-2 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Closed and fully constrained embedded XY sketch validated by the pinned solver. |
+| `studio.apply` | CAD-6 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Apply native appearance, camera, light and action edits in a Studio presentation transaction. |
+| `studio.rebind` | CAD-6 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Preview and explicitly accept a Studio source rebind with revision checks and historical render pins. |
 | `units.add` | CAD-1 | absent | absent | planned | unavailable | not_run / not_run | The Luma host binding is planned. |
 | `units.mm` | CAD-1 | absent | absent | planned | unavailable | not_run / not_run | The Luma host binding is planned. |
 | `view.from_body` | CAD-1 | implemented | implemented | planned | unavailable | not_run / not_run | The Luma host binding is planned. |
@@ -45,9 +48,12 @@ Runtime availability is scoped to the verified integration profiles.
 - `param.set(ref: ParamRef<T>, value: T) → Unit` · `BuildPlan`
 - `project.parameter(part: PartRef, key: StableKey) → ParamRef<T>` · `ReadPinned`
 - `render.still(presentation: PresentationRef, time: Time, options: RenderOptionsRef) → TaskSpecRef<PNGMaster>` · `DeclareTask`
+- `render.video(presentation: PresentationRef, clip: ClipRef, options: RenderOptionsRef) → TaskSpecRef<Video>` · `DeclareTask`
 - `sim.query(result: SimulationResultRef, quantity: SimulationQuantity, selector: SimulationSelector) → SimulationObservation` · `ReadPinned`
 - `sim.solve(study: StudyRef, options: SolveOptionsRef) → TaskSpecRef<SimulationResult>` · `DeclareTask`
 - `sketch.profile(sketch: SketchRef) → ProfileRef` · `BuildPlan`
+- `studio.apply(presentation: PresentationRef, input: PresentationEditsRef) → PresentationPlanRef` · `BuildPlan`
+- `studio.rebind(presentation: PresentationRef, input: CadSnapshotRef) → RebindPlanRef` · `BuildPlan`
 - `units.add(a: Quantity<D,KA>, b: Quantity<D,KB>) → Quantity<D,KOut>` · `Pure`
 - `units.mm(x: Number) → Quantity<Length>` · `Pure`
 - `view.from_body(body: BodyRef) → ViewSpecRef` · `Pure`

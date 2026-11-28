@@ -30,6 +30,7 @@ def main():
             f'\n[dependencies.luma-cad-contract]\npath = {json.dumps(str(ROOT / "crates/luma-cad-contract"))}\n'
         )
     shutil.copyfile(ROOT / "integrations/living-studio/render.rs", crate / "luma_render.rs")
+    shutil.copyfile(ROOT / "integrations/living-studio/rebind.rs", crate / "rebind.rs")
     (crate / "luma-studio-pin.txt").write_text(pin + "\n", encoding="utf-8")
 
 

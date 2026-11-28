@@ -1,4 +1,6 @@
-//! Prepare and submit one pinned Studio still through the standalone render queue.
+//! Prepare and submit pinned Studio stills and videos through the standalone render queue.
+mod rebind;
+
 use luma::{
     host::{WireSourceBundle, run_with_host},
     host_api::{
@@ -22,28 +24,82 @@ use std::{
 const PRESENTATION: &str = "PresentationRef";
 const TIME: &str = "Time";
 const OPTIONS: &str = "RenderOptionsRef";
-const TASK: &str = "TaskSpecRef<PNGMaster>";
-const PROFILE: &str = "preview-raster";
+const CLIP: &str = "ClipRef";
 const STUDIO_PIN: &str = include_str!("luma-studio-pin.txt");
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Still {
+struct RenderInput {
     presentation_id: String,
     revision: u64,
-    time: RationalTime,
+    time: Option<RationalTime>,
     height: u16,
+    #[serde(default)]
+    profile: Profile,
+    samples: Option<u16>,
+    threads: Option<u16>,
 }
 
-struct StillHost {
+#[derive(Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+enum Profile {
+    #[default]
+    PreviewRaster,
+    FinalPathtrace,
+}
+
+impl Profile {
+    fn name(self) -> &'static str {
+        match self {
+            Self::PreviewRaster => "preview-raster",
+            Self::FinalPathtrace => "final-pathtrace",
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum Target {
+    Still,
+    Video,
+}
+
+impl Target {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Still => "still",
+            Self::Video => "video",
+        }
+    }
+
+    fn result_type(self) -> &'static str {
+        match self {
+            Self::Still => "TaskSpecRef<PNGMaster>",
+            Self::Video => "TaskSpecRef<Video>",
+        }
+    }
+
+    fn outputs(self) -> Json {
+        match self {
+            Self::Still => json!(["png"]),
+            Self::Video => json!(["png", "mp4"]),
+        }
+    }
+}
+
+struct RenderHost {
     registry: Registry,
     declared: AtomicBool,
+    target: Target,
 }
 
 type Signature<'a> = (&'a str, &'a str, &'a [&'a str], &'a str, Effect);
 
-impl StillHost {
-    fn new() -> Result<Self, Error> {
+impl RenderHost {
+    fn new(target: Target) -> Result<Self, Error> {
+        let (selector, handle) = match target {
+            Target::Still => ("time", TIME),
+            Target::Video => ("clip", CLIP),
+        };
         let specs: [Signature<'_>; 4] = [
             (
                 "studio",
@@ -52,13 +108,13 @@ impl StillHost {
                 PRESENTATION,
                 Effect::ReadPinned,
             ),
-            ("render", "time", &[], TIME, Effect::Pure),
+            ("render", selector, &[], handle, Effect::Pure),
             ("render", "options", &[], OPTIONS, Effect::Pure),
             (
                 "render",
-                "still",
-                &[PRESENTATION, TIME, OPTIONS],
-                TASK,
+                target.name(),
+                &[PRESENTATION, handle, OPTIONS],
+                target.result_type(),
                 Effect::DeclareTask,
             ),
         ];
@@ -83,11 +139,12 @@ impl StillHost {
         Ok(Self {
             registry,
             declared: AtomicBool::new(false),
+            target,
         })
     }
 }
 
-impl Dispatch for StillHost {
+impl Dispatch for RenderHost {
     fn registry(&self) -> &Registry {
         &self.registry
     }
@@ -106,11 +163,16 @@ impl Dispatch for StillHost {
         let type_name = match (descriptor.operation.as_str(), args) {
             ("studio.presentation", []) => PRESENTATION,
             ("render.time", []) => TIME,
+            ("render.clip", []) => CLIP,
             ("render.options", []) => OPTIONS,
-            ("render.still", [presentation, time, options]) => {
+            ("render.still" | "render.video", [presentation, selector, options]) => {
+                let kind = match self.target {
+                    Target::Still => TIME,
+                    Target::Video => CLIP,
+                };
                 for (value, kind) in [
                     (presentation, PRESENTATION),
-                    (time, TIME),
+                    (selector, kind),
                     (options, OPTIONS),
                 ] {
                     if value.value_type() != Some(Type::Opaque(kind.into())) {
@@ -120,10 +182,10 @@ impl Dispatch for StillHost {
                 if self.declared.swap(true, Ordering::Relaxed) {
                     return Err(Error::new(
                         "RenderTaskLimit",
-                        "Expected one render.still declaration",
+                        "Expected one render task declaration",
                     ));
                 }
-                TASK
+                self.target.result_type()
             }
             _ => return Err(Error::new("RenderInputType", &descriptor.operation)),
         };
@@ -208,32 +270,7 @@ fn requested_time(time: RationalTime, actual: &Json) -> bool {
     })
 }
 
-fn execute() -> Result<Json, Json> {
-    let args: Vec<_> = std::env::args_os().skip(1).collect();
-    let (root, project, queue, request, options, bundle) = match args.as_slice() {
-        [action, root, project, queue, options, bundle] if action == "prepare" => {
-            (root, project, queue, None, options, bundle)
-        }
-        [action, root, project, queue, request, options, bundle] if action == "submit" => {
-            (root, project, queue, Some(request), options, bundle)
-        }
-        _ => {
-            return Err(json!({
-                "code": "Usage",
-                "message": "luma-cad-studio prepare STUDIO PROJECT QUEUE STILL.json COMMAND.json | submit STUDIO PROJECT QUEUE REQUEST STILL.json COMMAND.json"
-            }));
-        }
-    };
-    let still: Still = read_json(Path::new(options), 8192)?;
-    if still.presentation_id.is_empty()
-        || still.time.ticks < 0
-        || still.time.scale == 0
-        || still.revision == 0
-        || !((64..=1080).contains(&still.height) && still.height.is_multiple_of(2))
-    {
-        return Err(json!({"code":"InvalidStill"}));
-    }
-
+fn check_command(path: &Path, host: &impl Dispatch, code: &str) -> Result<String, Json> {
     let diagnostics = |error: luma::runtime::Failure| {
         let entries: Vec<_> = error
             .diagnostics
@@ -245,45 +282,108 @@ fn execute() -> Result<Json, Json> {
                 })
             })
             .collect();
-        json!({"code":"RenderCommandRejected","diagnostics":entries})
+        json!({"code": code, "diagnostics": entries})
     };
-    let wire: WireSourceBundle = read_json(Path::new(bundle), 256 * 1024)?;
+    let wire: WireSourceBundle = read_json(path, 256 * 1024)?;
     let bundle = wire.admit().map_err(diagnostics)?;
-    let host =
-        StillHost::new().map_err(|error| json!({"code":error.code,"message":error.message}))?;
-    run_with_host(&bundle, Mode::Command, &host, 100_000).map_err(diagnostics)?;
+    run_with_host(&bundle, Mode::Command, host, 100_000).map_err(diagnostics)?;
+    Ok(bundle.source_digest())
+}
+
+fn studio_binary() -> Result<std::path::PathBuf, Json> {
+    Ok(std::env::current_exe()
+        .map_err(io_error)?
+        .with_file_name("product-studio"))
+}
+
+fn execute() -> Result<Json, Json> {
+    let args: Vec<_> = std::env::args_os().skip(1).collect();
+    match args.first().and_then(|action| action.to_str()) {
+        Some("presentation-apply") => return rebind::apply(&args[1..]),
+        Some("rebind-preview") => return rebind::preview(&args[1..]),
+        Some("rebind-accept") => return rebind::accept(&args[1..]),
+        _ => {}
+    }
+    let (root, project, queue, request, options, bundle) = match args.as_slice() {
+        [action, root, project, queue, options, bundle] if action == "prepare" => {
+            (root, project, queue, None, options, bundle)
+        }
+        [action, root, project, queue, request, options, bundle] if action == "submit" => {
+            (root, project, queue, Some(request), options, bundle)
+        }
+        _ => {
+            return Err(json!({
+                "code": "Usage",
+                "message": "luma-cad-studio prepare STUDIO PROJECT QUEUE RENDER.json COMMAND.json | submit STUDIO PROJECT QUEUE REQUEST RENDER.json COMMAND.json"
+            }));
+        }
+    };
+    let input: RenderInput = read_json(Path::new(options), 8192)?;
+    let target = if input.time.is_some() {
+        Target::Still
+    } else {
+        Target::Video
+    };
+    let profile = input.profile.name();
+    let samples = input.samples.unwrap_or(16);
+    let threads = input.threads.unwrap_or(4);
+    if input.presentation_id.is_empty()
+        || input
+            .time
+            .is_some_and(|time| time.ticks < 0 || time.scale == 0)
+        || input.revision == 0
+        || !((64..=1080).contains(&input.height) && input.height.is_multiple_of(2))
+        || !(1..=128).contains(&samples)
+        || !(1..=16).contains(&threads)
+        || (input.profile == Profile::PreviewRaster
+            && (input.samples.is_some() || input.threads.is_some()))
+    {
+        return Err(json!({"code":"InvalidRenderInput"}));
+    }
+
+    let host = RenderHost::new(target)
+        .map_err(|error| json!({"code":error.code,"message":error.message}))?;
+    let command_digest = check_command(Path::new(bundle), &host, "RenderCommandRejected")?;
     if !host.declared.into_inner() {
         return Err(
-            json!({"code":"MissingRenderTask","message":"Expected one render.still declaration"}),
+            json!({"code":"MissingRenderTask","message":"Expected one render task declaration"}),
         );
     }
 
     let root = Path::new(root).canonicalize().map_err(io_error)?;
     verify_studio(&root)?;
-    let studio = std::env::current_exe()
-        .map_err(io_error)?
-        .with_file_name("product-studio");
+    let studio = studio_binary()?;
     let scratch = tempfile::tempdir().map_err(io_error)?;
     let packet = scratch.path().join("packet");
-    let revision = still.revision.to_string();
-    let capture = provider(
-        Command::new(studio)
-            .arg("preview-data")
-            .arg(project)
-            .arg("--revision")
-            .arg(&revision)
+    let revision = input.revision.to_string();
+    let mut capture_command = Command::new(studio);
+    capture_command
+        .arg("preview-data")
+        .arg(project)
+        .arg("--revision")
+        .arg(&revision)
+        .arg("--output")
+        .arg(&packet);
+    if let Some(time) = input.time {
+        capture_command
             .arg("--time")
-            .arg(format!("{}/{}", still.time.ticks, still.time.scale))
-            .arg("--output")
-            .arg(&packet),
-    )?;
-    let scene_bytes = read(&packet.join("scene.json"), 8 * 1024 * 1024)?;
+            .arg(format!("{}/{}", time.ticks, time.scale));
+    } else {
+        capture_command.arg("--sequence");
+    }
+    if input.profile == Profile::FinalPathtrace {
+        capture_command.arg("--final-geometry");
+    }
+    let capture = provider(&mut capture_command)?;
+    let scene_bytes = read(&packet.join("scene.json"), 32 * 1024 * 1024)?;
     let scene_digest = format!("sha256:{:x}", Sha256::digest(&scene_bytes));
     let scene: Json = serde_json::from_slice(&scene_bytes).map_err(invalid_json)?;
     let frame = &scene["frame"];
-    if frame["presentation_id"] != still.presentation_id
+    if frame["presentation_id"] != input.presentation_id
         || frame["revision"] != revision.as_str()
-        || !requested_time(still.time, &frame["time"])
+        || input
+            .time
+            .is_some_and(|time| !requested_time(time, &frame["time"]))
         || !frame["source_snapshot_digest"].is_string()
     {
         return Err(json!({"code":"PresentationPinMismatch"}));
@@ -301,22 +401,43 @@ fn execute() -> Result<Json, Json> {
         })
         .arg(packet)
         .arg("--profile")
-        .arg(PROFILE)
+        .arg(profile)
         .arg("--height")
-        .arg(still.height.to_string())
-        .arg("--png-only");
+        .arg(input.height.to_string());
+    if input.profile == Profile::FinalPathtrace {
+        command
+            .arg("--samples")
+            .arg(samples.to_string())
+            .arg("--threads")
+            .arg(threads.to_string());
+    }
     if let Some(request) = request {
         command.arg("--key").arg(request);
     }
     let receipt = provider(&mut command)?;
-    if receipt["presentation_id"] != still.presentation_id
+    let sample_plan = &receipt["sample_plan"];
+    let valid_sample_plan = match input.time {
+        Some(time) => {
+            sample_plan["mode"] == "still"
+                && requested_time(time, &sample_plan["exact_time"])
+                && receipt["frames"] == 1
+                && receipt["fps"] == scene["still"]["fps"]
+        }
+        None => {
+            sample_plan["mode"] == "sequence"
+                && scene["sequence"]["frames"]
+                    .as_array()
+                    .is_some_and(|frames| receipt["frames"] == frames.len())
+                && receipt["fps"] == scene["sequence"]["fps"]
+        }
+    };
+    if receipt["presentation_id"] != input.presentation_id
         || receipt["revision"] != frame["revision"]
         || receipt["source_snapshot_digest"] != frame["source_snapshot_digest"]
-        || receipt["profile"] != PROFILE
-        || receipt["height"] != still.height
-        || receipt["frames"] != 1
-        || receipt["outputs"] != json!(["png"])
-        || !requested_time(still.time, &receipt["sample_plan"]["exact_time"])
+        || receipt["profile"] != profile
+        || receipt["height"] != input.height
+        || receipt["outputs"] != target.outputs()
+        || !valid_sample_plan
         || !receipt["frame_recipe_hash"].is_string()
         || receipt["inputs"]["scene.json"] != scene_digest
         || (request.is_some() && !receipt["id"].is_string())
@@ -325,14 +446,16 @@ fn execute() -> Result<Json, Json> {
     }
     let mut report = json!({
         "studio_revision": STUDIO_PIN.trim(),
-        "command_digest": bundle.source_digest(),
+        "command_digest": command_digest,
         "task": {
-            "operation": "render.still", "result_type": TASK, "policy": "historical_pinned",
+            "operation": format!("render.{}", target.name()), "result_type": target.result_type(), "policy": "historical_pinned",
             "frame_recipe_hash": receipt["frame_recipe_hash"], "inputs": receipt["inputs"],
             "presentation_id": frame["presentation_id"], "revision": frame["revision"],
-            "source_snapshot_digest": frame["source_snapshot_digest"], "time": frame["time"],
+            "source_snapshot_digest": frame["source_snapshot_digest"], "time": sample_plan["exact_time"],
+            "fps": receipt["fps"], "frames": receipt["frames"],
             "camera": frame["camera"],
-            "profile": PROFILE, "width": receipt["width"], "height": receipt["height"],
+            "profile": profile, "width": receipt["width"], "height": receipt["height"],
+            "cycles": (input.profile == Profile::FinalPathtrace).then(|| json!({"samples": samples, "threads": threads})),
             "estimated_bytes": receipt["estimated_bytes"], "outputs": receipt["outputs"]
         },
         "capture": {

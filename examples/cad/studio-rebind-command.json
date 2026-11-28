@@ -1,0 +1,8 @@
+{
+  "bundle_version": 1,
+  "entry": "rebind.luma",
+  "files": {
+    "rebind.luma": "use studio\nplan = studio.rebind(studio.presentation(), studio.captured_source())\n"
+  },
+  "source_digest": "sha256:df2ff5963c8346ddf1981cf063b6ddee09005afd5a37d6f617f6317ae6fe8251"
+}

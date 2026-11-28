@@ -937,7 +937,7 @@
         "provider_contract": "studio@938eafee7a6b1f0c2a9a00d98814a33b457dd33d"
       },
       "provider": "studio",
-      "backend_operation": "WebGL2 preview-raster PNG still",
+      "backend_operation": "WebGL2 preview-raster or Blender Cycles CPU PNG still",
       "backend_version": "0.1.0",
       "adapter_version": "luma-cad-studio@1",
       "stage": "CAD-6",
@@ -958,11 +958,84 @@
       "required_grants": [
         "job-submit"
       ],
-      "limits": "Native Studio command, one PNG from a pinned presentation and exact rational time. Even size up to 1920×1080. Standalone queue ownership.",
+      "limits": "Native Studio command, one PNG from a pinned presentation and exact rational time. Cycles requires the provider's final CAD mesh for imported geometry.",
       "numerical_profile": "si-f64-v1",
       "reason": {
-        "en": "Prepare or queue one pinned Studio presentation as a WebGL2 PNG with a durable receipt.",
-        "ru": "Подготовка или постановка в очередь одного PNG WebGL2 по закреплённой презентации Studio с долговечной квитанцией."
+        "en": "Prepare or queue one pinned Studio presentation as a WebGL2 or Cycles CPU PNG with a durable receipt.",
+        "ru": "Подготовка или постановка в очередь одного PNG WebGL2 или Cycles CPU по закреплённой презентации Studio."
+      }
+    },
+    "render.video": {
+      "descriptor": {
+        "qualified_name": "render.video",
+        "operation_id": "render.video",
+        "operation_version": {
+          "major": 1,
+          "minor": 0
+        },
+        "parameters": [
+          {
+            "name": "presentation",
+            "type": "PresentationRef"
+          },
+          {
+            "name": "clip",
+            "type": "ClipRef"
+          },
+          {
+            "name": "options",
+            "type": "RenderOptionsRef"
+          }
+        ],
+        "result_type": "TaskSpecRef<Video>",
+        "type_scheme": {
+          "kind": "monomorphic"
+        },
+        "effects": [
+          "DeclareTask"
+        ],
+        "modes": [
+          "command"
+        ],
+        "phases": [
+          "prepare"
+        ],
+        "capability_predicates": [
+          "render.video"
+        ],
+        "diagnostic_codes": [
+          "UnsupportedCapability",
+          "UnsupportedSchemaVersion"
+        ],
+        "provider_contract": "studio@938eafee7a6b1f0c2a9a00d98814a33b457dd33d"
+      },
+      "provider": "studio",
+      "backend_operation": "Studio PNG sequence and FFmpeg H.264 MP4",
+      "backend_version": "0.1.0",
+      "adapter_version": "luma-cad-studio@1",
+      "stage": "CAD-6",
+      "backend": "implemented",
+      "adapter": "qualified_profile",
+      "binding": "qualified_profile",
+      "availability": "available",
+      "input_support": "requires_preflight",
+      "target_verification": {
+        "t0": "passed",
+        "t1": "not_run"
+      },
+      "evidence": [
+        "docs/S5-RASTER-EXPORT.md",
+        "docs/S6-LIVING-IR-PREVIEW.md",
+        "apps/standalone/tools/render-queue.mjs"
+      ],
+      "required_grants": [
+        "job-submit"
+      ],
+      "limits": "Pinned accepted Studio timeline, supported rational FPS, RGB8 sRGB PNG master and BT.709 MP4 without audio.",
+      "numerical_profile": "si-f64-v1",
+      "reason": {
+        "en": "Queue a pinned Studio clip with a PNG master and a validated H.264 video.",
+        "ru": "Постановка закреплённого клипа Studio в очередь с PNG-мастером и проверенным видео H.264."
       }
     },
     "sim.query": {
@@ -1478,6 +1551,142 @@
       "reason": {
         "en": "The Luma host binding is planned.",
         "ru": "Binding в Luma запланирован."
+      }
+    },
+    "studio.apply": {
+      "descriptor": {
+        "qualified_name": "studio.apply",
+        "operation_id": "studio.apply",
+        "operation_version": {
+          "major": 1,
+          "minor": 0
+        },
+        "parameters": [
+          {
+            "name": "presentation",
+            "type": "PresentationRef"
+          },
+          {
+            "name": "input",
+            "type": "PresentationEditsRef"
+          }
+        ],
+        "result_type": "PresentationPlanRef",
+        "type_scheme": {
+          "kind": "monomorphic"
+        },
+        "effects": [
+          "BuildPlan"
+        ],
+        "modes": [
+          "command"
+        ],
+        "phases": [
+          "prepare"
+        ],
+        "capability_predicates": [
+          "studio.apply"
+        ],
+        "diagnostic_codes": [
+          "UnsupportedCapability",
+          "UnsupportedSchemaVersion"
+        ],
+        "provider_contract": "studio@938eafee7a6b1f0c2a9a00d98814a33b457dd33d"
+      },
+      "provider": "studio",
+      "backend_operation": "Studio presentation transaction",
+      "backend_version": "0.1.0",
+      "adapter_version": "luma-cad-studio@1",
+      "stage": "CAD-6",
+      "backend": "implemented",
+      "adapter": "qualified_profile",
+      "binding": "qualified_profile",
+      "availability": "available",
+      "input_support": "requires_preflight",
+      "target_verification": {
+        "t0": "passed",
+        "t1": "not_run"
+      },
+      "evidence": [
+        "docs/S6-LIVING-IR-PREVIEW.md",
+        "docs/S1-STANDALONE.md"
+      ],
+      "required_grants": [
+        "presentation-write"
+      ],
+      "limits": "Native Studio SQLite authority, command mode and an accepted or explicitly captured source.",
+      "numerical_profile": "si-f64-v1",
+      "reason": {
+        "en": "Apply native appearance, camera, light and action edits in a Studio presentation transaction.",
+        "ru": "Правки оформления, камеры, света и действий в транзакции презентации Studio."
+      }
+    },
+    "studio.rebind": {
+      "descriptor": {
+        "qualified_name": "studio.rebind",
+        "operation_id": "studio.rebind",
+        "operation_version": {
+          "major": 1,
+          "minor": 0
+        },
+        "parameters": [
+          {
+            "name": "presentation",
+            "type": "PresentationRef"
+          },
+          {
+            "name": "input",
+            "type": "CadSnapshotRef"
+          }
+        ],
+        "result_type": "RebindPlanRef",
+        "type_scheme": {
+          "kind": "monomorphic"
+        },
+        "effects": [
+          "BuildPlan"
+        ],
+        "modes": [
+          "command"
+        ],
+        "phases": [
+          "prepare"
+        ],
+        "capability_predicates": [
+          "studio.rebind"
+        ],
+        "diagnostic_codes": [
+          "UnsupportedCapability",
+          "UnsupportedSchemaVersion"
+        ],
+        "provider_contract": "studio@938eafee7a6b1f0c2a9a00d98814a33b457dd33d"
+      },
+      "provider": "studio",
+      "backend_operation": "Studio source preview and guarded acceptance",
+      "backend_version": "0.1.0",
+      "adapter_version": "luma-cad-studio@1",
+      "stage": "CAD-6",
+      "backend": "implemented",
+      "adapter": "qualified_profile",
+      "binding": "qualified_profile",
+      "availability": "available",
+      "input_support": "requires_preflight",
+      "target_verification": {
+        "t0": "passed",
+        "t1": "not_run"
+      },
+      "evidence": [
+        "docs/S6-LIVING-IR-PREVIEW.md",
+        "docs/S1-STANDALONE.md"
+      ],
+      "required_grants": [
+        "presentation-write"
+      ],
+      "limits": "Native Studio SQLite authority, command mode and an accepted or explicitly captured source.",
+      "numerical_profile": "si-f64-v1",
+      "reason": {
+        "en": "Preview and explicitly accept a Studio source rebind with revision checks and historical render pins.",
+        "ru": "Предпросмотр и явное принятие перепривязки Studio с проверкой ревизии и сохранением исходных заданий."
       }
     },
     "voxel.sample": {
