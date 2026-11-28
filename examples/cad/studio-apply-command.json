@@ -1,0 +1,8 @@
+{
+  "bundle_version": 1,
+  "entry": "presentation.luma",
+  "files": {
+    "presentation.luma": "use studio\nplan = studio.apply(studio.presentation(), studio.edits())\n"
+  },
+  "source_digest": "sha256:629990aeadff53483dc00989efdd10b7b4c2175edcf7848d880bbb0c19968e95"
+}

@@ -353,7 +353,8 @@ def verify_cad2_profile(lock, registry):
                     and entry["target"] == "t0" and entry["entry_points"]
                     and entry["checks"] and set(entry["checks"]) <= set(checks)
                     and targets == {"t0": "passed", "t1": "not_run"}, f"Unqualified CAD-2 status for {name}")
-        elif name not in {"voxel.sample", "sim.solve", "sim.query", "elements.find", "elements.resolve", "render.still", "render.video"}:
+        elif name not in {"voxel.sample", "sim.solve", "sim.query", "elements.find", "elements.resolve", "render.still", "render.video",
+                           "studio.apply", "studio.rebind"}:
             require(row["binding"] == "planned" and row["availability"] == "unavailable"
                     and set(targets.values()) == {"not_run"}, f"Unsupported status inflation for {name}")
 
@@ -529,13 +530,18 @@ def verify_elements_catalog(lock, registry):
                 f"Invalid CAD-5 Elements catalog binding {name}")
 
 
-def verify_studio_render(lock, registry):
-    for target in ("still", "video"):
-        row = registry["capabilities"][f"render.{target}"]
+def verify_studio_profiles(lock, registry):
+    for module, target, effect in (
+        ("render", "still", "DeclareTask"),
+        ("render", "video", "DeclareTask"),
+        ("studio", "apply", "BuildPlan"),
+        ("studio", "rebind", "BuildPlan"),
+    ):
+        row = registry["capabilities"][f"{module}.{target}"]
         require(f"examples/cad/studio-{target}-command.json" in lock["contract"]["inputs"]
                 and row["stage"] == "CAD-6" and row["provider"] == "studio"
                 and row["descriptor"]["modes"] == ["command"]
-                and row["descriptor"]["effects"] == ["DeclareTask"]
+                and row["descriptor"]["effects"] == [effect]
                 and row["binding"] == row["adapter"] == "qualified_profile"
                 and row["availability"] == "available"
                 and row["target_verification"] == {"t0": "passed", "t1": "not_run"},
@@ -571,7 +577,7 @@ def main():
     verify_cad3_profile(lock, registry)
     verify_cad4_profiles(lock, registry)
     verify_elements_catalog(lock, registry)
-    verify_studio_render(lock, registry)
+    verify_studio_profiles(lock, registry)
     operations = {}
     for name, row in registry["capabilities"].items():
         descriptor = row["descriptor"]

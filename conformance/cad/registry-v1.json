@@ -1553,6 +1553,142 @@
         "ru": "Binding в Luma запланирован."
       }
     },
+    "studio.apply": {
+      "descriptor": {
+        "qualified_name": "studio.apply",
+        "operation_id": "studio.apply",
+        "operation_version": {
+          "major": 1,
+          "minor": 0
+        },
+        "parameters": [
+          {
+            "name": "presentation",
+            "type": "PresentationRef"
+          },
+          {
+            "name": "input",
+            "type": "PresentationEditsRef"
+          }
+        ],
+        "result_type": "PresentationPlanRef",
+        "type_scheme": {
+          "kind": "monomorphic"
+        },
+        "effects": [
+          "BuildPlan"
+        ],
+        "modes": [
+          "command"
+        ],
+        "phases": [
+          "prepare"
+        ],
+        "capability_predicates": [
+          "studio.apply"
+        ],
+        "diagnostic_codes": [
+          "UnsupportedCapability",
+          "UnsupportedSchemaVersion"
+        ],
+        "provider_contract": "studio@938eafee7a6b1f0c2a9a00d98814a33b457dd33d"
+      },
+      "provider": "studio",
+      "backend_operation": "Studio presentation transaction",
+      "backend_version": "0.1.0",
+      "adapter_version": "luma-cad-studio@1",
+      "stage": "CAD-6",
+      "backend": "implemented",
+      "adapter": "qualified_profile",
+      "binding": "qualified_profile",
+      "availability": "available",
+      "input_support": "requires_preflight",
+      "target_verification": {
+        "t0": "passed",
+        "t1": "not_run"
+      },
+      "evidence": [
+        "docs/S6-LIVING-IR-PREVIEW.md",
+        "docs/S1-STANDALONE.md"
+      ],
+      "required_grants": [
+        "presentation-write"
+      ],
+      "limits": "Native Studio SQLite authority, command mode and an accepted or explicitly captured source.",
+      "numerical_profile": "si-f64-v1",
+      "reason": {
+        "en": "Apply native appearance, camera, light and action edits in a Studio presentation transaction.",
+        "ru": "Правки оформления, камеры, света и действий в транзакции презентации Studio."
+      }
+    },
+    "studio.rebind": {
+      "descriptor": {
+        "qualified_name": "studio.rebind",
+        "operation_id": "studio.rebind",
+        "operation_version": {
+          "major": 1,
+          "minor": 0
+        },
+        "parameters": [
+          {
+            "name": "presentation",
+            "type": "PresentationRef"
+          },
+          {
+            "name": "input",
+            "type": "CadSnapshotRef"
+          }
+        ],
+        "result_type": "RebindPlanRef",
+        "type_scheme": {
+          "kind": "monomorphic"
+        },
+        "effects": [
+          "BuildPlan"
+        ],
+        "modes": [
+          "command"
+        ],
+        "phases": [
+          "prepare"
+        ],
+        "capability_predicates": [
+          "studio.rebind"
+        ],
+        "diagnostic_codes": [
+          "UnsupportedCapability",
+          "UnsupportedSchemaVersion"
+        ],
+        "provider_contract": "studio@938eafee7a6b1f0c2a9a00d98814a33b457dd33d"
+      },
+      "provider": "studio",
+      "backend_operation": "Studio source preview and guarded acceptance",
+      "backend_version": "0.1.0",
+      "adapter_version": "luma-cad-studio@1",
+      "stage": "CAD-6",
+      "backend": "implemented",
+      "adapter": "qualified_profile",
+      "binding": "qualified_profile",
+      "availability": "available",
+      "input_support": "requires_preflight",
+      "target_verification": {
+        "t0": "passed",
+        "t1": "not_run"
+      },
+      "evidence": [
+        "docs/S6-LIVING-IR-PREVIEW.md",
+        "docs/S1-STANDALONE.md"
+      ],
+      "required_grants": [
+        "presentation-write"
+      ],
+      "limits": "Native Studio SQLite authority, command mode and an accepted or explicitly captured source.",
+      "numerical_profile": "si-f64-v1",
+      "reason": {
+        "en": "Preview and explicitly accept a Studio source rebind with revision checks and historical render pins.",
+        "ru": "Предпросмотр и явное принятие перепривязки Studio с проверкой ревизии и сохранением исходных заданий."
+      }
+    },
     "voxel.sample": {
       "descriptor": {
         "qualified_name": "voxel.sample",

@@ -68,13 +68,77 @@ def verify_master(delivered, task):
     assert png[24:26] == b"\x08\x02" and png[37:41] == b"sRGB"
 
 
+def verify_rebind(adapter, studio, native, project, scratch, updated, initial):
+    source_command = ROOT / "examples/cad/studio-rebind-command.json"
+
+    def preview(path):
+        return json.loads(run(adapter, "rebind-preview", studio, project,
+                              updated, source_command, path))["result"]
+
+    def accept(plan, header, code=0):
+        return json.loads(run(adapter, "rebind-accept", studio, project, plan, header, code=code))
+
+    def header(revision, attempt):
+        return {
+            "api_version": "1.0",
+            "presentation_id": initial["id"],
+            "expected_revision": revision,
+            "command_id": f"70000000-0000-4000-8000-{attempt:012x}",
+            "idempotency_key": f"luma-cad6-rebind-test-{attempt}",
+        }
+
+    first = scratch / "first-rebind.json"
+    reviewed = preview(first)
+    report = reviewed["plan"]["report"]
+    assert read(first) == reviewed
+    assert report["base_revision"] == initial["revision"] == "1" and not report["blockers"]
+    assert report["old_source"] == initial["cad_source"]
+    assert report["old_source"]["snapshot_digest"] != report["new_source"]["snapshot_digest"]
+    assert report["base_changed"]
+    assert json.loads(run(adapter, "rebind-preview", studio, project, updated, source_command, first,
+                          code=2))["error"]["code"] == "RebindPlanExists"
+
+    moved_node = report["base_changed"][0]
+    local = {"translation_m": [0.0, 0.0, 0.01], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}
+    edit = {**header("1", 1), "operations": [{
+        "type": "SetNodeOffset", "node_id": moved_node, "presentation_offset": local,
+    }]}
+    edit_bundle = ROOT / "examples/cad/studio-apply-command.json"
+    edit_path = write(scratch / "offset.json", edit)
+    changed = json.loads(run(adapter, "presentation-apply", studio, project, edit_path, edit_bundle))
+    assert changed["result"]["receipt"]["committed_revision"] == "2"
+    assert json.loads(run(adapter, "presentation-apply", studio, project, edit_path, edit_bundle)) == changed
+    old_header = write(scratch / "stale-rebind-header.json", header("1", 2))
+    stale = accept(first, old_header, code=2)["error"]
+    assert stale["diagnostic"]["code"] == "REVISION_CONFLICT"
+
+    second = scratch / "accepted-rebind.json"
+    revised = preview(second)
+    assert revised["plan"]["report"]["base_revision"] == "2"
+    next_header = write(scratch / "rebind-header.json", header("2", 3))
+    invalid = read(second)
+    invalid["plan"]["plan_digest"] = "sha256:" + "0" * 64
+    damaged = write(scratch / "damaged-rebind.json", invalid)
+    denied = accept(damaged, next_header, code=2)["error"]
+    assert denied["diagnostic"]["code"] == "REBIND_PLAN_MISMATCH"
+    accepted = accept(second, next_header)["result"]
+    assert accepted["receipt"]["committed_revision"] == "3"
+    assert accept(second, next_header)["result"] == accepted
+    current = json.loads(run(native, "inspect", project))
+    assert current["cad_source"] == report["new_source"]
+    assert current["nodes"][moved_node]["presentation_offset"] == local
+    return current
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("studio", type=Path, help="pinned Studio checkout with npm dependencies")
     parser.add_argument("adapter", type=lambda path: Path(path).resolve())
     parser.add_argument("--capture", type=Path, help="historical Living IR assembly capture")
     parser.add_argument("--extended", action="store_true", help="also exercise Cycles CPU and FFmpeg")
+    parser.add_argument("--updated-capture", type=Path, help="updated capture from the same CAD assembly")
     args = parser.parse_args()
+    if args.updated_capture and not args.capture:
+        parser.error("--updated-capture requires --capture")
     studio = args.studio.resolve()
     queue_cli = studio / "apps/standalone/tools/render-queue.mjs"
     native = args.adapter.with_name("product-studio")
@@ -97,6 +161,11 @@ def main():
         def status(*rest):
             return json.loads(run("node", queue_cli, "--root", queue, *rest))
 
+        def apply(path):
+            edit_bundle = ROOT / "examples/cad/studio-apply-command.json"
+            return json.loads(run(args.adapter, "presentation-apply", studio, project, path,
+                                  edit_bundle))["result"]["receipt"]
+
         prepared = adapter("prepare", options, command)["result"]
         assert "receipt" not in prepared and status("list") == []
         task = prepared["task"]
@@ -113,7 +182,7 @@ def main():
         assert admitted["task"] == task
         assert receipt["status"] == "queued" and receipt["frames"] == 1
         assert adapter("submit", REQUEST, options, command)["result"]["receipt"]["id"] == receipt["id"]
-        run(native, "apply", project, edit)
+        assert apply(edit)["committed_revision"] == "2"
         current = write(scratch / "new.json", {**opts, "revision": 2})
         conflict = adapter("submit", REQUEST, current, command, code=2)["error"]
         assert conflict["diagnostic"]["code"] == "IDEMPOTENCY_CONFLICT"
@@ -123,6 +192,20 @@ def main():
         delivered = status("status", receipt["id"])
         verify_master(delivered, task)
         assert len(status("list")) == 1
+
+        retry_queue = scratch / "retry-queue"
+        original_queue = queue
+        queue = retry_queue
+        pending = adapter("submit", REQUEST, options, command)["result"]["receipt"]
+        cancelled = status("cancel", pending["id"], "--job-revision", pending["job_revision"])
+        assert cancelled["status"] == "cancelled" and cancelled["output"] is None
+        retry_key = REQUEST[:-1] + "9"
+        retried = status("retry", pending["id"], "--key", retry_key)
+        assert retried["parent_job_id"] == pending["id"] and retried["id"] != pending["id"]
+        assert retried["frame_recipe_hash"] == pending["frame_recipe_hash"]
+        assert status("retry", pending["id"], "--key", retry_key)["id"] == retried["id"]
+        assert len(status("list")) == 2
+        queue = original_queue
 
         if args.extended:
             initial = read(edit)
@@ -135,7 +218,7 @@ def main():
                     "active_camera_id": "50000000-0000-4000-8000-000000000001",
                 }}],
             })
-            run(native, "apply", project, timeline)
+            assert apply(timeline)["committed_revision"] == "3"
             video = ROOT / "examples/cad/studio-video-command.json"
             video_options = write(scratch / "video.json", {
                 "presentation_id": presentation, "revision": 3, "height": 144,
@@ -180,7 +263,7 @@ def main():
             queue = scratch / "cycles-queue"
             run(native, "init-mock", project)
             for path in ("s1/apply.json", "s3/look.json", "s4/dolly.json", "s5/final-orbit-light.json"):
-                run(native, "apply", project, studio / "fixtures" / path)
+                apply(studio / "fixtures" / path)
             cycles = write(scratch / "cycles.json", {
                 **opts, "revision": 5, "profile": "final-pathtrace", "samples": 2, "threads": 2,
             })
@@ -210,6 +293,17 @@ def main():
                 rejected = adapter("submit", REQUEST[:-1] + "2", final_options, command, code=2)
                 assert rejected["error"]["diagnostic"]["code"] == "CAD_FINAL_MESH_UNAVAILABLE"
                 assert len(status("list")) == 1
+            if args.updated_capture:
+                current = verify_rebind(args.adapter, studio, native, project, scratch,
+                                        args.updated_capture.resolve(), imported)
+                updated_options = write(scratch / "rebound-still.json", {
+                    **read(options), "revision": int(current["revision"]),
+                })
+                next_task = adapter("prepare", updated_options, command)["result"]["task"]
+                assert next_task["source_snapshot_digest"] == current["cad_source"]["snapshot_digest"]
+                assert next_task["source_snapshot_digest"] != pinned["task"]["source_snapshot_digest"]
+                assert adapter("prepare", options, command)["result"]["task"] == pinned["task"]
+                print("PASS Studio rebind: edited presentation CAS, plan digest, and retained old render")
             run("node", queue_cli, "--root", queue, "run")
             verify_master(status("status", pinned["receipt"]["id"]), pinned["task"])
             print("PASS Studio still: imported historical Core assembly capture")

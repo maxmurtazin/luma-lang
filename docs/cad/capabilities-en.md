@@ -25,6 +25,8 @@ Runtime availability is scoped to the verified integration profiles.
 | `sim.query` | CAD-4 | experimental | qualified_profile | qualified_profile | available | passed / not_run | A Luma command reads an archived cell or face observation with its physical quantity, units and address. |
 | `sim.solve` | CAD-4 | experimental | qualified_profile | qualified_profile | available | passed / not_run | A Luma command declares a stationary Box study with captured material and boundaries. The Core queue publishes its verified Living Simulation archive. |
 | `sketch.profile` | CAD-2 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Closed and fully constrained embedded XY sketch validated by the pinned solver. |
+| `studio.apply` | CAD-6 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Apply native appearance, camera, light and action edits in a Studio presentation transaction. |
+| `studio.rebind` | CAD-6 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Preview and explicitly accept a Studio source rebind with revision checks and historical render pins. |
 | `units.add` | CAD-1 | absent | absent | planned | unavailable | not_run / not_run | The Luma host binding is planned. |
 | `units.mm` | CAD-1 | absent | absent | planned | unavailable | not_run / not_run | The Luma host binding is planned. |
 | `view.from_body` | CAD-1 | implemented | implemented | planned | unavailable | not_run / not_run | The Luma host binding is planned. |
@@ -50,6 +52,8 @@ Runtime availability is scoped to the verified integration profiles.
 - `sim.query(result: SimulationResultRef, quantity: SimulationQuantity, selector: SimulationSelector) → SimulationObservation` · `ReadPinned`
 - `sim.solve(study: StudyRef, options: SolveOptionsRef) → TaskSpecRef<SimulationResult>` · `DeclareTask`
 - `sketch.profile(sketch: SketchRef) → ProfileRef` · `BuildPlan`
+- `studio.apply(presentation: PresentationRef, input: PresentationEditsRef) → PresentationPlanRef` · `BuildPlan`
+- `studio.rebind(presentation: PresentationRef, input: CadSnapshotRef) → RebindPlanRef` · `BuildPlan`
 - `units.add(a: Quantity<D,KA>, b: Quantity<D,KB>) → Quantity<D,KOut>` · `Pure`
 - `units.mm(x: Number) → Quantity<Length>` · `Pure`
 - `view.from_body(body: BodyRef) → ViewSpecRef` · `Pure`

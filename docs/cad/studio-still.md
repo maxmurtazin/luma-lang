@@ -17,8 +17,8 @@
 Профили проверены на Linux x86‑64 с Rust 1.100.0 и Node.js 24.
 `preview-raster` использует Chromium, `final-pathtrace` — Blender Cycles
 на CPU. Для финального рендера импортированной CAD-сборки Studio
-требует закреплённую финальную сетку. Перепривязка и редактирование
-презентации доступны в автономном Studio.
+требует закреплённую финальную сетку. Презентация, её правки и
+перепривязка принадлежат хранилищу Studio.
 [Ревизии провайдеров](../../luma-cad.lock.json) ·
 [Контракт очереди](https://github.com/maxmurtazin/illusion-maker-product-studio/blob/938eafee7a6b1f0c2a9a00d98814a33b457dd33d/docs/S5-RASTER-EXPORT.md)
 
@@ -91,4 +91,30 @@ Studio проверяет сохранённые кадры при возобн�
 ```sh
 "$NATIVE" import-living-ir "$PROJECT_DB" "$STUDIO_CAPTURE_DIR"
 python3 -B tools/cad/test-studio-still.py "$BUILD" "$ADAPTER" --capture "$STUDIO_CAPTURE_DIR"
+```
+
+## Правки презентации и перепривязка
+
+`presentation-apply` принимает пакет Luma с `studio.apply` и нативный
+конверт правок Studio. Операции оформления, камеры, света и действий
+проверяются и принимаются одной SQLite-транзакцией Studio. Смещение
+в презентации хранится отдельно от позы из CAD.
+
+`rebind-preview` принимает снимок той же сборки и сохраняет план с
+исходной ревизией, дайджестами снимков, изменениями и блокерами.
+При неоднозначной или пропавшей связи можно явно передать
+`DECISIONS.json` в последнем аргументе. Для принятия требуется конверт
+команды Studio с ID презентации и `expected_revision` из плана.
+Устаревший или изменённый план отклоняется. Повтор принятия с тем же
+ключом возвращает исходную квитанцию. Поставленные задания сохраняют
+пакеты от прежней ревизии.
+
+```sh
+"$ADAPTER" presentation-apply "$BUILD" "$PROJECT_DB" "$EDITS" \
+  examples/cad/studio-apply-command.json
+"$ADAPTER" rebind-preview "$BUILD" "$PROJECT_DB" "$UPDATED_CAPTURE" \
+  examples/cad/studio-rebind-command.json "$PLAN"
+"$ADAPTER" rebind-accept "$BUILD" "$PROJECT_DB" "$PLAN" "$HEADER"
+python3 -B tools/cad/test-studio-still.py "$BUILD" "$ADAPTER" --extended \
+  --capture "$STUDIO_CAPTURE_DIR" --updated-capture "$UPDATED_CAPTURE"
 ```

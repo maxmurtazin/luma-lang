@@ -17,7 +17,7 @@
       "schema/cad/registry-v1.json": "sha256:a57e6cb7a87338b9a2080e2b1f162c9a3243b76d70907e7622129713560e9f58",
       "schema/cad/sketch-profile-v1.json": "sha256:06237d88913edee9628d806be19c4b8a4b2aae94197f21b219379800f1055716",
       "schema/cad/wire-v1.json": "sha256:1a0a8fe30c338c333d15626abb7c32917684287bc87dc0f3bd9febc0d3a60986",
-      "conformance/cad/registry-v1.json": "sha256:84cf8ad3359b3bfd44277090923cc252d0d3216a3537fdbdc4cf4ce985394a77",
+      "conformance/cad/registry-v1.json": "sha256:35253021ed6ee434d97cc7f8125d9c699e63a4da2d0fbc8a94b8fccbffafc86b",
       "conformance/cad/cad2-profile-v1.json": "sha256:71252872b985b3fb2ff30ea27ba7648f78160573894a5d41633be1c2e8de646d",
       "conformance/cad/cad3-regular-sphere-v1.json": "sha256:b35943fbe8b3c808f18a36cb35450897fbf4aa52a6945c725769ec26bb3e92f4",
       "conformance/cad/cad3-voxel-project-v1.json": "sha256:d509226d46722300062f0eed086779ebca102409612f6828c2f17b219c11d6ec",
@@ -38,7 +38,9 @@
       "examples/cad/elements-find-command.json": "sha256:eb52a3d26c23b0efc3fc7bf36d50bfd15d2b49e03b155ca3d3afa0fe282b3f20",
       "examples/cad/elements-resolve-command.json": "sha256:84e90a2dc108b899c96d6f2c862cdf54b9e17a84207d4c0a67797bef807742fb",
       "examples/cad/studio-still-command.json": "sha256:d88a5d36f46c2fb54e66c5e0edcdeea2ccec8e8d046ea44661cbbed8e8cdd78c",
-      "examples/cad/studio-video-command.json": "sha256:94f37b649659c21ba37f0c3b67b34f64295210e6ec773c90476a5f7af83ab44b"
+      "examples/cad/studio-video-command.json": "sha256:94f37b649659c21ba37f0c3b67b34f64295210e6ec773c90476a5f7af83ab44b",
+      "examples/cad/studio-rebind-command.json": "sha256:70f6159bf18f7c9ccdb280a0905b74cdf0b92291c2097fe0d661f4448b0df1a9",
+      "examples/cad/studio-apply-command.json": "sha256:c01b54205943867e77fe9f374af6d306a4a562a63cf26932ef65f56c6464c73d"
     }
   },
   "numeric_profiles": [
@@ -133,7 +135,8 @@
       "review_paths": [
         "docs/S5-RASTER-EXPORT.md",
         "docs/S6-LIVING-IR-PREVIEW.md",
-        "apps/standalone/tools/render-queue.mjs"
+        "apps/standalone/tools/render-queue.mjs",
+        "docs/S1-STANDALONE.md"
       ]
     },
     "elements": {

@@ -1,4 +1,6 @@
 //! Prepare and submit pinned Studio stills and videos through the standalone render queue.
+mod rebind;
+
 use luma::{
     host::{WireSourceBundle, run_with_host},
     host_api::{
@@ -268,8 +270,40 @@ fn requested_time(time: RationalTime, actual: &Json) -> bool {
     })
 }
 
+fn check_command(path: &Path, host: &impl Dispatch, code: &str) -> Result<String, Json> {
+    let diagnostics = |error: luma::runtime::Failure| {
+        let entries: Vec<_> = error
+            .diagnostics
+            .into_iter()
+            .map(|(file, diagnostic)| {
+                json!({
+                    "file": file, "code": diagnostic.code, "message": diagnostic.message,
+                    "start": diagnostic.span.start, "end": diagnostic.span.end
+                })
+            })
+            .collect();
+        json!({"code": code, "diagnostics": entries})
+    };
+    let wire: WireSourceBundle = read_json(path, 256 * 1024)?;
+    let bundle = wire.admit().map_err(diagnostics)?;
+    run_with_host(&bundle, Mode::Command, host, 100_000).map_err(diagnostics)?;
+    Ok(bundle.source_digest())
+}
+
+fn studio_binary() -> Result<std::path::PathBuf, Json> {
+    Ok(std::env::current_exe()
+        .map_err(io_error)?
+        .with_file_name("product-studio"))
+}
+
 fn execute() -> Result<Json, Json> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
+    match args.first().and_then(|action| action.to_str()) {
+        Some("presentation-apply") => return rebind::apply(&args[1..]),
+        Some("rebind-preview") => return rebind::preview(&args[1..]),
+        Some("rebind-accept") => return rebind::accept(&args[1..]),
+        _ => {}
+    }
     let (root, project, queue, request, options, bundle) = match args.as_slice() {
         [action, root, project, queue, options, bundle] if action == "prepare" => {
             (root, project, queue, None, options, bundle)
@@ -307,24 +341,9 @@ fn execute() -> Result<Json, Json> {
         return Err(json!({"code":"InvalidRenderInput"}));
     }
 
-    let diagnostics = |error: luma::runtime::Failure| {
-        let entries: Vec<_> = error
-            .diagnostics
-            .into_iter()
-            .map(|(file, diagnostic)| {
-                json!({
-                    "file": file, "code": diagnostic.code, "message": diagnostic.message,
-                    "start": diagnostic.span.start, "end": diagnostic.span.end
-                })
-            })
-            .collect();
-        json!({"code":"RenderCommandRejected","diagnostics":entries})
-    };
-    let wire: WireSourceBundle = read_json(Path::new(bundle), 256 * 1024)?;
-    let bundle = wire.admit().map_err(diagnostics)?;
     let host = RenderHost::new(target)
         .map_err(|error| json!({"code":error.code,"message":error.message}))?;
-    run_with_host(&bundle, Mode::Command, &host, 100_000).map_err(diagnostics)?;
+    let command_digest = check_command(Path::new(bundle), &host, "RenderCommandRejected")?;
     if !host.declared.into_inner() {
         return Err(
             json!({"code":"MissingRenderTask","message":"Expected one render task declaration"}),
@@ -333,9 +352,7 @@ fn execute() -> Result<Json, Json> {
 
     let root = Path::new(root).canonicalize().map_err(io_error)?;
     verify_studio(&root)?;
-    let studio = std::env::current_exe()
-        .map_err(io_error)?
-        .with_file_name("product-studio");
+    let studio = studio_binary()?;
     let scratch = tempfile::tempdir().map_err(io_error)?;
     let packet = scratch.path().join("packet");
     let revision = input.revision.to_string();
@@ -429,7 +446,7 @@ fn execute() -> Result<Json, Json> {
     }
     let mut report = json!({
         "studio_revision": STUDIO_PIN.trim(),
-        "command_digest": bundle.source_digest(),
+        "command_digest": command_digest,
         "task": {
             "operation": format!("render.{}", target.name()), "result_type": target.result_type(), "policy": "historical_pinned",
             "frame_recipe_hash": receipt["frame_recipe_hash"], "inputs": receipt["inputs"],

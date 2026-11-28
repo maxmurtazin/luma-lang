@@ -25,6 +25,8 @@
 | `sim.query` | CAD-4 | experimental | qualified_profile | qualified_profile | available | passed / not_run | Команда Luma читает архивное значение ячейки или грани с физической величиной, единицами и адресом. |
 | `sim.solve` | CAD-4 | experimental | qualified_profile | qualified_profile | available | passed / not_run | Команда Luma объявляет стационарное исследование Box с закреплёнными материалом и границами. Очередь Core публикует проверенный архив Living Simulation. |
 | `sketch.profile` | CAD-2 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Замкнутый встроенный эскиз XY с полным набором ограничений и проверкой закреплённым решателем. |
+| `studio.apply` | CAD-6 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Правки оформления, камеры, света и действий в транзакции презентации Studio. |
+| `studio.rebind` | CAD-6 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Предпросмотр и явное принятие перепривязки Studio с проверкой ревизии и сохранением исходных заданий. |
 | `units.add` | CAD-1 | absent | absent | planned | unavailable | not_run / not_run | Binding в Luma запланирован. |
 | `units.mm` | CAD-1 | absent | absent | planned | unavailable | not_run / not_run | Binding в Luma запланирован. |
 | `view.from_body` | CAD-1 | implemented | implemented | planned | unavailable | not_run / not_run | Binding в Luma запланирован. |
@@ -50,6 +52,8 @@
 - `sim.query(result: SimulationResultRef, quantity: SimulationQuantity, selector: SimulationSelector) → SimulationObservation` · `ReadPinned`
 - `sim.solve(study: StudyRef, options: SolveOptionsRef) → TaskSpecRef<SimulationResult>` · `DeclareTask`
 - `sketch.profile(sketch: SketchRef) → ProfileRef` · `BuildPlan`
+- `studio.apply(presentation: PresentationRef, input: PresentationEditsRef) → PresentationPlanRef` · `BuildPlan`
+- `studio.rebind(presentation: PresentationRef, input: CadSnapshotRef) → RebindPlanRef` · `BuildPlan`
 - `units.add(a: Quantity<D,KA>, b: Quantity<D,KB>) → Quantity<D,KOut>` · `Pure`
 - `units.mm(x: Number) → Quantity<Length>` · `Pure`
 - `view.from_body(body: BodyRef) → ViewSpecRef` · `Pure`
