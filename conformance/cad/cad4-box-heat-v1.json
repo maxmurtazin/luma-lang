@@ -1,0 +1,26 @@
+{
+  "profile": "cad4-box-heat-v1",
+  "schema_version": 1,
+  "provider_commits": {
+    "core": "e8d5a465dbc943b746ce9f3607fe526f1b3a93df",
+    "simulation": "c906f43a052fd918f33b94965045f449d3468544"
+  },
+  "target": "Linux x86-64, Rust 1.100.0",
+  "source": "accepted axis-aligned Core editor Box",
+  "solver_profile": "bootstrap-volume-heat-3d-fv-preview-v1",
+  "qualification": "Experimental",
+  "entry_points": [
+    "heat-source", "heat-submit", "heat-receipt", "heat-status",
+    "heat-work", "heat-cancel", "heat-retry", "heat-export", "heat-cell"
+  ],
+  "fixture": {
+    "extent_m": [0.04, 0.03, 0.02],
+    "min_x_outward_flow_w": 1.2,
+    "max_x_outward_flow_w": -1.2,
+    "first_cell_temperature_k": 302.5
+  },
+  "evidence": [
+    "examples/cad/box-heat-study.json",
+    "integrations/living-voxel-core/project_test.rs"
+  ]
+}

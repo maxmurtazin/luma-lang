@@ -2,6 +2,7 @@
 mod bindings;
 mod artifact_jobs;
 pub mod voxel_jobs;
+pub mod thermal_jobs;
 pub mod brep_jobs;
 mod jobs;
 use super::*;

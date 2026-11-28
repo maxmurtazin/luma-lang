@@ -3,6 +3,7 @@ mod adaptive;
 mod blocks;
 mod paged;
 mod provider;
+mod thermal;
 
 use living_cad_viewer::checkpoint::project::ProjectStore;
 use serde_json::{json, Value};
@@ -54,6 +55,7 @@ fn execute(args: &[String]) -> Result<Value> {
         .ok_or_else(|| json!({"code":"ProjectKey","message":"Expected a 32-byte hex key"}))?;
     let mut store = ProjectStore::open(Path::new(database), project, key).map_err(core_error)?;
     match (action.as_str(), args) {
+        (action, args) if action.starts_with("heat-") => thermal::execute(&store, action, args),
         ("adaptive-sphere", [provider, part, revision, hash, profile, output]) => {
             let source = store
                 .voxel_sphere_source(part, Some((revision.parse().map_err(|_| usage())?, hash)))
@@ -401,7 +403,11 @@ fn read_response(
     if status.success() {
         Ok(response)
     } else if response["error"]["code"].is_string() {
-        Err(response["error"].clone())
+        let mut error = response["error"].clone();
+        if response["status"].is_string() {
+            error["provider_status"] = response["status"].clone();
+        }
+        Err(error)
     } else {
         Err(json!({"code":"VoxelProviderRejected"}))
     }
@@ -465,5 +471,5 @@ fn corrupt() -> Value {
 }
 
 fn usage() -> Value {
-    json!({"code":"Usage","message":"DB PROJECT source PART | adaptive-gyroid PROVIDER PART REVISION HASH GRID.json OUTPUT.lvxadap | adaptive-sphere VOXEL_CLI PART REVISION HASH PROFILE.json OUTPUT.lvxadap | adaptive-submit VOXEL_CLI REQUEST PART REVISION HASH PROFILE.json | adaptive-work VOXEL_CLI | adaptive-receipt REQUEST | adaptive-status JOB | adaptive-cancel JOB | adaptive-retry JOB ATTEMPT | adaptive-export JOB OUTPUT.lvxadap | lattice-source PART | lattice-submit[-luma] PROVIDER REQUEST PART REVISION HASH GRID.json [BUNDLE.json] | lattice-work PROVIDER | lattice-receipt REQUEST | lattice-status JOB | lattice-cancel JOB | lattice-retry JOB ATTEMPT | lattice-export JOB FILE.lvx | submit PROVIDER REQUEST PART REVISION HASH GRID.json | submit-luma PROVIDER REQUEST PART REVISION HASH GRID.json BUNDLE.json | work PROVIDER | receipt REQUEST | status JOB | cancel JOB | retry JOB ATTEMPT | export JOB FILE.lvx | field-csg VOXEL_CLI OP LEFT_JOB RIGHT_JOB implicit | mask PUBLICATIONS VOXEL_CLI COMMAND ... | paged PUBLICATIONS VOXEL_CLI DIRECTORY COMMAND ..."})
+    json!({"code":"Usage","message":"DB PROJECT heat-source PART | heat-submit LSIM REQUEST PART REVISION HASH STUDY.json | heat-work LSIM | heat-status JOB | heat-receipt REQUEST | heat-cancel JOB | heat-retry JOB ATTEMPT | heat-export JOB OUTPUT.lsim | heat-cell LSIM JOB X Y Z | source PART | adaptive-gyroid PROVIDER PART REVISION HASH GRID.json OUTPUT.lvxadap | adaptive-sphere VOXEL_CLI PART REVISION HASH PROFILE.json OUTPUT.lvxadap | adaptive-submit VOXEL_CLI REQUEST PART REVISION HASH PROFILE.json | adaptive-work VOXEL_CLI | adaptive-receipt REQUEST | adaptive-status JOB | adaptive-cancel JOB | adaptive-retry JOB ATTEMPT | adaptive-export JOB OUTPUT.lvxadap | lattice-source PART | lattice-submit[-luma] PROVIDER REQUEST PART REVISION HASH GRID.json [BUNDLE.json] | lattice-work PROVIDER | lattice-receipt REQUEST | lattice-status JOB | lattice-cancel JOB | lattice-retry JOB ATTEMPT | lattice-export JOB FILE.lvx | submit PROVIDER REQUEST PART REVISION HASH GRID.json | submit-luma PROVIDER REQUEST PART REVISION HASH GRID.json BUNDLE.json | work PROVIDER | receipt REQUEST | status JOB | cancel JOB | retry JOB ATTEMPT | export JOB FILE.lvx | field-csg VOXEL_CLI OP LEFT_JOB RIGHT_JOB implicit | mask PUBLICATIONS VOXEL_CLI COMMAND ... | paged PUBLICATIONS VOXEL_CLI DIRECTORY COMMAND ..."})
 }

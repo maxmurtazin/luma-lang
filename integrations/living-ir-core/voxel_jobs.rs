@@ -141,7 +141,7 @@ impl ProjectStore {
         })
     }
 
-    fn voxel_part(
+    pub(super) fn voxel_part(
         &self,
         document: &str,
         pin: Option<(u64, &str)>,
@@ -316,7 +316,7 @@ impl ProjectStore {
         self.run_voxel_artifact_job(provider, compute)
     }
 
-    fn run_voxel_artifact_job<T: JobInput>(
+    pub(super) fn run_voxel_artifact_job<T: JobInput>(
         &self,
         provider: &str,
         compute: impl FnOnce(&T, &dyn Fn() -> bool) -> Result<Value, &'static str>,

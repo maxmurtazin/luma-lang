@@ -481,6 +481,23 @@ def verify_cad3_profile(lock, registry):
             "Invalid CAD-3 adaptive Gyroid surface profile")
 
 
+def verify_cad4_profile(lock):
+    path = FIXTURES / "cad4-box-heat-v1.json"
+    profile = read(path)
+    fixture = "examples/cad/box-heat-study.json"
+    require({path.relative_to(ROOT).as_posix(), fixture} <= set(lock["contract"]["inputs"])
+            and profile["profile"] == path.stem and profile["schema_version"] == 1
+            and profile["provider_commits"] == {
+                name: lock["providers"][name]["commit"] for name in ("core", "simulation")
+            } and profile["qualification"] == "Experimental"
+            and profile["solver_profile"] == "bootstrap-volume-heat-3d-fv-preview-v1"
+            and {"heat-source", "heat-submit", "heat-work", "heat-export", "heat-cell"}
+                <= set(profile["entry_points"])
+            and fixture in profile["evidence"]
+            and all((ROOT / file).is_file() for file in profile["evidence"]),
+            "Invalid CAD-4 Box heat evidence")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--write-docs", action="store_true")
@@ -508,6 +525,7 @@ def main():
     verify_lock(lock, repositories)
     verify_cad2_profile(lock, registry)
     verify_cad3_profile(lock, registry)
+    verify_cad4_profile(lock)
     operations = {}
     for name, row in registry["capabilities"].items():
         descriptor = row["descriptor"]
@@ -535,7 +553,7 @@ def main():
             path.write_text(expected, encoding="utf-8")
         require(path.read_text(encoding="utf-8") == expected, f"Stale capability reference {path.name}")
     validate_links([*DOCS.glob("*.md"), *SPEC.parent.glob("*.md")])
-    print(f"Validated CAD contracts, lock, {len(operations)} capability entries, CAD-2/3 evidence and documentation")
+    print(f"Validated CAD contracts, lock, {len(operations)} capability entries, CAD-2/3/4 evidence and documentation")
 
 
 if __name__ == "__main__":

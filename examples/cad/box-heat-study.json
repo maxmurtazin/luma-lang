@@ -1,0 +1,10 @@
+{
+  "cells": [8, 4, 2],
+  "material": {
+    "id": "reference-solid",
+    "generation": 1,
+    "conductivity_w_per_m_k": 2.0
+  },
+  "min_x_temperature_k": 300.0,
+  "max_x_temperature_k": 340.0
+}
