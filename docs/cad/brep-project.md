@@ -48,7 +48,8 @@ cargo build --locked --manifest-path "$BUILD/native/Cargo.toml"
 | `latest PART FEATURE` | Показывает последнюю публикацию и её актуальность относительно Core. |
 | `measure OPERATION_UUID` | Проверяет опубликованный артефакт и возвращает интервал объёма в м³, исходные контуры, отчёт и provenance. |
 | `view OPERATION_UUID` | Тесселирует проверенный артефакт и возвращает пакет для `pack-publication` в `result`. |
-| `sheet-publish PART LIR2D INPUT SHEET POLICY OUTPUT [--font FONT]` | Выпускает чертёж аналитической пластины из принятой ревизии Part. |
+| `sheet-validate PART LIR2D INPUT SHEET POLICY [--font FONT]` | Проверяет лист и связанные размеры, возвращает точный pin без сохранения файла. |
+| `sheet-publish PART LIR2D INPUT SHEET POLICY OUTPUT [--expect-source REV HASH DRAWING_SHA] [--font FONT]` | Выпускает чертёж аналитической пластины из принятой ревизии Part. |
 | `distance OPERATION_UUID GEOMETRY_SHA solid\|face:N X Y Z` | Возвращает интервал расстояния до границы в метрах и признак возможных нескольких минимумов. Координаты заданы в локальной системе тела. |
 | `section OPERATION_UUID GEOMETRY_SHA FRAME_JSON` | Возвращает аналитическое сечение нормальной экструзии плоскостью, параллельной её основанию. |
 
@@ -65,6 +66,29 @@ ID и хеш его публикации. `FRAME_JSON` содержит числ
 сегменты, окружности и дуги с родными ID. Для профиля доступны один
 внешний контур и отверстия первого уровня. Отдельный отчёт решателя
 ограничений доступен для [самостоятельного Living IR 2D](standalone-2d.md).
+
+## CAD‑5 · Проверка и перепривязка чертежа
+
+Запустите `sheet-validate` для листа с проекциями аналитической пластины.
+В разделе `views` отчёт показывает ассоциативные размеры и их опоры.
+Скопируйте `native_revision`, `definition_hash` и `drawing_sha256` из
+`validated_source` в параметр `--expect-source` при выпуске. Если модель
+или нормализованный чертёж изменились, выпуск вернёт `Conflict`.
+
+После изменения детали повторите проверку, чтобы принять новый pin.
+Если опора сохранилась, отчёт покажет тот же ID и новый размер.
+При пропавшей опоре адаптер возвращает `UnresolvedDrawingReference`
+с диагностикой `projection.anchor_missing`.
+Публикация повторно проверяет результат и ревизию Core под блокировкой.
+Проверенный профиль этой проекции выпускает SVG и PDF с политикой
+`review`. Политика `manufacturing` требует доказанного качества проекции.
+
+```sh
+"$BREP_CLI" "$DB" "$PROJECT" "$DERIVED" sheet-validate "$PART" "$LIR2D" \
+  "$INPUT" "$SHEET" review --font "$FONT"
+"$BREP_CLI" "$DB" "$PROJECT" "$DERIVED" sheet-publish "$PART" "$LIR2D" \
+  "$INPUT" "$SHEET" review review.pdf --expect-source "$REV" "$HASH" "$DRAWING_SHA" --font "$FONT"
+```
 
 <a id="living-view"></a>
 
