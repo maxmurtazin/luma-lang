@@ -1,0 +1,10 @@
+{
+  "cells": [8, 4, 4],
+  "material": { "id": "diffusion-medium", "generation": 1, "coefficient": 0.02, "unit": "m2/s" },
+  "boundaries": {
+    "diffusion": {
+      "min_x_concentration_mol_per_m3": 1.0,
+      "max_x_concentration_mol_per_m3": 5.0
+    }
+  }
+}

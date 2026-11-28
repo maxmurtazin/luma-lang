@@ -149,3 +149,28 @@ pub fn prepare_voxel_task(
         .map_err(PreparationError::Execution)?;
     session.finish().map_err(PreparationError::Parameters)
 }
+
+/// Prepare one stationary solver declaration against the captured project study.
+pub fn prepare_simulation_task(
+    bundle: &host::SourceBundle,
+    expression_budget: usize,
+) -> Result<(), PreparationError> {
+    let session =
+        luma_cad_engine::SimulationHost::for_study().map_err(PreparationError::Parameters)?;
+    host::run_with_host(bundle, host::Mode::Command, &session, expression_budget)
+        .map_err(PreparationError::Execution)?;
+    session.finish().map_err(PreparationError::Parameters)
+}
+
+/// Read one typed observation against the result and selector captured by the native caller.
+pub fn read_simulation_observation(
+    bundle: &host::SourceBundle,
+    observation: &serde_json::Value,
+    expression_budget: usize,
+) -> Result<(), PreparationError> {
+    let session = luma_cad_engine::SimulationHost::for_result(observation)
+        .map_err(PreparationError::Parameters)?;
+    host::run_with_host(bundle, host::Mode::Command, &session, expression_budget)
+        .map_err(PreparationError::Execution)?;
+    session.finish().map_err(PreparationError::Parameters)
+}

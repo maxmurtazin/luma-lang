@@ -17,7 +17,7 @@
       "schema/cad/registry-v1.json": "sha256:a57e6cb7a87338b9a2080e2b1f162c9a3243b76d70907e7622129713560e9f58",
       "schema/cad/sketch-profile-v1.json": "sha256:06237d88913edee9628d806be19c4b8a4b2aae94197f21b219379800f1055716",
       "schema/cad/wire-v1.json": "sha256:1a0a8fe30c338c333d15626abb7c32917684287bc87dc0f3bd9febc0d3a60986",
-      "conformance/cad/registry-v1.json": "sha256:f9d80c9b0da62a97ed34c568fbe36b68cb7404b772ec88e55c4c8c248fd12576",
+      "conformance/cad/registry-v1.json": "sha256:3f85688fc0cc0517bb8848ecec2c5dca107de98b3af680abccbf75a291b3b17f",
       "conformance/cad/cad2-profile-v1.json": "sha256:71252872b985b3fb2ff30ea27ba7648f78160573894a5d41633be1c2e8de646d",
       "conformance/cad/cad3-regular-sphere-v1.json": "sha256:b35943fbe8b3c808f18a36cb35450897fbf4aa52a6945c725769ec26bb3e92f4",
       "conformance/cad/cad3-voxel-project-v1.json": "sha256:d509226d46722300062f0eed086779ebca102409612f6828c2f17b219c11d6ec",
@@ -27,8 +27,14 @@
       "conformance/cad/cad3-adaptive-gyroid-mask-v1.json": "sha256:4bb44824ba6fb61feef872eb719234b1057f8fbeede6a23430e9baf899e3eb62",
       "examples/cad/voxel-adaptive-gyroid.json": "sha256:48f20c5b4a64eb376fdf58012b6b33fc1aba8bde1a307f1d50b89036a9c892bd",
       "conformance/cad/cad3-adaptive-gyroid-surface-v1.json": "sha256:08ee9d877f342cc707e2c544f85c8561cf282693eb59d4f86c596c648f9ec353",
-      "conformance/cad/cad4-box-heat-v1.json": "sha256:174ae35a79128ca6e174dfbe0b68cb9de491ad5d10eb82ea2ea3294116172572",
-      "examples/cad/box-heat-study.json": "sha256:a88d39c5609150bbc25365fba116b9fedc18d63ebc30edbaa75000d02f119434"
+      "conformance/cad/cad4-box-heat-v1.json": "sha256:aa28385e3df8143964276db4719cacbac4aa8c06b2adcff5f5801f8341ea86b4",
+      "examples/cad/box-heat-study.json": "sha256:a88d39c5609150bbc25365fba116b9fedc18d63ebc30edbaa75000d02f119434",
+      "conformance/cad/cad4-box-diffusion-v1.json": "sha256:78a3d6718f1c2f81e3a448511f5eddd2912fec38750e361b2919a6416ba16196",
+      "examples/cad/box-diffusion-study.json": "sha256:1c342d2bace69025d103761d1b5ca543067275b39fbe25a2a8f669855669aa38",
+      "conformance/cad/cad4-box-dc-v1.json": "sha256:e98594275481f06ad56ccf5268555bdac57248b86b71a1fc0be7a15658df0cfc",
+      "examples/cad/box-dc-study.json": "sha256:62649edac211ee627a3bf2454953430d6b4a549087e3668545d48574f2510dd0",
+      "examples/cad/box-solve-command.json": "sha256:cc149a551af8f8134d00e87c4cc3ff1f7f4d4c4102cf3bc5c090b6243e873b83",
+      "examples/cad/box-query-command.json": "sha256:5d821146debb233c5b4b9bd3cca46deb85938a1b2f060fdaf7621f038a05c1a9"
     }
   },
   "numeric_profiles": [
@@ -109,7 +115,11 @@
       "review_paths": [
         "docs/SUPPORT.md",
         "integration/living-ir/Cargo.toml",
-        "integration/living-ir/README.md"
+        "integration/living-ir/README.md",
+        "simulation-cli/src/main.rs",
+        "simulation-core/src/volume_heat/mod.rs",
+        "simulation-core/src/volume_diffusion/mod.rs",
+        "simulation-core/src/volume_dc/mod.rs"
       ]
     },
     "studio": {

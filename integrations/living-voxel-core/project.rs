@@ -55,7 +55,9 @@ fn execute(args: &[String]) -> Result<Value> {
         .ok_or_else(|| json!({"code":"ProjectKey","message":"Expected a 32-byte hex key"}))?;
     let mut store = ProjectStore::open(Path::new(database), project, key).map_err(core_error)?;
     match (action.as_str(), args) {
-        (action, args) if action.starts_with("heat-") => thermal::execute(&store, action, args),
+        (action, args) if action.starts_with("heat-") || action.starts_with("transport-") => {
+            thermal::execute(&store, action, args)
+        }
         ("adaptive-sphere", [provider, part, revision, hash, profile, output]) => {
             let source = store
                 .voxel_sphere_source(part, Some((revision.parse().map_err(|_| usage())?, hash)))
@@ -356,16 +358,19 @@ fn verify_container(report: &Value, bytes: &[u8], magic: &[u8; 8]) -> bool {
 }
 
 fn check_bundle(path: &Path) -> Result<String> {
+    let bundle = read_bundle(path)?;
+    luma::cad::prepare_voxel_task(&bundle, 100_000)
+        .map_err(|error| json!({"code":"VoxelTaskPlanRejected","message":format!("{error:?}")}))?;
+    Ok(bundle.source_digest())
+}
+
+fn read_bundle(path: &Path) -> Result<luma::host::SourceBundle> {
     let bytes = read(path, 256 * 1024)?;
     let invalid_bundle = |message: String| json!({"code":"InvalidSourceBundle","message":message});
     let wire: luma::host::WireSourceBundle =
         serde_json::from_slice(&bytes).map_err(|error| invalid_bundle(error.to_string()))?;
-    let bundle = wire
-        .admit()
-        .map_err(|error| invalid_bundle(format!("{:?}", error.diagnostics)))?;
-    luma::cad::prepare_voxel_task(&bundle, 100_000)
-        .map_err(|error| json!({"code":"VoxelTaskPlanRejected","message":format!("{error:?}")}))?;
-    Ok(bundle.source_digest())
+    wire.admit()
+        .map_err(|error| invalid_bundle(format!("{:?}", error.diagnostics)))
 }
 
 fn publish(output: &Path, bytes: &[u8]) -> Result<()> {
@@ -471,5 +476,5 @@ fn corrupt() -> Value {
 }
 
 fn usage() -> Value {
-    json!({"code":"Usage","message":"DB PROJECT heat-source PART | heat-submit LSIM REQUEST PART REVISION HASH STUDY.json | heat-work LSIM | heat-status JOB | heat-receipt REQUEST | heat-cancel JOB | heat-retry JOB ATTEMPT | heat-export JOB OUTPUT.lsim | heat-cell LSIM JOB X Y Z | source PART | adaptive-gyroid PROVIDER PART REVISION HASH GRID.json OUTPUT.lvxadap | adaptive-sphere VOXEL_CLI PART REVISION HASH PROFILE.json OUTPUT.lvxadap | adaptive-submit VOXEL_CLI REQUEST PART REVISION HASH PROFILE.json | adaptive-work VOXEL_CLI | adaptive-receipt REQUEST | adaptive-status JOB | adaptive-cancel JOB | adaptive-retry JOB ATTEMPT | adaptive-export JOB OUTPUT.lvxadap | lattice-source PART | lattice-submit[-luma] PROVIDER REQUEST PART REVISION HASH GRID.json [BUNDLE.json] | lattice-work PROVIDER | lattice-receipt REQUEST | lattice-status JOB | lattice-cancel JOB | lattice-retry JOB ATTEMPT | lattice-export JOB FILE.lvx | submit PROVIDER REQUEST PART REVISION HASH GRID.json | submit-luma PROVIDER REQUEST PART REVISION HASH GRID.json BUNDLE.json | work PROVIDER | receipt REQUEST | status JOB | cancel JOB | retry JOB ATTEMPT | export JOB FILE.lvx | field-csg VOXEL_CLI OP LEFT_JOB RIGHT_JOB implicit | mask PUBLICATIONS VOXEL_CLI COMMAND ... | paged PUBLICATIONS VOXEL_CLI DIRECTORY COMMAND ..."})
+    json!({"code":"Usage","message":"DB PROJECT heat-source PART | heat-submit[-luma] LSIM REQUEST PART REVISION HASH STUDY.json [BUNDLE.json] | heat-work LSIM | heat-status JOB | heat-receipt REQUEST | heat-cancel JOB | heat-retry JOB ATTEMPT | heat-export JOB OUTPUT.lsim | heat-cell[-luma] LSIM JOB X Y Z [BUNDLE.json] | heat-boundary[-luma] LSIM JOB SIDE [BUNDLE.json] | heat-view JOB | transport-source PART | transport-submit[-luma] LSIM REQUEST PART REVISION HASH STUDY.json [BUNDLE.json] | transport-work LSIM | transport-status JOB | transport-receipt REQUEST | transport-cancel JOB | transport-retry JOB ATTEMPT | transport-export JOB OUTPUT.lsim | transport-cell[-luma] LSIM JOB X Y Z [BUNDLE.json] | transport-boundary[-luma] LSIM JOB SIDE [BUNDLE.json] | transport-view JOB | source PART | adaptive-gyroid PROVIDER PART REVISION HASH GRID.json OUTPUT.lvxadap | adaptive-sphere VOXEL_CLI PART REVISION HASH PROFILE.json OUTPUT.lvxadap | adaptive-submit VOXEL_CLI REQUEST PART REVISION HASH PROFILE.json | adaptive-work VOXEL_CLI | adaptive-receipt REQUEST | adaptive-status JOB | adaptive-cancel JOB | adaptive-retry JOB ATTEMPT | adaptive-export JOB OUTPUT.lvxadap | lattice-source PART | lattice-submit[-luma] PROVIDER REQUEST PART REVISION HASH GRID.json [BUNDLE.json] | lattice-work PROVIDER | lattice-receipt REQUEST | lattice-status JOB | lattice-cancel JOB | lattice-retry JOB ATTEMPT | lattice-export JOB FILE.lvx | submit PROVIDER REQUEST PART REVISION HASH GRID.json | submit-luma PROVIDER REQUEST PART REVISION HASH GRID.json BUNDLE.json | work PROVIDER | receipt REQUEST | status JOB | cancel JOB | retry JOB ATTEMPT | export JOB FILE.lvx | field-csg VOXEL_CLI OP LEFT_JOB RIGHT_JOB implicit | mask PUBLICATIONS VOXEL_CLI COMMAND ... | paged PUBLICATIONS VOXEL_CLI DIRECTORY COMMAND ..."})
 }

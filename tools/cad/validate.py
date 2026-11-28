@@ -353,7 +353,7 @@ def verify_cad2_profile(lock, registry):
                     and entry["target"] == "t0" and entry["entry_points"]
                     and entry["checks"] and set(entry["checks"]) <= set(checks)
                     and targets == {"t0": "passed", "t1": "not_run"}, f"Unqualified CAD-2 status for {name}")
-        elif name != "voxel.sample":
+        elif name not in {"voxel.sample", "sim.solve", "sim.query"}:
             require(row["binding"] == "planned" and row["availability"] == "unavailable"
                     and set(targets.values()) == {"not_run"}, f"Unsupported status inflation for {name}")
 
@@ -481,21 +481,37 @@ def verify_cad3_profile(lock, registry):
             "Invalid CAD-3 adaptive Gyroid surface profile")
 
 
-def verify_cad4_profile(lock):
-    path = FIXTURES / "cad4-box-heat-v1.json"
-    profile = read(path)
-    fixture = "examples/cad/box-heat-study.json"
-    require({path.relative_to(ROOT).as_posix(), fixture} <= set(lock["contract"]["inputs"])
-            and profile["profile"] == path.stem and profile["schema_version"] == 1
-            and profile["provider_commits"] == {
-                name: lock["providers"][name]["commit"] for name in ("core", "simulation")
-            } and profile["qualification"] == "Experimental"
-            and profile["solver_profile"] == "bootstrap-volume-heat-3d-fv-preview-v1"
-            and {"heat-source", "heat-submit", "heat-work", "heat-export", "heat-cell"}
-                <= set(profile["entry_points"])
-            and fixture in profile["evidence"]
-            and all((ROOT / file).is_file() for file in profile["evidence"]),
-            "Invalid CAD-4 Box heat evidence")
+def verify_cad4_profiles(lock, registry):
+    commands = {"examples/cad/box-solve-command.json", "examples/cad/box-query-command.json"}
+    for physics, family in (("heat", "heat"), ("diffusion", "transport"), ("dc", "transport")):
+        path = FIXTURES / f"cad4-box-{physics}-v1.json"
+        profile = read(path)
+        fixture = f"examples/cad/box-{physics}-study.json"
+        require({path.relative_to(ROOT).as_posix(), fixture} | commands <= set(lock["contract"]["inputs"])
+                and profile["profile"] == path.stem and profile["schema_version"] == 1
+                and profile["provider_commits"] == {
+                    name: lock["providers"][name]["commit"] for name in ("core", "simulation")
+                } and profile["qualification"] == "Experimental"
+                and profile["solver_profile"] == f"bootstrap-volume-{physics}-3d-fv-preview-v1"
+                and profile["visualization"] == "UnsupportedCapability"
+                and set(profile["entry_points"]) == {
+                    f"{family}-{action}" for action in (
+                        "source", "submit", "submit-luma", "work", "receipt", "status", "cancel",
+                        "retry", "export", "cell", "cell-luma", "boundary", "boundary-luma",
+                    )
+                }
+                and {fixture} | commands <= set(profile["evidence"])
+                and all((ROOT / file).is_file() for file in profile["evidence"]),
+                f"Invalid CAD-4 Box {physics} evidence")
+    for operation, effect in (("sim.solve", "DeclareTask"), ("sim.query", "ReadPinned")):
+        row = registry["capabilities"][operation]
+        require(row["stage"] == "CAD-4"
+                and row["descriptor"]["modes"] == ["command"]
+                and row["descriptor"]["effects"] == [effect]
+                and row["binding"] == row["adapter"] == "qualified_profile"
+                and row["availability"] == "available"
+                and row["target_verification"]["t0"] == "passed",
+                f"Invalid CAD-4 command binding {operation}")
 
 
 def main():
@@ -525,7 +541,7 @@ def main():
     verify_lock(lock, repositories)
     verify_cad2_profile(lock, registry)
     verify_cad3_profile(lock, registry)
-    verify_cad4_profile(lock)
+    verify_cad4_profiles(lock, registry)
     operations = {}
     for name, row in registry["capabilities"].items():
         descriptor = row["descriptor"]

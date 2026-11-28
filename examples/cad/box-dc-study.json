@@ -1,0 +1,10 @@
+{
+  "cells": [8, 4, 4],
+  "material": { "id": "electrical-conductor", "generation": 1, "coefficient": 5.0, "unit": "S/m" },
+  "boundaries": {
+    "dc": {
+      "min_x_potential_v": 2.0,
+      "max_x_potential_v": -2.0
+    }
+  }
+}

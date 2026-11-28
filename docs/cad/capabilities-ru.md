@@ -19,7 +19,8 @@
 | `param.set` | CAD-1 | implemented | absent | planned | unavailable | not_run / not_run | Binding в Luma запланирован. |
 | `project.parameter` | CAD-1 | implemented | absent | planned | unavailable | not_run / not_run | Binding в Luma запланирован. |
 | `render.still` | CAD-6 | implemented | absent | planned | unavailable | not_run / not_run | Binding в Luma запланирован. |
-| `sim.solve` | CAD-4 | experimental | implemented | planned | unavailable | not_run / not_run | Binding в Luma запланирован. |
+| `sim.query` | CAD-4 | experimental | qualified_profile | qualified_profile | available | passed / not_run | Команда Luma читает архивное значение ячейки или грани с физической величиной, единицами и адресом. |
+| `sim.solve` | CAD-4 | experimental | qualified_profile | qualified_profile | available | passed / not_run | Команда Luma объявляет стационарное исследование Box с закреплёнными материалом и границами. Очередь Core публикует проверенный архив Living Simulation. |
 | `sketch.profile` | CAD-2 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Замкнутый встроенный эскиз XY с полным набором ограничений и проверкой закреплённым решателем. |
 | `units.add` | CAD-1 | absent | absent | planned | unavailable | not_run / not_run | Binding в Luma запланирован. |
 | `units.mm` | CAD-1 | absent | absent | planned | unavailable | not_run / not_run | Binding в Luma запланирован. |
@@ -40,6 +41,7 @@
 - `param.set(ref: ParamRef<T>, value: T) → Unit` · `BuildPlan`
 - `project.parameter(part: PartRef, key: StableKey) → ParamRef<T>` · `ReadPinned`
 - `render.still(presentation: PresentationRef, time: Time, options: RenderOptionsRef) → TaskSpecRef<PNGMaster>` · `DeclareTask`
+- `sim.query(result: SimulationResultRef, quantity: SimulationQuantity, selector: SimulationSelector) → SimulationObservation` · `ReadPinned`
 - `sim.solve(study: StudyRef, options: SolveOptionsRef) → TaskSpecRef<SimulationResult>` · `DeclareTask`
 - `sketch.profile(sketch: SketchRef) → ProfileRef` · `BuildPlan`
 - `units.add(a: Quantity<D,KA>, b: Quantity<D,KB>) → Quantity<D,KOut>` · `Pure`

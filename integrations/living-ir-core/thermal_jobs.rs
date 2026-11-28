@@ -18,6 +18,26 @@ pub struct BoxSource {
 pub struct HeatInput {
     pub source: BoxSource,
     pub study: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command_digest: Option<String>,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct TransportInput {
+    pub source: BoxSource,
+    pub study: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command_digest: Option<String>,
+}
+
+impl BoxSource {
+    fn pin(&self) -> queue::SourcePin {
+        queue::SourcePin {
+            document: self.document.clone(),
+            revision: self.revision,
+            definition_digest: jobs::normalized_hash(&self.definition_hash),
+        }
+    }
 }
 
 impl JobInput for HeatInput {
@@ -29,11 +49,20 @@ impl JobInput for HeatInput {
     const RESULT_DOMAIN: &[u8] = b"luma-thermal-job-result/1";
 
     fn pin(&self) -> queue::SourcePin {
-        queue::SourcePin {
-            document: self.source.document.clone(),
-            revision: self.source.revision,
-            definition_digest: jobs::normalized_hash(&self.source.definition_hash),
-        }
+        self.source.pin()
+    }
+}
+
+impl JobInput for TransportInput {
+    const PREFIX: &str = "transport";
+    const TASK: &str = "stationary-box-transport";
+    const OPERATION: &str = "simulation.stationary.box_transport";
+    const SCHEMA: &str = "luma.simulation.transport-archive/1";
+    const INPUT_DOMAIN: &[u8] = b"luma-transport-job-input/1";
+    const RESULT_DOMAIN: &[u8] = b"luma-transport-job-result/1";
+
+    fn pin(&self) -> queue::SourcePin {
+        self.source.pin()
     }
 }
 
@@ -103,9 +132,18 @@ impl ProjectStore {
         part: &str,
         pin: (u64, &str),
         study: Value,
+        command_digest: Option<String>,
     ) -> Result<queue::Delivery, Error> {
         let source = self.heat_box_source(part, Some(pin))?;
-        self.admit_artifact_job(request, provider, HeatInput { source, study })
+        self.admit_artifact_job(
+            request,
+            provider,
+            HeatInput {
+                source,
+                study,
+                command_digest,
+            },
+        )
     }
 
     pub fn run_heat(
@@ -126,5 +164,46 @@ impl ProjectStore {
 
     pub fn heat_result(&self, job: i64) -> Result<Value, Error> {
         self.artifact_job_result::<HeatInput>(job)
+    }
+
+    pub fn admit_transport(
+        &self,
+        request: &str,
+        provider: &str,
+        part: &str,
+        pin: (u64, &str),
+        study: Value,
+        command_digest: Option<String>,
+    ) -> Result<queue::Delivery, Error> {
+        let source = self.heat_box_source(part, Some(pin))?;
+        self.admit_artifact_job(
+            request,
+            provider,
+            TransportInput {
+                source,
+                study,
+                command_digest,
+            },
+        )
+    }
+
+    pub fn run_transport(
+        &self,
+        provider: &str,
+        compute: impl FnOnce(&TransportInput, &dyn Fn() -> bool) -> Result<Value, &'static str>,
+    ) -> Result<Option<queue::JobReceipt>, Error> {
+        self.run_voxel_artifact_job(provider, compute)
+    }
+
+    pub fn transport_status(&self, job: i64) -> Result<queue::JobReceipt, Error> {
+        self.artifact_job_status::<TransportInput>(job)
+    }
+
+    pub fn transport_receipt(&self, request: &str) -> Result<queue::Delivery, Error> {
+        self.artifact_job_receipt::<TransportInput>(request)
+    }
+
+    pub fn transport_result(&self, job: i64) -> Result<Value, Error> {
+        self.artifact_job_result::<TransportInput>(job)
     }
 }

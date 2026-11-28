@@ -841,6 +841,81 @@
         "ru": "Binding в Luma запланирован."
       }
     },
+    "sim.query": {
+      "descriptor": {
+        "qualified_name": "sim.query",
+        "operation_id": "sim.query",
+        "operation_version": {
+          "major": 1,
+          "minor": 0
+        },
+        "parameters": [
+          {
+            "name": "result",
+            "type": "SimulationResultRef"
+          },
+          {
+            "name": "quantity",
+            "type": "SimulationQuantity"
+          },
+          {
+            "name": "selector",
+            "type": "SimulationSelector"
+          }
+        ],
+        "result_type": "SimulationObservation",
+        "type_scheme": {
+          "kind": "monomorphic"
+        },
+        "effects": [
+          "ReadPinned"
+        ],
+        "modes": [
+          "command"
+        ],
+        "phases": [
+          "prepare"
+        ],
+        "capability_predicates": [
+          "sim.query"
+        ],
+        "diagnostic_codes": [
+          "UnsupportedCapability",
+          "UnsupportedSchemaVersion",
+          "InputChanged",
+          "SimulationQueryRejected"
+        ],
+        "provider_contract": "simulation@c906f43a052fd918f33b94965045f449d3468544"
+      },
+      "provider": "simulation",
+      "backend_operation": "stationary archive cell average or outward face flow",
+      "backend_version": "0.1.0",
+      "adapter_version": "luma-cad-box-simulation-project@1",
+      "stage": "CAD-4",
+      "backend": "experimental",
+      "adapter": "qualified_profile",
+      "binding": "qualified_profile",
+      "availability": "available",
+      "input_support": "requires_preflight",
+      "target_verification": {
+        "t0": "passed",
+        "t1": "not_run"
+      },
+      "evidence": [
+        "docs/SUPPORT.md",
+        "simulation-cli/src/main.rs",
+        "simulation-core/src/volume_heat/mod.rs",
+        "simulation-core/src/volume_diffusion/mod.rs",
+        "simulation-core/src/volume_dc/mod.rs"
+      ],
+      "required_grants": [],
+      "limits": "One provider-verified cell average or outward face flow from a published Box archive using its pinned solver binary.",
+      "numerical_profile": "si-f64-v1",
+      "reason": {
+        "en": "A Luma command reads an archived cell or face observation with its physical quantity, units and address.",
+        "ru": "Команда Luma читает архивное значение ячейки или грани с физической величиной, единицами и адресом."
+      }
+    },
     "sim.solve": {
       "descriptor": {
         "qualified_name": "sim.solve",
@@ -867,7 +942,6 @@
           "DeclareTask"
         ],
         "modes": [
-          "recipe",
           "command"
         ],
         "phases": [
@@ -878,37 +952,43 @@
         ],
         "diagnostic_codes": [
           "UnsupportedCapability",
-          "UnsupportedSchemaVersion"
+          "UnsupportedSchemaVersion",
+          "UnsupportedGeometry",
+          "InvalidHeatStudy",
+          "InvalidTransportStudy",
+          "SimulationTaskPlanRejected"
         ],
         "provider_contract": "simulation@c906f43a052fd918f33b94965045f449d3468544"
       },
       "provider": "simulation",
       "backend_operation": "stationary heat/diffusion/DC",
       "backend_version": "0.1.0",
-      "adapter_version": "living-ir-adapter@0.1.0",
+      "adapter_version": "luma-cad-box-simulation-project@1",
       "stage": "CAD-4",
       "backend": "experimental",
-      "adapter": "implemented",
-      "binding": "planned",
-      "availability": "unavailable",
+      "adapter": "qualified_profile",
+      "binding": "qualified_profile",
+      "availability": "available",
       "input_support": "requires_preflight",
       "target_verification": {
-        "t0": "not_run",
+        "t0": "passed",
         "t1": "not_run"
       },
       "evidence": [
         "docs/SUPPORT.md",
-        "integration/living-ir/Cargo.toml",
-        "integration/living-ir/README.md"
+        "simulation-cli/src/main.rs",
+        "simulation-core/src/volume_heat/mod.rs",
+        "simulation-core/src/volume_diffusion/mod.rs",
+        "simulation-core/src/volume_dc/mod.rs"
       ],
       "required_grants": [
         "job-submit"
       ],
-      "limits": "Pinned simulation-to-Core adapter uses a different Core commit; integrated geometry is Box",
+      "limits": "Stationary heat, diffusion and DC on an accepted axis-aligned Core Box, at most 4096 cells. The solver qualification is Experimental. The Simulation-to-View bridge is unavailable.",
       "numerical_profile": "si-f64-v1",
       "reason": {
-        "en": "The Luma host binding is planned.",
-        "ru": "Binding в Luma запланирован."
+        "en": "A Luma command declares a stationary Box study with captured material and boundaries. The Core queue publishes its verified Living Simulation archive.",
+        "ru": "Команда Luma объявляет стационарное исследование Box с закреплёнными материалом и границами. Очередь Core публикует проверенный архив Living Simulation."
       }
     },
     "sketch.profile": {
