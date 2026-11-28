@@ -437,6 +437,14 @@ def verify_cad3_profile(lock, registry):
             and len(example["refinement"]["regions"]) <= adaptive["max_refinement_regions"]
             and example["max_hausdorff_error_m"] == adaptive["surface"]["fixture_tolerance_m"],
             "Invalid CAD-3 adaptive sphere evidence")
+    require(set(adaptive["queue"]) == {
+        "adaptive-submit", "adaptive-work", "adaptive-receipt", "adaptive-status",
+        "adaptive-cancel", "adaptive-retry", "adaptive-export"
+    } and adaptive["view"]["provider_commit"] == lock["providers"]["view"]["commit"]
+            and adaptive["view"]["source_binding"] == "ExternalAsset"
+            and adaptive["view"]["display_mesh_accuracy"] == "Unavailable"
+            and "tools/cad/test-adaptive-view.py" in adaptive["evidence"],
+            "Invalid CAD-3 adaptive queue or View profile")
 
 
 def main():

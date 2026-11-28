@@ -22,6 +22,23 @@
   },
   "evidence": [
     "examples/cad/voxel-adaptive-sphere.json",
-    "integrations/living-voxel-core/project_test.rs"
-  ]
+    "integrations/living-voxel-core/project_test.rs",
+    "tools/cad/test-adaptive-view.py",
+    "tools/cad/test-view-scene.mjs"
+  ],
+  "queue": [
+    "adaptive-submit",
+    "adaptive-work",
+    "adaptive-receipt",
+    "adaptive-status",
+    "adaptive-cancel",
+    "adaptive-retry",
+    "adaptive-export"
+  ],
+  "view": {
+    "provider_commit": "a94fe6cca6f1d2982bb85e4cd4170422ba77f7b4",
+    "target": "Chromium 159, software WebGPU",
+    "source_binding": "ExternalAsset",
+    "display_mesh_accuracy": "Unavailable"
+  }
 }

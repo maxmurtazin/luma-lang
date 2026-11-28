@@ -271,9 +271,43 @@ Contouring. Экспорт записывает новый файл после �
 Отчёт связывает ревизию Part, хеш бинарника, хеши файла и дерева и
 поверхность с численной границей ошибки. Сам LVXADAP хранит
 аналитическую сферу и данные дерева поставщика. Сохраните отчёт для
-привязки к авторской ревизии Core. Маршрут выполняется синхронно.
-Адаптивные решётки Gyroid, очередь адаптивных задач и передача
-адаптивной поверхности в Living View остаются вне этого профиля.
+привязки к авторской ревизии Core. Команда `adaptive-sphere` выполняется
+синхронно. Для восстановления после сбоя используйте очередь Core.
+
+```sh
+"$PROJECT_CLI" "$DB" "$PROJECT" adaptive-submit "$VOXEL_CLI" "$REQUEST" \
+  "$PART" "$PART_REV" "$DEFINITION_HASH" examples/cad/voxel-adaptive-sphere.json
+"$PROJECT_CLI" "$DB" "$PROJECT" adaptive-work "$VOXEL_CLI"
+"$PROJECT_CLI" "$DB" "$PROJECT" adaptive-export "$JOB" sphere.lvxadap > adaptive-report.json
+```
+
+`REQUEST` — UUID команды, `JOB` — номер из квитанции. `adaptive-receipt
+REQUEST` читает исходную квитанцию, `adaptive-status JOB` — состояние
+попытки. После сбоя отмените незавершённую попытку через `adaptive-cancel
+JOB` и запустите `adaptive-retry JOB ATTEMPT` с её номером. Очередь
+закрепляет бинарник поставщика и ограничивает сохранённый отчёт вместе
+с закодированным артефактом восемью МиБ.
+
+### Показ адаптивной сферы
+
+Соберите `pack-voxel` по инструкции для обычной сетки. Передайте
+проверенный LVXADAP и отчёт команды без изменения входных данных.
+
+```sh
+"$VIEW_BUILD/target/debug/pack-voxel" adaptive sphere.lvxadap \
+  < adaptive-report.json > adaptive-view.json
+jq -e .bundle adaptive-view.json > adaptive-scene.json
+VIEW_FIT=1 VIEW_EXPECTED_REVISION=1 VIEW_RECOVERY=1 WEBGPU_SOFTWARE=1 \
+  VIEW_SOURCE_SHA256="$(jq -er '.result.digests.blob_digest' adaptive-report.json)" \
+  node tools/cad/test-view-scene.mjs "$VIEW" adaptive-scene.json
+```
+
+Пакет сохраняет SHA‑256 LVXADAP, идентичность дерева и авторской ревизии,
+хеш входного отчёта и исходную границу Хаусдорфа в `evidence`.
+Граница относится к сетке поставщика в метрах. Для геометрии,
+подготовленной к показу в View, точность остаётся `Unavailable`.
+View связывает выбор объекта с LVXADAP через `ExternalAsset`.
+Адаптивные решётки Gyroid остаются за рамками этого профиля.
 
 Тест `publishes_balanced_adaptive_tree_for_the_captured_core_sphere`
 проверяет переходы 2:1, замкнутость сетки, сохранение исторической

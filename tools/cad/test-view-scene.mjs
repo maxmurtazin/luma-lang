@@ -119,6 +119,9 @@ try {
     const pick = await page.evaluate(() => window.pickFace(240, 180));
     assert.equal(pick.result.status, "hit");
     assert.equal(pick.result.source.kind, "external_asset");
+    if (process.env.VIEW_SOURCE_SHA256) {
+      assert.equal(pick.result.source.asset_id, process.env.VIEW_SOURCE_SHA256);
+    }
     assert.equal(pick.result.precision, "display_mesh_unknown");
     assert.equal(pick.result.entity_ordinal, undefined);
 

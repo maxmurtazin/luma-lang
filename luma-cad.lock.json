@@ -22,7 +22,7 @@
       "conformance/cad/cad3-regular-sphere-v1.json": "sha256:b35943fbe8b3c808f18a36cb35450897fbf4aa52a6945c725769ec26bb3e92f4",
       "conformance/cad/cad3-voxel-project-v1.json": "sha256:d509226d46722300062f0eed086779ebca102409612f6828c2f17b219c11d6ec",
       "conformance/cad/cad3-gyroid-regular-v1.json": "sha256:aeaaa490aefa977dec85304d148434cb57b69ff004135d32603effe1fb57d93a",
-      "conformance/cad/cad3-adaptive-sphere-v1.json": "sha256:be2271836aef5fd55fdc516abfc6c295939953225f90b4cb37080d29b08f4d49",
+      "conformance/cad/cad3-adaptive-sphere-v1.json": "sha256:80c1c7e3a2a84a167b8733c0dfacb18ec33842fc65ba523ae9f3c8b392cd858c",
       "examples/cad/voxel-adaptive-sphere.json": "sha256:7cd291d146590a0cb1f6e2937be37d2038fe509aefe4842d63d727711f981d52"
     }
   },

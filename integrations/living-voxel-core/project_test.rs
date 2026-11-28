@@ -754,6 +754,73 @@ fn publishes_balanced_adaptive_tree_for_the_captured_core_sphere() {
         assert!((x.hypot(y).hypot(z) - 0.0693359375).abs() <= bound);
     }
 
+    let submit = [
+        "adaptive-submit",
+        &provider,
+        REQUEST,
+        PART,
+        &revision,
+        pin["definition_hash"].as_str().unwrap(),
+        profile.to_str().unwrap(),
+    ];
+    let admitted = fixture.call(&submit, 0);
+    let job = admitted["job"].to_string();
+    assert_eq!(fixture.call(&submit, 0), admitted);
+    assert_eq!(fixture.call(&["adaptive-receipt", REQUEST], 0), admitted);
+    let regular_provider = std::env::var("LUMA_VOXEL_PROVIDER").unwrap();
+    assert!(fixture
+        .call(&["adaptive-work", &regular_provider], 0)
+        .is_null());
+    let failed_attempt = if cfg!(feature = "checkpoint-fault-injection") {
+        assert_eq!(
+            fixture
+                .run(
+                    &["adaptive-work", &provider],
+                    Some("adaptive-sphere-job-before-publication")
+                )
+                .status
+                .code(),
+            Some(73)
+        );
+        assert_eq!(
+            fixture.call(&["adaptive-status", &job], 0)["state"],
+            "running"
+        );
+        1
+    } else {
+        0
+    };
+    assert_eq!(
+        fixture.call(&["adaptive-export", &job, output.to_str().unwrap()], 2)["code"],
+        "JobPending"
+    );
+    assert_eq!(
+        fixture.call(&["adaptive-cancel", &job], 0)["state"],
+        "cancelled"
+    );
+    assert_eq!(
+        fixture.call(&["adaptive-retry", &job, &failed_attempt.to_string()], 0)["state"],
+        "admitted"
+    );
+    let completed = fixture.call(&["adaptive-work", &provider], 0);
+    assert_eq!(completed["state"], "published");
+    assert_eq!(completed["attempt"], failed_attempt + 1);
+    let target = std::env::var_os("LUMA_VOXEL_ADAPTIVE_EVIDENCE");
+    let dir = target.as_ref().map(Path::new).unwrap_or(fixture.dir.path());
+    let exported = dir.join("adaptive-job.lvxadap");
+    let recovered = fixture.call(&["adaptive-export", &job, exported.to_str().unwrap()], 0);
+    assert_eq!(fs::read(&exported).unwrap(), bytes);
+    assert_eq!(recovered["part_source"], pin);
+    assert_eq!(recovered["surface"], result["surface"]);
+    assert!(recovered["job_manifest"].is_object());
+    if target.is_some() {
+        fs::write(
+            dir.join("adaptive-report.json"),
+            json!({"result":recovered}).to_string(),
+        )
+        .unwrap();
+    }
+
     let decoded = |path: &Path| {
         Command::new(&provider)
             .arg("decode-adaptive-sphere")
