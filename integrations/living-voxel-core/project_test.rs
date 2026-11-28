@@ -1151,14 +1151,28 @@ fn recovers_stationary_box_heat_from_the_historical_part_and_material() {
     }
     let query = ["heat-cell", &solver, &job, "0", "0", "0"];
     assert!((fixture.call(&query, 0)["value"].as_f64().unwrap() - 302.5).abs() < 1e-8);
+    let boundary = fixture.call(&["heat-boundary", &solver, &job, "min_x"], 0);
+    assert_eq!(boundary["quantity"], "heat_flow");
+    assert_eq!(boundary["unit"], "W");
+    assert!((boundary["value"].as_f64().unwrap() - 1.2).abs() < 1e-8);
 
     let mut newer: Value = serde_json::from_slice(include_bytes!("box-heat-study.json")).unwrap();
     newer["material"]["generation"] = json!(2);
     newer["material"]["conductivity_w_per_m_k"] = json!(4);
     fs::write(&grid, newer.to_string()).unwrap();
     assert_eq!(fixture.call(&submit, 4)["code"], "RequestIdReuse");
-    let mut next = submit;
-    next[2] = "00000000-0000-4000-8000-000000000013";
+    let solve = fixture.dir.path().join("solve.json");
+    fs::write(&solve, include_bytes!("box-solve-command.json")).unwrap();
+    let next = [
+        "heat-submit-luma",
+        &solver,
+        "00000000-0000-4000-8000-000000000013",
+        PART,
+        &revision,
+        hash,
+        grid.to_str().unwrap(),
+        solve.to_str().unwrap(),
+    ];
     let next_job = fixture.call(&next, 0)["job"].to_string();
     assert_eq!(
         fixture.call(&["heat-work", &solver], 0)["state"],
@@ -1179,4 +1193,305 @@ fn recovers_stationary_box_heat_from_the_historical_part_and_material() {
     newer["boundaries"] = json!([]);
     fs::write(&grid, newer.to_string()).unwrap();
     assert_eq!(fixture.call(&next, 2)["code"], "InvalidHeatStudy");
+}
+
+#[cfg(feature = "cad4-thermal-tests")]
+#[test]
+fn publishes_stationary_box_diffusion_with_molar_balance() {
+    assert_box_transport(
+        include_bytes!("box-diffusion-study.json"),
+        "cad4-box-diffusion-v1",
+        "boundary_outward_molar_flow_mol_per_s",
+        ("molar_flow", "mol/s", 0.0012),
+        ("amount_concentration", "mol/m3", 1.25),
+    );
+}
+
+#[cfg(feature = "cad4-thermal-tests")]
+#[test]
+fn publishes_stationary_box_dc_with_current_and_power_balance() {
+    let summary = assert_box_transport(
+        include_bytes!("box-dc-study.json"),
+        "cad4-box-dc-v1",
+        "boundary_outward_current_a",
+        ("electric_current", "A", -0.3),
+        ("electric_potential", "V", 1.75),
+    );
+    let power = &summary["power"];
+    for key in ["electrode_input_power_w", "joule_dissipation_w"] {
+        assert!((power[key].as_f64().unwrap() - 1.2).abs() < 1e-8);
+    }
+    assert!(
+        power["relative_imbalance"].as_f64().unwrap()
+            <= power["relative_imbalance_limit"].as_f64().unwrap()
+    );
+}
+
+#[cfg(feature = "cad4-thermal-tests")]
+fn assert_box_transport(
+    study: &[u8],
+    profile: &str,
+    flows_key: &str,
+    (flow_quantity, flow_unit, flow): (&str, &str, f64),
+    (cell_quantity, cell_unit, cell_value): (&str, &str, f64),
+) -> Value {
+    let solver = std::env::var("LUMA_SIM_CLI").expect("absolute path to the pinned lsim");
+    let mut fixture = Fixture::new();
+    fixture.edit(json!({"op":"add","kind":"sphere"}));
+    let sphere = fixture.call(&["source", PART], 0);
+    let input = fixture.dir.path().join("study.json");
+    fs::write(&input, study).unwrap();
+    let input_path = input.to_str().unwrap();
+    assert_eq!(
+        fixture.call(
+            &[
+                "transport-submit",
+                "missing-lsim",
+                REQUEST,
+                PART,
+                &sphere["revision"].to_string(),
+                sphere["definition_hash"].as_str().unwrap(),
+                input_path
+            ],
+            2
+        )["code"],
+        "UnsupportedGeometry"
+    );
+
+    fixture.edit(json!({"op":"add","kind":"box"}));
+    let node = fixture.call(&["transport-source", PART], 0)["entity"].clone();
+    fixture
+        .edit(json!({"op":"properties","node":node,"values":{"width":40,"height":30,"depth":20}}));
+    let pin = fixture.call(&["transport-source", PART], 0);
+    let revision = pin["revision"].to_string();
+    let hash = pin["definition_hash"].as_str().unwrap();
+    let submit = [
+        "transport-submit",
+        &solver,
+        REQUEST,
+        PART,
+        &revision,
+        hash,
+        input_path,
+    ];
+    let mut invalid: Value = serde_json::from_slice(study).unwrap();
+    invalid["boundaries"]
+        .as_object_mut()
+        .unwrap()
+        .values_mut()
+        .next()
+        .unwrap()
+        .as_object_mut()
+        .unwrap()
+        .retain(|key, _| !key.starts_with("max_x"));
+    fs::write(&input, invalid.to_string()).unwrap();
+    assert_eq!(fixture.call(&submit, 2)["code"], "InvalidTransportStudy");
+    let valid: Value = serde_json::from_slice(study).unwrap();
+    let duplicated = valid.to_string().replace(
+        "\"boundaries\":",
+        &format!("\"boundaries\":{},\"boundaries\":", valid["boundaries"]),
+    );
+    fs::write(&input, duplicated).unwrap();
+    assert_eq!(fixture.call(&submit, 2)["code"], "InvalidTransportStudy");
+    let mut newer: Value = serde_json::from_slice(study).unwrap();
+    let unit = newer["material"]["unit"].clone();
+    newer["material"]["unit"] = if unit == "S/m" {
+        json!("m2/s")
+    } else {
+        json!("S/m")
+    };
+    fs::write(&input, newer.to_string()).unwrap();
+    assert_eq!(fixture.call(&submit, 2)["code"], "InvalidTransportStudy");
+
+    fs::write(&input, study).unwrap();
+    let command = fixture.dir.path().join("solve.json");
+    fs::write(&command, include_bytes!("sample-command.json")).unwrap();
+    let submit_luma = [
+        "transport-submit-luma",
+        &solver,
+        REQUEST,
+        PART,
+        &revision,
+        hash,
+        input_path,
+        command.to_str().unwrap(),
+    ];
+    assert_eq!(
+        fixture.call(&submit_luma, 2)["code"],
+        "SimulationTaskPlanRejected"
+    );
+    let bundle = include_bytes!("box-solve-command.json");
+    fs::write(&command, bundle).unwrap();
+    let admission = fixture.call(&submit_luma, 0);
+    assert_eq!(fixture.call(&submit_luma, 0), admission);
+    assert_eq!(fixture.call(&submit, 4)["code"], "RequestIdReuse");
+    assert_eq!(fixture.call(&["transport-receipt", REQUEST], 0), admission);
+    let job = admission["job"].to_string();
+    assert_eq!(
+        fixture.call(&["heat-status", &job], 2)["code"],
+        "CheckpointAuthentication"
+    );
+    let output = fixture.dir.path().join("transport.lsim");
+    assert_eq!(
+        fixture.call(&["transport-export", &job, output.to_str().unwrap()], 2)["code"],
+        "JobPending"
+    );
+    fixture.edit(json!({"op":"properties","node":node,"values":{"width":80}}));
+    assert_eq!(
+        fixture.call(&["transport-cancel", &job], 0)["state"],
+        "cancelled"
+    );
+    assert_eq!(
+        fixture.call(&["transport-retry", &job, "0"], 0)["state"],
+        "admitted"
+    );
+    let changed_solver = fixture.dir.path().join("changed-lsim");
+    fs::write(&changed_solver, b"different solver").unwrap();
+    let changed_solver = changed_solver.to_str().unwrap();
+    assert!(fixture
+        .call(&["transport-work", changed_solver], 0)
+        .is_null());
+    assert_eq!(
+        fixture.call(&["transport-status", &job], 0)["state"],
+        "admitted"
+    );
+    assert_eq!(
+        fixture.call(&["transport-work", &solver], 0)["state"],
+        "published"
+    );
+    let result = fixture.call(&["transport-export", &job, output.to_str().unwrap()], 0);
+    assert!(fs::read(&output).unwrap().starts_with(b"PK\x03\x04"));
+    let report = &result["report"];
+    assert_eq!(report["source"], pin);
+    let bundle: Value = serde_json::from_slice(bundle).unwrap();
+    assert_eq!(report["command_digest"], bundle["source_digest"]);
+    assert_eq!(report["study"]["material"]["generation"], 1);
+    assert_eq!(report["profile"], profile);
+    assert_eq!(report["outcome"], "Accepted");
+    let summary = &report["summary"];
+    assert_eq!(summary["qualification"], "Experimental");
+    let flows = summary[flows_key].as_array().unwrap();
+    assert_eq!(flows.len(), 6);
+    assert!((flows[0].as_f64().unwrap() - flow).abs() < 1e-8);
+    assert!((flows[1].as_f64().unwrap() + flow).abs() < 1e-8);
+    assert!(flows[2..].iter().all(|flow| flow.as_f64() == Some(0.0)));
+    let verification = &summary["verification"];
+    for key in [
+        "max_normalized_residual",
+        "normalized_outward_flow_imbalance",
+    ] {
+        assert!(
+            verification[key].as_f64().unwrap()
+                <= verification[format!("{key}_limit")].as_f64().unwrap()
+        );
+    }
+    let cell = ["transport-cell", &solver, &job, "0", "0", "0"];
+    let observation = fixture.call(&cell, 0);
+    assert_eq!(observation["quantity"], cell_quantity);
+    assert_eq!(observation["unit"], cell_unit);
+    assert!((observation["value"].as_f64().unwrap() - cell_value).abs() < 1e-8);
+    let mut changed_query = cell;
+    changed_query[1] = changed_solver;
+    assert_eq!(fixture.call(&changed_query, 4)["code"], "InputChanged");
+    let boundary = fixture.call(&["transport-boundary", &solver, &job, "min_x"], 0);
+    assert_eq!(boundary["quantity"], flow_quantity);
+    assert_eq!(boundary["unit"], flow_unit);
+    assert!((boundary["value"].as_f64().unwrap() - flow).abs() < 1e-8);
+    let query = fixture.dir.path().join("query.json");
+    fs::write(&query, include_bytes!("box-solve-command.json")).unwrap();
+    let query_luma = [
+        "transport-boundary-luma",
+        &solver,
+        &job,
+        "min_x",
+        query.to_str().unwrap(),
+    ];
+    assert_eq!(
+        fixture.call(&query_luma, 2)["code"],
+        "SimulationQueryRejected"
+    );
+    fs::write(&query, include_bytes!("box-query-command.json")).unwrap();
+    assert_eq!(fixture.call(&query_luma, 0), boundary);
+    assert_eq!(
+        fixture.call(&["transport-view", &job], 2)["code"],
+        "UnsupportedCapability"
+    );
+
+    newer["material"]["unit"] = unit;
+    newer["material"]["generation"] = json!(2);
+    newer["material"]["coefficient"] =
+        json!(2.0 * newer["material"]["coefficient"].as_f64().unwrap());
+    fs::write(&input, newer.to_string()).unwrap();
+    assert_eq!(fixture.call(&submit_luma, 4)["code"], "RequestIdReuse");
+    let mut next = submit;
+    next[2] = "00000000-0000-4000-8000-000000000013";
+    let next_job = fixture.call(&next, 0)["job"].to_string();
+    assert_eq!(
+        fixture.call(&["transport-work", &solver], 0)["state"],
+        "published"
+    );
+    let next_boundary = fixture.call(&["transport-boundary", &solver, &next_job, "min_x"], 0);
+    assert!((next_boundary["value"].as_f64().unwrap() - 2.0 * flow).abs() < 1e-8);
+    assert_eq!(fixture.call(&cell, 0), observation);
+    summary.clone()
+}
+
+#[cfg(all(feature = "cad4-thermal-tests", unix))]
+#[test]
+fn retains_unsuccessful_simulation_outcomes_without_publishing_an_archive() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mut fixture = Fixture::new();
+    fixture.edit(json!({"op":"add","kind":"box"}));
+    let pin = fixture.call(&["transport-source", PART], 0);
+    let revision = pin["revision"].to_string();
+    let hash = pin["definition_hash"].as_str().unwrap();
+    let input = fixture.dir.path().join("study.json");
+    let provider = fixture.dir.path().join("solver-response");
+    let output = fixture.dir.path().join("refused.lsim");
+    fs::write(&input, include_bytes!("box-diffusion-study.json")).unwrap();
+    for (index, outcome) in [
+        "NotConverged",
+        "Unresolved",
+        "LimitExceeded",
+        "InternalFault",
+        "Rejected",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        // Exercise the adapter's failed-response wire contract independently of the solver.
+        let response = json!({"status":outcome,"error":{"code":"TestDiagnostic"}});
+        fs::write(
+            &provider,
+            format!("#!/bin/sh\nprintf '%s\\n' '{response}'\nexit 2\n"),
+        )
+        .unwrap();
+        fs::set_permissions(&provider, fs::Permissions::from_mode(0o700)).unwrap();
+        let request = format!("00000000-0000-4000-8000-{:012x}", 100 + index);
+        let provider = provider.to_str().unwrap();
+        let admission = fixture.call(
+            &[
+                "transport-submit",
+                provider,
+                &request,
+                PART,
+                &revision,
+                hash,
+                input.to_str().unwrap(),
+            ],
+            0,
+        );
+        let job = admission["job"].to_string();
+        let failed = fixture.call(&["transport-work", provider], 0);
+        assert_eq!(failed["state"], "failed");
+        assert_eq!(failed["failure"], outcome);
+        assert!(failed["artifact"].is_null());
+        assert_eq!(fixture.call(&["transport-status", &job], 0), failed);
+        assert_eq!(
+            fixture.call(&["transport-export", &job, output.to_str().unwrap()], 2)["code"],
+            "JobPending"
+        );
+        assert!(!output.exists());
+    }
 }

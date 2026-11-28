@@ -1,0 +1,45 @@
+{
+  "profile": "cad4-box-dc-v1",
+  "schema_version": 1,
+  "provider_commits": {
+    "core": "e8d5a465dbc943b746ce9f3607fe526f1b3a93df",
+    "simulation": "c906f43a052fd918f33b94965045f449d3468544"
+  },
+  "target": "Linux x86-64, Rust 1.100.0",
+  "source": "accepted axis-aligned Core editor Box",
+  "solver_profile": "bootstrap-volume-dc-3d-fv-preview-v1",
+  "qualification": "Experimental",
+  "entry_points": [
+    "transport-source",
+    "transport-submit",
+    "transport-submit-luma",
+    "transport-receipt",
+    "transport-status",
+    "transport-work",
+    "transport-cancel",
+    "transport-retry",
+    "transport-export",
+    "transport-cell",
+    "transport-cell-luma",
+    "transport-boundary",
+    "transport-boundary-luma"
+  ],
+  "fixture": {
+    "extent_m": [
+      0.04,
+      0.03,
+      0.02
+    ],
+    "min_x_outward_current_a": -0.3,
+    "max_x_outward_current_a": 0.3,
+    "first_cell_potential_v": 1.75,
+    "joule_dissipation_w": 1.2
+  },
+  "evidence": [
+    "examples/cad/box-dc-study.json",
+    "integrations/living-voxel-core/project_test.rs",
+    "examples/cad/box-solve-command.json",
+    "examples/cad/box-query-command.json"
+  ],
+  "visualization": "UnsupportedCapability"
+}

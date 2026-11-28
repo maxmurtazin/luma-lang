@@ -1,0 +1,8 @@
+{
+  "bundle_version": 1,
+  "entry": "solve.luma",
+  "files": {
+    "solve.luma": "use sim\nstudy = sim.pinned_study()\ntask = sim.solve(study, sim.solve_options())\n"
+  },
+  "source_digest": "sha256:ca6ea5efb07bf4c79cfb1feb8e98bad2fea5d251d88df27123d3951287eac4c6"
+}

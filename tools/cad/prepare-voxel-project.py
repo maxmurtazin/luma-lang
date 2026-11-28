@@ -69,6 +69,11 @@ tempfile = "=3.27.0"
     shutil.copyfile(ROOT / "examples/cad/voxel-adaptive-sphere.json", project / "adaptive-sphere.json")
     shutil.copyfile(ROOT / "examples/cad/voxel-adaptive-gyroid.json", project / "adaptive-gyroid.json")
     shutil.copyfile(ROOT / "examples/cad/box-heat-study.json", project / "box-heat-study.json")
+    shutil.copyfile(ROOT / "examples/cad/box-solve-command.json", project / "box-solve-command.json")
+    shutil.copyfile(ROOT / "examples/cad/box-query-command.json", project / "box-query-command.json")
+    for physics in ("diffusion", "dc"):
+        fixture = f"box-{physics}-study.json"
+        shutil.copyfile(ROOT / "examples/cad" / fixture, project / fixture)
     shutil.copyfile(ROOT / "examples/cad/voxel-sample-command.json", project / "sample-command.json")
     shutil.copyfile(integration / "project.Cargo.lock", project / "Cargo.lock")
     (project / "Cargo.toml").write_text("""[package]

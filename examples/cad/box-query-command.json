@@ -1,0 +1,8 @@
+{
+  "bundle_version": 1,
+  "entry": "query.luma",
+  "files": {
+    "query.luma": "use sim\nresult = sim.pinned_result()\nobservation = sim.query(result, sim.quantity(), sim.selector())\n"
+  },
+  "source_digest": "sha256:245949f3dd8d11b5954afa799369bd45d5513887d1f5d82479c8c34395e6bae8"
+}

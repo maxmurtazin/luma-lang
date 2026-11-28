@@ -10,17 +10,35 @@
   "solver_profile": "bootstrap-volume-heat-3d-fv-preview-v1",
   "qualification": "Experimental",
   "entry_points": [
-    "heat-source", "heat-submit", "heat-receipt", "heat-status",
-    "heat-work", "heat-cancel", "heat-retry", "heat-export", "heat-cell"
+    "heat-source",
+    "heat-submit",
+    "heat-submit-luma",
+    "heat-receipt",
+    "heat-status",
+    "heat-work",
+    "heat-cancel",
+    "heat-retry",
+    "heat-export",
+    "heat-cell",
+    "heat-cell-luma",
+    "heat-boundary",
+    "heat-boundary-luma"
   ],
   "fixture": {
-    "extent_m": [0.04, 0.03, 0.02],
+    "extent_m": [
+      0.04,
+      0.03,
+      0.02
+    ],
     "min_x_outward_flow_w": 1.2,
     "max_x_outward_flow_w": -1.2,
     "first_cell_temperature_k": 302.5
   },
   "evidence": [
     "examples/cad/box-heat-study.json",
-    "integrations/living-voxel-core/project_test.rs"
-  ]
+    "integrations/living-voxel-core/project_test.rs",
+    "examples/cad/box-solve-command.json",
+    "examples/cad/box-query-command.json"
+  ],
+  "visualization": "UnsupportedCapability"
 }

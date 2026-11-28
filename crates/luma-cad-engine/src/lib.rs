@@ -8,6 +8,7 @@ mod ownership;
 mod parameters;
 mod planar;
 mod recipe;
+mod simulation_tasks;
 mod sketch;
 mod voxel_tasks;
 
@@ -29,5 +30,6 @@ pub use ownership::{
 pub use parameters::{Declaration, Kind, ParamValue, Parameter, ParameterSnapshot};
 pub use planar::{Operand as PlanarOperand, PlanarHost, PlanarOperation, PlanarPlan};
 pub use recipe::{ParameterHost, ParameterPlan};
+pub use simulation_tasks::SimulationHost;
 pub use sketch::{ProfileExtrusion, SketchHost, SketchPlan};
 pub use voxel_tasks::VoxelTaskHost;
