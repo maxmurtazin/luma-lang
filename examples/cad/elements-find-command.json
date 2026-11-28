@@ -1,0 +1,8 @@
+{
+  "bundle_version": 1,
+  "entry": "find.luma",
+  "files": {
+    "find.luma": "use elements\nmatches = elements.find(\"Контрольная\")\npin = elements.select(matches, 0)\npart = elements.resolve(pin)\n"
+  },
+  "source_digest": "sha256:96c287ab9b52e79ab31b5fc93c1ac6d348b001280e6c394c8ae37c66c1e0c9c1"
+}

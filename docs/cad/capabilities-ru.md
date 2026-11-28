@@ -14,7 +14,9 @@
 | `cad.plate` | CAD-1 | implemented | absent | planned | unavailable | not_run / not_run | Binding в Luma запланирован. |
 | `cad.through_hole` | CAD-1 | implemented | absent | planned | unavailable | not_run / not_run | Binding в Luma запланирован. |
 | `draft.create` | CAD-2 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Командный профиль встроенного Draft с зарегистрированным Part и единой транзакцией Core. |
+| `elements.find` | CAD-5 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Поиск по снимку каталога Elements с выбором точной версии пакета и ревизии определения. |
 | `elements.place` | CAD-5 | implemented | absent | planned | unavailable | not_run / not_run | Binding в Luma запланирован. |
+| `elements.resolve` | CAD-5 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Чтение закреплённого определения с происхождением пакета, вариантами и закреплёнными зависимостями. |
 | `param.length` | CAD-1 | implemented | absent | planned | unavailable | not_run / not_run | Binding в Luma запланирован. |
 | `param.set` | CAD-1 | implemented | absent | planned | unavailable | not_run / not_run | Binding в Luma запланирован. |
 | `project.parameter` | CAD-1 | implemented | absent | planned | unavailable | not_run / not_run | Binding в Luma запланирован. |
@@ -36,7 +38,9 @@
 - `cad.plate(key: StableKey, width: LengthInput, height: LengthInput, thickness: LengthInput) → BodyRef` · `BuildPlan`
 - `cad.through_hole(key: StableKey, base: BodyRef, diameter: LengthInput, x: LengthInput, y: LengthInput) → BodyRef` · `BuildPlan`
 - `draft.create(key: StableKey) → DraftRef` · `BuildPlan`
+- `elements.find(query: Text) → ElementSearchResult` · `ReadPinned`
 - `elements.place(package: PackageRef, key: StableKey, configuration: ElementConfigRef) → ElementInstanceRef` · `BuildPlan`
+- `elements.resolve(pin: ElementRevisionRef) → ElementDefinitionRef` · `ReadPinned`
 - `param.length(key: StableKey, default: Quantity<Length>) → ParamRef<Length>` · `BuildPlan`
 - `param.set(ref: ParamRef<T>, value: T) → Unit` · `BuildPlan`
 - `project.parameter(part: PartRef, key: StableKey) → ParamRef<T>` · `ReadPinned`

@@ -14,7 +14,9 @@ Runtime availability is scoped to the verified integration profiles.
 | `cad.plate` | CAD-1 | implemented | absent | planned | unavailable | not_run / not_run | The Luma host binding is planned. |
 | `cad.through_hole` | CAD-1 | implemented | absent | planned | unavailable | not_run / not_run | The Luma host binding is planned. |
 | `draft.create` | CAD-2 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Embedded command profile with a registered Core Part and one authority commit. |
+| `elements.find` | CAD-5 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Search the captured Elements catalog and select an exact package and definition revision. |
 | `elements.place` | CAD-5 | implemented | absent | planned | unavailable | not_run / not_run | The Luma host binding is planned. |
+| `elements.resolve` | CAD-5 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Resolve a pinned definition with package provenance, variants, and dependency pins. |
 | `param.length` | CAD-1 | implemented | absent | planned | unavailable | not_run / not_run | The Luma host binding is planned. |
 | `param.set` | CAD-1 | implemented | absent | planned | unavailable | not_run / not_run | The Luma host binding is planned. |
 | `project.parameter` | CAD-1 | implemented | absent | planned | unavailable | not_run / not_run | The Luma host binding is planned. |
@@ -36,7 +38,9 @@ Runtime availability is scoped to the verified integration profiles.
 - `cad.plate(key: StableKey, width: LengthInput, height: LengthInput, thickness: LengthInput) → BodyRef` · `BuildPlan`
 - `cad.through_hole(key: StableKey, base: BodyRef, diameter: LengthInput, x: LengthInput, y: LengthInput) → BodyRef` · `BuildPlan`
 - `draft.create(key: StableKey) → DraftRef` · `BuildPlan`
+- `elements.find(query: Text) → ElementSearchResult` · `ReadPinned`
 - `elements.place(package: PackageRef, key: StableKey, configuration: ElementConfigRef) → ElementInstanceRef` · `BuildPlan`
+- `elements.resolve(pin: ElementRevisionRef) → ElementDefinitionRef` · `ReadPinned`
 - `param.length(key: StableKey, default: Quantity<Length>) → ParamRef<Length>` · `BuildPlan`
 - `param.set(ref: ParamRef<T>, value: T) → Unit` · `BuildPlan`
 - `project.parameter(part: PartRef, key: StableKey) → ParamRef<T>` · `ReadPinned`
