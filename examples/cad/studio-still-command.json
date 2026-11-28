@@ -1,0 +1,8 @@
+{
+  "bundle_version": 1,
+  "entry": "still.luma",
+  "files": {
+    "still.luma": "use studio\nuse render\npresentation = studio.presentation()\nframe = render.still(presentation, render.time(), render.options())\n"
+  },
+  "source_digest": "sha256:0864650164e97567bf1f79a303b1b9697d7d98ccede166f44114c30c0eef6ce0"
+}
