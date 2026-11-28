@@ -5,6 +5,8 @@ from pathlib import Path
 import subprocess
 import tempfile
 
+import lcan
+
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -83,6 +85,18 @@ def main():
         assert call(reader, database, resolve, exact)["result"]["outputs"]["part"]["value"]["payload"] == original_definition
         assert call(elements, "project-open", archive) == before
         assert call(elements, "project-bom", archive) == bom
+        entry = "write.luma"
+        files = {entry: "use elements\nelements.place()\n"}
+        target = {"bundle_version": {"$u64": "1"}, "entry": entry, "files": files}
+        write_command = write(scratch / "write.json", {
+            **target,
+            "bundle_version": 1,
+            "source_digest": lcan.digest("luma.cad.source", lcan.encode(target)),
+        })
+        catalog_before = database.read_bytes()
+        denied = call(reader, database, write_command, code=2)
+        assert denied["error"]["diagnostics"][0]["code"] == "UnsupportedCapability"
+        assert database.read_bytes() == catalog_before
 
         tampered = {**pin, "expected_revision_digest": "sha256:" + "0" * 64}
         denied = call(reader, database, resolve, write(scratch / "bad.json", tampered), code=2)
