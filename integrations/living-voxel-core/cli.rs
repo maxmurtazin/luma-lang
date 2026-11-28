@@ -13,9 +13,10 @@ use std::{
 };
 use voxel_core::{
     field::{
-        extract_uniform_surface, slice_sample, FieldOperand, GridAxis, IndexRegion, ResidentField,
-        Sample, SliceOptions, SlicePlacement, SlicePolicy, SurfaceBudget, SurfaceOptions,
-        UniformSurfaceProfile, Value,
+        decode_adaptive, encode_adaptive, extract_uniform_surface, grid_adapt, slice_sample,
+        AdaptiveBudget, AdaptiveIoLimits, AdaptiveOptions, FieldOperand, GridAxis,
+        IndexObservation, IndexRegion, ResidentField, Sample, SliceOptions, SlicePlacement,
+        SlicePolicy, SurfaceBudget, SurfaceOptions, UniformSurfaceProfile, Value,
     },
     native::{
         decode_field, encode_field, hash, hash_reader, BackendFingerprint, Digest, EncodedField,
@@ -29,6 +30,7 @@ use voxel_core::{
 
 const CHANNEL: &str = "distance";
 const IMPLICIT_CHANNEL: &str = "implicit";
+const MASK_CHANNEL: &str = "occupancy";
 const PINS: &str = include_str!("provider-pins.json");
 
 #[derive(Deserialize)]
@@ -109,8 +111,13 @@ impl FieldEvaluator for Gyroid {
             .iter()
             .map(|point| {
                 let point = Point3::new(*point).map_err(geometry)?;
+                let value = self.field.sample_at(point).map_err(geometry)?;
                 Ok(Sample::Known {
-                    value: Value::F64(self.field.sample_at(point).map_err(geometry)?),
+                    value: if self.descriptor.dtype == DType::Bool {
+                        Value::Bool(value <= 0.0)
+                    } else {
+                        Value::F64(value)
+                    },
                     metric_status: MetricStatus::NotDistance,
                 })
             })
@@ -138,6 +145,9 @@ fn execute(args: &[String]) -> Result<Json, Diagnostic> {
         }
         [action, request, output] if action == "lattice-pinned" => {
             sample_lattice(Path::new(request), Path::new(output))
+        }
+        [action, request, output] if action == "adaptive-gyroid-pinned" => {
+            adaptive_gyroid(Path::new(request), Path::new(output))
         }
         [action, path, expected, i, j, k] if action == "inspect" => {
             let mut index = [0; 3];
@@ -262,40 +272,8 @@ fn sample_lattice(request_path: &Path, output: &Path) -> Result<Json, Diagnostic
             "Expected lattice request version 1 with a Node grid",
         ));
     }
-    let field =
-        LatticeField::decode(request.part_source.field_json.as_bytes()).map_err(geometry)?;
-    if !matches!(field.intent().cell, Cell::Gyroid { .. }) {
-        return Err(Diagnostic::new(
-            DiagnosticCode::UnsupportedCapability,
-            "Expected Core Gyroid",
-        ));
-    }
     let pins: Json = serde_json::from_str(PINS).map_err(invalid)?;
-    let mut identity = b"luma.cad.core-gyroid/1\0".to_vec();
-    identity.extend_from_slice(
-        pins["core"]
-            .as_str()
-            .ok_or_else(|| invalid("Missing Core pin"))?
-            .as_bytes(),
-    );
-    identity.extend_from_slice(&serde_json::to_vec(&request.part_source).map_err(invalid)?);
-    let gyroid = Gyroid {
-        field,
-        descriptor: FieldDescriptor {
-            source: VersionedId {
-                id: "luma.core.lattice.gyroid".into(),
-                version: 1,
-            },
-            fingerprint: hash(&identity).to_string(),
-            world_min_m: [-1000.0; 3],
-            world_max_m: [1000.0; 3],
-            dtype: DType::F64,
-            semantic_kind: ChannelSemantic::ImplicitScalar,
-            units: "m".into(),
-            iso: Some(0.0),
-            material_labels: Vec::new(),
-        },
-    };
+    let gyroid = gyroid(&request.part_source, &pins, false)?;
     let (artifact, sampled) = sample_evaluator(
         request.grid,
         &gyroid,
@@ -309,6 +287,174 @@ fn sample_lattice(request_path: &Path, output: &Path) -> Result<Json, Diagnostic
         "source":sampled["source"],"known_samples":sampled["known_samples"],"unknown_samples":sampled["unknown_samples"],
         "digests":artifact.digests,"bytes":artifact.bytes.len(),
     }))
+}
+
+fn gyroid(part: &LatticePin, pins: &Json, occupancy: bool) -> Result<Gyroid, Diagnostic> {
+    let field = LatticeField::decode(part.field_json.as_bytes()).map_err(geometry)?;
+    if !matches!(field.intent().cell, Cell::Gyroid { .. }) {
+        return Err(Diagnostic::new(
+            DiagnosticCode::UnsupportedCapability,
+            "Expected Core Gyroid",
+        ));
+    }
+    let mut identity = if occupancy {
+        b"luma.cad.core-gyroid-occupancy/1\0".to_vec()
+    } else {
+        b"luma.cad.core-gyroid/1\0".to_vec()
+    };
+    identity.extend_from_slice(
+        pins["core"]
+            .as_str()
+            .ok_or_else(|| invalid("Missing Core pin"))?
+            .as_bytes(),
+    );
+    identity.extend_from_slice(&serde_json::to_vec(part).map_err(invalid)?);
+    Ok(Gyroid {
+        field,
+        descriptor: FieldDescriptor {
+            source: VersionedId {
+                id: if occupancy {
+                    "luma.core.lattice.gyroid.occupancy"
+                } else {
+                    "luma.core.lattice.gyroid"
+                }
+                .into(),
+                version: 1,
+            },
+            fingerprint: hash(&identity).to_string(),
+            world_min_m: [-1000.0; 3],
+            world_max_m: [1000.0; 3],
+            dtype: if occupancy { DType::Bool } else { DType::F64 },
+            semantic_kind: if occupancy {
+                ChannelSemantic::CellUnionMask
+            } else {
+                ChannelSemantic::ImplicitScalar
+            },
+            units: if occupancy { "1" } else { "m" }.into(),
+            iso: (!occupancy).then_some(0.0),
+            material_labels: Vec::new(),
+        },
+    })
+}
+
+fn adaptive_gyroid(request_path: &Path, output: &Path) -> Result<Json, Diagnostic> {
+    let request: LatticeRequest =
+        serde_json::from_slice(&read(request_path, 32 * 1024)?).map_err(invalid)?;
+    let grid = request.grid;
+    let extent: [i64; 3] = std::array::from_fn(|axis| {
+        i64::from(grid.index_max[axis]) - i64::from(grid.index_min[axis])
+    });
+    let side = u32::try_from(extent[0]).unwrap_or(0);
+    if request.schema_version != 1
+        || grid.layout != Layout::CellCenter
+        || extent != [i64::from(side); 3]
+        || !side.is_power_of_two()
+        || !(2..=16).contains(&side)
+        || grid.spacing_m != [grid.spacing_m[0]; 3]
+    {
+        return Err(Diagnostic::new(
+            DiagnosticCode::UnsupportedCapability,
+            "Expected an isotropic CellCenter cube of 2, 4, 8 or 16 cells per axis",
+        ));
+    }
+    let pins: Json = serde_json::from_str(PINS).map_err(invalid)?;
+    let evaluator = gyroid(&request.part_source, &pins, true)?;
+    let source_digest =
+        hash(&serde_json::to_vec(&(&evaluator.descriptor.fingerprint, &grid)).map_err(invalid)?);
+    let region = IndexRegion {
+        index_min: grid.index_min,
+        index_max: grid.index_max,
+    };
+    let registry = Registry::builtin()?;
+    let cancelled = AtomicBool::new(false);
+    let sampled = sample_field(
+        registry,
+        SamplingRequest {
+            grid,
+            numeric_profile: VersionedId {
+                id: "grid-si-v1".into(),
+                version: 1,
+            },
+            channel_id: MASK_CHANNEL.into(),
+            max_samples: 4096,
+            max_blocks: 64,
+            allow_unknown: false,
+        },
+        &evaluator,
+        &cancelled,
+    )?;
+    let artifact = grid_adapt(
+        FieldOperand {
+            field: &sampled.field,
+            channel: MASK_CHANNEL,
+        },
+        AdaptiveOptions {
+            region,
+            max_depth: side.ilog2() as u8,
+            max_scalar_span: 0.0,
+            source_digest,
+            budget: AdaptiveBudget {
+                max_input_cells: 4096,
+                max_leaves: 4096,
+                max_sample_reads: 32768,
+                max_balance_pairs: 4_194_304,
+            },
+            cancelled: &cancelled,
+        },
+    )?;
+    let limits = AdaptiveIoLimits::default();
+    let encoded = encode_adaptive(registry, &artifact, limits, &cancelled)?;
+    let decoded = decode_adaptive(
+        registry,
+        &encoded.bytes,
+        Some(encoded.digests.blob_digest),
+        limits,
+        &cancelled,
+    )?;
+    let mut occupied = 0u32;
+    let mut checked = 0u32;
+    for leaf in &decoded.artifact.leaves {
+        let Sample::Known {
+            value: Value::Bool(inside),
+            metric_status: MetricStatus::NotDistance,
+        } = leaf.sample
+        else {
+            return Err(invalid("Expected known Bool occupancy in each leaf"));
+        };
+        let [x, y, z] = leaf.anchor;
+        let width = leaf.finest_cells_per_axis as i32;
+        for i in x..x + width {
+            for j in y..y + width {
+                for k in z..z + width {
+                    let direct = sampled.field.lookup(MASK_CHANNEL, [i, j, k])?;
+                    if !matches!(direct, IndexObservation::InsideDomain { sample, .. } if sample == leaf.sample)
+                    {
+                        return Err(Diagnostic::new(
+                            DiagnosticCode::CorruptArtifact,
+                            "Adaptive occupancy differs from the sampled cell mask",
+                        ));
+                    }
+                    checked += 1;
+                    occupied += u32::from(inside);
+                }
+            }
+        }
+    }
+    if checked != side.pow(3) || decoded.artifact.source_digest != source_digest {
+        return Err(Diagnostic::new(
+            DiagnosticCode::CorruptArtifact,
+            "Adaptive occupancy lost source or coverage",
+        ));
+    }
+    let report = json!({
+        "profile":"cad3-adaptive-gyroid-mask-v1","provider_pins":pins,"part_source":request.part_source,
+        "source_digest":source_digest,"classification":"CellCenterNonPositive","layout":"AdaptiveCellConstant",
+        "semantic_kind":"CellUnionMask","metric_status":"NotDistance","geometry_error_bound":"Unavailable",
+        "occupied_cells":occupied,"checked_cells":checked,"leaf_count":decoded.artifact.leaves.len(),
+        "report":artifact.report,"digests":encoded.digests,"bytes":encoded.bytes.len()
+    });
+    publish(output, &encoded.bytes)?;
+    Ok(report)
 }
 
 fn sample(request_path: &Path, output: &Path, pinned: bool) -> Result<Json, Diagnostic> {

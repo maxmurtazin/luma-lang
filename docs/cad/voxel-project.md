@@ -313,3 +313,31 @@ View связывает выбор объекта с LVXADAP через `Externa
 проверяет переходы 2:1, замкнутость сетки, сохранение исторической
 сферы и отказ при повреждённом файле или недостижимой точности.
 [Профиль приёмки](../../conformance/cad/cad3-adaptive-sphere-v1.json)
+
+## Адаптивная маска Gyroid
+
+Профиль `cad3-adaptive-gyroid-mask-v1` использует Gyroid из закреплённой
+ревизии Core Part. Положение каждого центра ячейки проверяется исходным
+полем Core. Ячейка считается занятой при значении поля ≤ 0. Вход —
+изотропный куб `CellCenter` со стороной 2, 4, 8 или 16 ячеек.
+
+Living Voxel сохраняет Bool-маску в LVXADAP с балансом 2:1. Перед
+публикацией адаптер повторно открывает артефакт и сверяет значение
+каждой исходной ячейки с её листом. Отчёт содержит хеши LVXADAP и
+источника, число проверенных и занятых ячеек, число листьев и
+закреплённую ревизию Part. Для пространственной ошибки относительно
+аналитической формы указан статус `Unavailable`.
+
+```sh
+"$PROJECT_CLI" "$DB" "$PROJECT" lattice-source "$PART"
+"$PROJECT_CLI" "$DB" "$PROJECT" adaptive-gyroid "$CLI" \
+  "$PART" "$PART_REV" "$DEFINITION_HASH" examples/cad/voxel-adaptive-gyroid.json \
+  gyroid.lvxadap > adaptive-gyroid-report.json
+LVX_SHA=$(jq -er '.result.digests.blob_digest' adaptive-gyroid-report.json)
+"$VOXEL_CLI" decode-adaptive gyroid.lvxadap "$LVX_SHA"
+```
+
+Команда работает синхронно. Маска описывает объединение занятых
+ячеек. У неё статус `NotDistance`. Профиль квалифицирует хранение
+маски, а адаптивное извлечение поверхности Gyroid остаётся отдельным
+сценарием. [Манифест](../../conformance/cad/cad3-adaptive-gyroid-mask-v1.json)

@@ -65,6 +65,31 @@ fn execute(args: &[String]) -> Result<Value> {
                 Path::new(output),
             )
         }
+        ("adaptive-gyroid", [provider, part, revision, hash, grid, output]) => {
+            let pin = store
+                .voxel_lattice_source(part, Some((revision.parse().map_err(|_| usage())?, hash)))
+                .map_err(core_error)?;
+            let grid: Value =
+                serde_json::from_slice(&read(Path::new(grid), 16 * 1024)?).map_err(|_| usage())?;
+            let directory = tempfile::tempdir().map_err(io_error)?;
+            let executable = Path::new(provider).canonicalize().map_err(io_error)?;
+            let worker = SamplingWorker {
+                executable: &executable,
+                directory: directory.path(),
+            };
+            let (report, bytes) = worker.invoke(
+                "adaptive-gyroid-pinned",
+                json!({"schema_version":1,"grid":grid,"part_source":pin}),
+                &|| true,
+            )?;
+            if report["profile"] != "cad3-adaptive-gyroid-mask-v1"
+                || !verify_container(&report, &bytes, b"LVXADAP\0")
+            {
+                return Err(corrupt());
+            }
+            publish(Path::new(output), &bytes)?;
+            Ok(report)
+        }
         (action, args) if action.starts_with("adaptive-") => {
             adaptive::execute(&store, action, args)
         }
@@ -257,31 +282,43 @@ impl SamplingWorker<'_> {
         current: &dyn Fn() -> bool,
     ) -> std::result::Result<Value, &'static str> {
         let compute = || -> Result<Value> {
-            let request = self.directory.join("request.json");
-            let artifact = self.directory.join("sample.lvx");
-            std::fs::write(&request, wire.to_string()).map_err(io_error)?;
-            let stdout = tempfile::tempfile().map_err(io_error)?;
-            let child = Command::new(self.executable)
-                .arg(command)
-                .arg(request)
-                .arg(&artifact)
-                .env_remove("LUMA_CAD_PROJECT_KEY")
-                .env_remove("LUMA_CAD_TEST_CRASH_AT")
-                .stdin(Stdio::null())
-                .stderr(Stdio::null())
-                .stdout(stdout.try_clone().map_err(io_error)?)
-                .spawn()
-                .map_err(io_error)?;
-            let response = read_response(child, stdout, current)?;
-            let mut report = response["result"].clone();
-            let bytes = read(&artifact, MAX_LVX)?;
-            if report["part_source"] != wire["part_source"] || !verify_lvx(&report, &bytes) {
+            let (mut report, bytes) = self.invoke(command, wire, current)?;
+            if !verify_lvx(&report, &bytes) {
                 return Err(corrupt());
             }
             report["command_digest"] = json!(command_digest);
             Ok(json!({"report":report,"lvx_hex":hex::encode(bytes)}))
         };
         compute().map_err(|_| "VoxelProviderRejected")
+    }
+
+    fn invoke(
+        &self,
+        command: &str,
+        wire: Value,
+        current: &dyn Fn() -> bool,
+    ) -> Result<(Value, Vec<u8>)> {
+        let request = self.directory.join("request.json");
+        let artifact = self.directory.join("sample.lvx");
+        std::fs::write(&request, wire.to_string()).map_err(io_error)?;
+        let stdout = tempfile::tempfile().map_err(io_error)?;
+        let child = Command::new(self.executable)
+            .arg(command)
+            .arg(request)
+            .arg(&artifact)
+            .env_remove("LUMA_CAD_PROJECT_KEY")
+            .env_remove("LUMA_CAD_TEST_CRASH_AT")
+            .stdin(Stdio::null())
+            .stderr(Stdio::null())
+            .stdout(stdout.try_clone().map_err(io_error)?)
+            .spawn()
+            .map_err(io_error)?;
+        let mut response = read_response(child, stdout, current)?;
+        let report = response["result"].take();
+        if report["part_source"] != wire["part_source"] {
+            return Err(corrupt());
+        }
+        Ok((report, read(&artifact, MAX_LVX)?))
     }
 }
 
@@ -307,7 +344,11 @@ fn historical_lvx(store: &ProjectStore, id: &str, lattice: bool) -> Result<(Vec<
 }
 
 fn verify_lvx(report: &Value, bytes: &[u8]) -> bool {
-    bytes.starts_with(b"LVXGRID\0")
+    verify_container(report, bytes, b"LVXGRID\0")
+}
+
+fn verify_container(report: &Value, bytes: &[u8], magic: &[u8; 8]) -> bool {
+    bytes.starts_with(magic)
         && report["digests"]["blob_digest"] == format!("{:x}", Sha256::digest(bytes))
         && report["bytes"] == bytes.len()
 }
@@ -354,11 +395,16 @@ fn read_response(
         }
         std::thread::sleep(Duration::from_millis(25));
     };
-    if !status.success() {
-        return Err(json!({"code":"VoxelProviderRejected"}));
-    }
     stdout.seek(SeekFrom::Start(0)).map_err(io_error)?;
-    serde_json::from_slice(&limit(stdout, 64 * 1024)?).map_err(|_| corrupt())
+    let response: Value = serde_json::from_slice(&limit(stdout, 64 * 1024)?)
+        .map_err(|_| json!({"code":"VoxelProviderRejected"}))?;
+    if status.success() {
+        Ok(response)
+    } else if response["error"]["code"].is_string() {
+        Err(response["error"].clone())
+    } else {
+        Err(json!({"code":"VoxelProviderRejected"}))
+    }
 }
 
 fn provider_fingerprint(path: &Path, lattice: bool) -> Result<String> {
@@ -419,5 +465,5 @@ fn corrupt() -> Value {
 }
 
 fn usage() -> Value {
-    json!({"code":"Usage","message":"DB PROJECT source PART | adaptive-sphere VOXEL_CLI PART REVISION HASH PROFILE.json OUTPUT.lvxadap | adaptive-submit VOXEL_CLI REQUEST PART REVISION HASH PROFILE.json | adaptive-work VOXEL_CLI | adaptive-receipt REQUEST | adaptive-status JOB | adaptive-cancel JOB | adaptive-retry JOB ATTEMPT | adaptive-export JOB OUTPUT.lvxadap | lattice-source PART | lattice-submit[-luma] PROVIDER REQUEST PART REVISION HASH GRID.json [BUNDLE.json] | lattice-work PROVIDER | lattice-receipt REQUEST | lattice-status JOB | lattice-cancel JOB | lattice-retry JOB ATTEMPT | lattice-export JOB FILE.lvx | submit PROVIDER REQUEST PART REVISION HASH GRID.json | submit-luma PROVIDER REQUEST PART REVISION HASH GRID.json BUNDLE.json | work PROVIDER | receipt REQUEST | status JOB | cancel JOB | retry JOB ATTEMPT | export JOB FILE.lvx | field-csg VOXEL_CLI OP LEFT_JOB RIGHT_JOB implicit | mask PUBLICATIONS VOXEL_CLI COMMAND ... | paged PUBLICATIONS VOXEL_CLI DIRECTORY COMMAND ..."})
+    json!({"code":"Usage","message":"DB PROJECT source PART | adaptive-gyroid PROVIDER PART REVISION HASH GRID.json OUTPUT.lvxadap | adaptive-sphere VOXEL_CLI PART REVISION HASH PROFILE.json OUTPUT.lvxadap | adaptive-submit VOXEL_CLI REQUEST PART REVISION HASH PROFILE.json | adaptive-work VOXEL_CLI | adaptive-receipt REQUEST | adaptive-status JOB | adaptive-cancel JOB | adaptive-retry JOB ATTEMPT | adaptive-export JOB OUTPUT.lvxadap | lattice-source PART | lattice-submit[-luma] PROVIDER REQUEST PART REVISION HASH GRID.json [BUNDLE.json] | lattice-work PROVIDER | lattice-receipt REQUEST | lattice-status JOB | lattice-cancel JOB | lattice-retry JOB ATTEMPT | lattice-export JOB FILE.lvx | submit PROVIDER REQUEST PART REVISION HASH GRID.json | submit-luma PROVIDER REQUEST PART REVISION HASH GRID.json BUNDLE.json | work PROVIDER | receipt REQUEST | status JOB | cancel JOB | retry JOB ATTEMPT | export JOB FILE.lvx | field-csg VOXEL_CLI OP LEFT_JOB RIGHT_JOB implicit | mask PUBLICATIONS VOXEL_CLI COMMAND ... | paged PUBLICATIONS VOXEL_CLI DIRECTORY COMMAND ..."})
 }

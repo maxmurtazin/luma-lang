@@ -65,6 +65,7 @@ tempfile = "=3.27.0"
         shutil.copyfile(integration / file, project / file)
     shutil.copyfile(ROOT / "examples/cad/voxel-sphere.json", project / "sphere.json")
     shutil.copyfile(ROOT / "examples/cad/voxel-adaptive-sphere.json", project / "adaptive-sphere.json")
+    shutil.copyfile(ROOT / "examples/cad/voxel-adaptive-gyroid.json", project / "adaptive-gyroid.json")
     shutil.copyfile(ROOT / "examples/cad/voxel-sample-command.json", project / "sample-command.json")
     shutil.copyfile(integration / "project.Cargo.lock", project / "Cargo.lock")
     (project / "Cargo.toml").write_text("""[package]

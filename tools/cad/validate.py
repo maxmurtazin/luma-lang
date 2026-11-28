@@ -446,6 +446,26 @@ def verify_cad3_profile(lock, registry):
             and "tools/cad/test-adaptive-view.py" in adaptive["evidence"],
             "Invalid CAD-3 adaptive queue or View profile")
 
+    path = FIXTURES / "cad3-adaptive-gyroid-mask-v1.json"
+    occupancy = read(path)
+    fixture = "examples/cad/voxel-adaptive-gyroid.json"
+    grid = read(ROOT / fixture)
+    require({path.relative_to(ROOT).as_posix(), fixture} <= set(lock["contract"]["inputs"])
+            and occupancy["profile"] == path.stem and occupancy["schema_version"] == 1
+            and occupancy["builds_on"] == gyroid["profile"]
+            and occupancy["provider_commits"] == adaptive["provider_commits"]
+            and occupancy["entry_point"] == "adaptive-gyroid"
+            and occupancy["input_layout"] == grid["layout"] == "CellCenter"
+            and occupancy["max_cells_per_axis"] == 16
+            and occupancy["artifact"] == "LVXADAP"
+            and occupancy["semantic_kind"] == "CellUnionMask"
+            and occupancy["metric_status"] == "NotDistance"
+            and occupancy["balance"] == "StrongTwoToOne"
+            and occupancy["geometry_error_bound"] == "Unavailable"
+            and fixture in occupancy["evidence"]
+            and all((ROOT / evidence).is_file() for evidence in occupancy["evidence"]),
+            "Invalid CAD-3 adaptive Gyroid occupancy profile")
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
