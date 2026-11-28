@@ -64,3 +64,7 @@ python -B tools/cad/validate.py --provider core=/path/to/core --provider view=/p
 ## CAD-3
 
 [Семплирование сферы Core и запись LVX](voxel-project.md)
+
+## Подготовка выпуска
+
+[Манифест кандидата и проверка Git-коммита](release-candidate.md)
