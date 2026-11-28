@@ -76,6 +76,7 @@ WEBGPU_SOFTWARE=1 node tools/cad/test-view-scene.mjs "$VIEW" /tmp/luma-accepted-
 | `preview recipe PART REVISION BUNDLE TOKEN [JOB_KEY ...]` | Проверяет рецепт, сохраняет токен |
 | `preview command PART REVISION BUNDLE TOKEN [JOB_KEY ...]` | Выполняет команду в overlay, проверяет пересчёт принятого рецепта |
 | `inspect` / `recipe-info PART` | Показывает ревизии проекта и принятого рецепта |
+| `assembly-bom ASSEMBLY [CONFIGURATION]` | Читает ведомость по принятой сборке и её закреплённым деталям |
 | `bind PART REVISION BINDINGS TOKEN [JOB_KEY ...]` | Готовит замену типизированных связей |
 | `detach PART REVISION TOKEN` | Готовит полный detach и возвращает отчёт |
 | `apply TOKEN OPERATION` | Применяет токен с CAS и возвращает квитанцию |
@@ -220,3 +221,22 @@ Chromium 159.0.8154.6 сообщил адаптер SwiftShader. От начал
 остаётся открытой. В частности, нужно проверить окружение VS Code без
 заглушек, полный корпус нагрузки и лимитов, аппаратный WebGPU и остальные
 целевые платформы.
+
+## Ведомость сборки CAD‑5
+
+`assembly-bom` принимает UUID нативной сборки. По умолчанию используется её
+основная конфигурация. Отчёт содержит ревизию и дайджест сборки, путь и
+мировое положение каждого экземпляра. Строки ведомости группируются по
+документу, ревизии, хешу и выходу детали. Изменение детали сохраняет
+прежние строки до явной замены ссылки в сборке.
+
+Габариты поставляются Core как консервативные AABB в метрах. Масса
+отмечается `UnknownDensity`, а значение возвращается как `null`.
+Профиль покрывает чтение нативных сборок. Каталоги Elements, раскрой и
+ассоциативные чертежи требуют отдельной интеграции.
+
+```sh
+"$PROJECT_CLI" "$DB" "$PROJECT" assembly-bom "$ASSEMBLY"
+cargo test --manifest-path "$CORE/Cargo.toml" -p living-cad-viewer \
+  --features luma-cad --lib cad5_bom
+```
