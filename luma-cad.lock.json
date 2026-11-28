@@ -25,7 +25,8 @@
       "conformance/cad/cad3-adaptive-sphere-v1.json": "sha256:80c1c7e3a2a84a167b8733c0dfacb18ec33842fc65ba523ae9f3c8b392cd858c",
       "examples/cad/voxel-adaptive-sphere.json": "sha256:7cd291d146590a0cb1f6e2937be37d2038fe509aefe4842d63d727711f981d52",
       "conformance/cad/cad3-adaptive-gyroid-mask-v1.json": "sha256:4bb44824ba6fb61feef872eb719234b1057f8fbeede6a23430e9baf899e3eb62",
-      "examples/cad/voxel-adaptive-gyroid.json": "sha256:48f20c5b4a64eb376fdf58012b6b33fc1aba8bde1a307f1d50b89036a9c892bd"
+      "examples/cad/voxel-adaptive-gyroid.json": "sha256:48f20c5b4a64eb376fdf58012b6b33fc1aba8bde1a307f1d50b89036a9c892bd",
+      "conformance/cad/cad3-adaptive-gyroid-surface-v1.json": "sha256:08ee9d877f342cc707e2c544f85c8561cf282693eb59d4f86c596c648f9ec353"
     }
   },
   "numeric_profiles": [

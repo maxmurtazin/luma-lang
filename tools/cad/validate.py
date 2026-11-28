@@ -466,6 +466,20 @@ def verify_cad3_profile(lock, registry):
             and all((ROOT / evidence).is_file() for evidence in occupancy["evidence"]),
             "Invalid CAD-3 adaptive Gyroid occupancy profile")
 
+    path = FIXTURES / "cad3-adaptive-gyroid-surface-v1.json"
+    surface = read(path)
+    require(path.relative_to(ROOT).as_posix() in lock["contract"]["inputs"]
+            and surface["profile"] == path.stem and surface["schema_version"] == 1
+            and surface["builds_on"] == occupancy["profile"]
+            and surface["provider_commits"] == project["provider_commits"]
+            and set(surface["entry_points"]) == {"adaptive-mask-surface", "pack-voxel mask"}
+            and surface["geometry_scope"] == "SampledCellUnion" and surface["halo_cells"] == 1
+            and surface["topology_checks"] == "NotCertified"
+            and surface["position_error_bound"] == surface["hausdorff_bound"] == "Unavailable"
+            and surface["evidence"]
+            and all((ROOT / evidence).is_file() for evidence in surface["evidence"]),
+            "Invalid CAD-3 adaptive Gyroid surface profile")
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)

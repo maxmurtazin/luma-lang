@@ -743,7 +743,7 @@ fn check_adaptive_gyroid(fixture: &Fixture, provider: &str, pin: &Value) {
     let leaves = artifact["leaves"].as_array().unwrap();
     let mut levels = std::collections::BTreeSet::new();
     let mut covered = 0;
-    let mut occupied = 0;
+    let mut occupied = std::collections::BTreeSet::new();
     let angle = std::f64::consts::TAU / 0.005;
     for leaf in leaves {
         levels.insert(leaf["level"].as_u64().unwrap());
@@ -764,17 +764,42 @@ fn check_adaptive_gyroid(fixture: &Fixture, provider: &str, pin: &Value) {
                     let oracle = stock <= 0.0 && (!interior || stock >= -0.001 || periodic <= 0.2);
                     assert_eq!(expected, oracle, "cell [{i},{j},{k}]");
                     covered += 1;
-                    occupied += u32::from(expected);
+                    if oracle {
+                        occupied.insert([i, j, k]);
+                    }
                 }
             }
         }
     }
     assert!(levels.len() > 1 && leaves.len() < 4096);
     assert_eq!(covered, 4096);
-    assert_eq!(result["occupied_cells"], occupied);
+    assert_eq!(result["occupied_cells"], occupied.len());
+    check_mask_surface(provider, &output, digest, &occupied);
     let bytes = fs::read(&output).unwrap();
     assert_eq!(fixture.call(&command, 2)["code"], "IoFailure");
     assert_eq!(fs::read(&output).unwrap(), bytes);
+
+    let mut cropped: Value = serde_json::from_slice(grid_wire).unwrap();
+    cropped["origin_m"] = json!([-0.005, -0.005, -0.005]);
+    fs::write(&grid, cropped.to_string()).unwrap();
+    let cropped_path = fixture.dir.path().join("cropped.lvxadap");
+    let mut cropped_command = command;
+    cropped_command[6] = cropped_path.to_str().unwrap();
+    let cropped = fixture.call(&cropped_command, 0);
+    let refused_mesh = Command::new(provider)
+        .args([
+            "adaptive-mask-surface",
+            cropped_command[6],
+            cropped["digests"]["blob_digest"].as_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(refused_mesh.status.code(), Some(2));
+    let error: Value = serde_json::from_slice(&refused_mesh.stdout).unwrap();
+    assert_eq!(
+        error["error"]["message"],
+        "Mask surface requires an empty one-cell halo"
+    );
 
     let mut invalid: Value = serde_json::from_slice(grid_wire).unwrap();
     invalid["layout"] = json!("Node");
@@ -784,6 +809,87 @@ fn check_adaptive_gyroid(fixture: &Fixture, provider: &str, pin: &Value) {
     command[6] = refused.to_str().unwrap();
     assert_eq!(fixture.call(&command, 2)["code"], "UnsupportedCapability");
     assert!(!refused.exists());
+}
+
+fn check_mask_surface(
+    provider: &str,
+    path: &Path,
+    digest: &str,
+    occupied: &std::collections::BTreeSet<[i32; 3]>,
+) {
+    use std::collections::BTreeMap;
+    let run = |expected: &str| {
+        Command::new(provider)
+            .arg("adaptive-mask-surface")
+            .arg(path)
+            .arg(expected)
+            .output()
+            .unwrap()
+    };
+    assert_eq!(run(&"0".repeat(64)).status.code(), Some(2));
+    let output = run(digest);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    let wire: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let mesh = &wire["result"]["surface"];
+    assert_eq!(mesh["source_digest"], digest);
+    assert_eq!(mesh["report"]["geometry_scope"], "SampledCellUnion");
+    assert_eq!(mesh["report"]["hausdorff_bound"], "Unavailable");
+    assert_eq!(mesh["report"]["topology_checks"], "NotCertified");
+    let vertices: Vec<[i32; 3]> = mesh["vertices"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|vertex| {
+            let p: [f64; 3] = serde_json::from_value(vertex["position_m"].clone()).unwrap();
+            p.map(|point| {
+                let index = (point + 0.01) / 0.00125;
+                assert!((index - index.round()).abs() < 1e-10);
+                index.round() as i32
+            })
+        })
+        .collect();
+
+    let mut faces = BTreeMap::new();
+    for triangle in mesh["triangles"].as_array().unwrap() {
+        let indices: [usize; 3] = serde_json::from_value(triangle["vertices"].clone()).unwrap();
+        let [a, b, c] = indices.map(|index| vertices[index]);
+        let u: [i32; 3] = std::array::from_fn(|axis| b[axis] - a[axis]);
+        let v: [i32; 3] = std::array::from_fn(|axis| c[axis] - a[axis]);
+        let normal = [
+            u[1] * v[2] - u[2] * v[1],
+            u[2] * v[0] - u[0] * v[2],
+            u[0] * v[1] - u[1] * v[0],
+        ];
+        assert_eq!(normal.iter().map(|n| n.abs()).sum::<i32>(), 1);
+        let axis = normal.iter().position(|n| *n != 0).unwrap();
+        let side = normal[axis];
+        let mut cell: [i32; 3] = std::array::from_fn(|i| a[i].min(b[i]).min(c[i]));
+        cell[axis] -= i32::from(side == 1);
+        *faces.entry((cell, axis, side)).or_insert(0) += 1;
+    }
+    let mut expected = BTreeMap::new();
+    for &cell in occupied {
+        for axis in 0..3 {
+            for direction in [-1, 1] {
+                let mut outside = cell;
+                outside[axis] += direction;
+                if !occupied.contains(&outside) {
+                    expected.insert((cell, axis, direction), 2);
+                }
+            }
+        }
+    }
+    assert_eq!(faces, expected);
+    assert_eq!(mesh["report"]["exposed_faces"], faces.len());
+    if let Some(dir) = std::env::var_os("LUMA_VOXEL_MASK_SURFACE_EVIDENCE") {
+        let dir = Path::new(&dir);
+        fs::copy(path, dir.join("gyroid.lvxadap")).unwrap();
+        fs::write(dir.join("gyroid-surface.json"), wire["result"].to_string()).unwrap();
+    }
 }
 
 #[test]

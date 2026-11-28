@@ -24,6 +24,7 @@ struct Surface {
     schema: String,
     units: String,
     source_digest: String,
+    source_manifest_digest: Option<String>,
     vertices: Vec<Vertex>,
     triangles: Vec<Triangle>,
     report: Report,
@@ -33,6 +34,7 @@ struct Surface {
 struct Report {
     position_error_bound: String,
     hausdorff_bound: String,
+    geometry_scope: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -85,15 +87,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("Voxel surface exceeds the View input limit".into());
     }
     let args: Vec<_> = std::env::args_os().skip(1).collect();
-    match args.as_slice() {
+    let mask = match args.as_slice() {
         [mode, tree] if mode == "adaptive" => return pack_adaptive(&bytes, Path::new(tree)),
-        [] => {}
-        _ => return Err("usage: pack-voxel [adaptive INPUT.lvxadap] < report.json".into()),
-    }
+        [mode, tree] if mode == "mask" => Some(Path::new(tree)),
+        [] => None,
+        _ => return Err("usage: pack-voxel [adaptive|mask INPUT.lvxadap] < report.json".into()),
+    };
     let wire: Wire = serde_json::from_slice(&bytes)?;
     let surface = wire.surface;
     if wire.voxel_revision != include_str!("voxel-pin.txt").trim()
-        || surface.schema != "living.voxel.mesh/v1"
         || surface.units != "m"
         || !is_digest(&surface.source_digest)
         || surface.vertices.is_empty()
@@ -105,11 +107,25 @@ fn main() -> Result<(), Box<dyn Error>> {
     {
         return Err("Unsupported Voxel surface profile".into());
     }
+    let asset_provider = match (mask, surface.schema.as_str()) {
+        (None, "living.voxel.mesh/v1") => format!("living-voxel-core@{}", wire.voxel_revision),
+        (Some(tree), "luma.cad.adaptive-mask-surface/1")
+            if surface.report.geometry_scope.as_deref() == Some("SampledCellUnion")
+                && surface
+                    .source_manifest_digest
+                    .as_deref()
+                    .is_some_and(is_digest) =>
+        {
+            check_tree(tree, &surface.source_digest)?;
+            format!("luma.cad.mask-surface/1@{}", wire.voxel_revision)
+        }
+        _ => return Err("Unsupported Voxel surface profile".into()),
+    };
     let content_digest = format!("{:x}", Sha256::digest(&bytes));
     let bundle = scene(
         surface.vertices,
         surface.triangles,
-        &wire.voxel_revision,
+        &asset_provider,
         &surface.source_digest,
         &content_digest,
     )?;
@@ -147,22 +163,12 @@ fn pack_adaptive(bytes: &[u8], tree: &Path) -> Result<(), Box<dyn Error>> {
     {
         return Err("Unsupported adaptive Voxel report".into());
     }
-    const MAX_TREE: u64 = 8 * 1024 * 1024;
-    let mut tree_bytes = Vec::new();
-    File::open(tree)?
-        .take(MAX_TREE + 1)
-        .read_to_end(&mut tree_bytes)?;
-    if tree_bytes.len() as u64 > MAX_TREE
-        || !tree_bytes.starts_with(b"LVXADAP\0")
-        || report.digests.blob_digest != format!("{:x}", Sha256::digest(&tree_bytes))
-    {
-        return Err("LVXADAP digest differs from the adaptive report".into());
-    }
+    check_tree(tree, &report.digests.blob_digest)?;
     let content_digest = format!("{:x}", Sha256::digest(bytes));
     let bundle = scene(
         surface.vertices,
         surface.triangles,
-        &report.voxel_revision,
+        &format!("living-voxel-core@{}", report.voxel_revision),
         &report.digests.blob_digest,
         &content_digest,
     )?;
@@ -188,10 +194,25 @@ fn pack_adaptive(bytes: &[u8], tree: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+fn check_tree(tree: &Path, digest: &str) -> Result<(), Box<dyn Error>> {
+    const MAX_TREE: u64 = 8 * 1024 * 1024;
+    let mut tree_bytes = Vec::new();
+    File::open(tree)?
+        .take(MAX_TREE + 1)
+        .read_to_end(&mut tree_bytes)?;
+    if tree_bytes.len() as u64 > MAX_TREE
+        || !tree_bytes.starts_with(b"LVXADAP\0")
+        || digest != format!("{:x}", Sha256::digest(&tree_bytes))
+    {
+        return Err("LVXADAP digest differs from the adaptive report".into());
+    }
+    Ok(())
+}
+
 fn scene(
     vertices: Vec<Vertex>,
     triangles: Vec<Triangle>,
-    voxel_revision: &str,
+    asset_provider: &str,
     asset_id: &str,
     content_digest: &str,
 ) -> Result<SceneBundle, Box<dyn Error>> {
@@ -213,7 +234,7 @@ fn scene(
         AffineTransform64::IDENTITY,
         geometry,
         Some(SourceBinding::ExternalAsset {
-            provider: format!("living-voxel-core@{voxel_revision}"),
+            provider: asset_provider.into(),
             asset_id: asset_id.into(),
             content_digest: content_digest.into(),
         }),

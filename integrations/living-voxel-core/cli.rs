@@ -1,4 +1,6 @@
 //! Native CAD-3 bootstrap: sample a Living IR Core F-Rep sphere with Living Voxel.
+mod mask_surface;
+
 use living_frep::lattice::{Cell, LatticeField};
 use living_frep::{FieldSemantics, GeometryPrimitive, Point3, Pose3};
 use living_symbolic::{Dimension, Quantity};
@@ -149,6 +151,9 @@ fn execute(args: &[String]) -> Result<Json, Diagnostic> {
         [action, request, output] if action == "adaptive-gyroid-pinned" => {
             adaptive_gyroid(Path::new(request), Path::new(output))
         }
+        [action, path, expected] if action == "adaptive-mask-surface" => {
+            mask_surface::surface(Path::new(path), expected.parse().map_err(invalid)?)
+        }
         [action, path, expected, i, j, k] if action == "inspect" => {
             let mut index = [0; 3];
             for (slot, value) in index.iter_mut().zip([i, j, k]) {
@@ -242,7 +247,7 @@ fn execute(args: &[String]) -> Result<Json, Diagnostic> {
             )
         }
         _ => Err(invalid(
-            "luma-cad-voxel sample REQUEST.json OUTPUT.lvx | inspect INPUT.lvx SHA256 I J K | slice-xy INPUT.lvx SHA256 Z | surface INPUT.lvx SHA256 [REGION.json]",
+            "luma-cad-voxel sample REQUEST.json OUTPUT.lvx | inspect INPUT.lvx SHA256 I J K | slice-xy INPUT.lvx SHA256 Z | surface INPUT.lvx SHA256 [REGION.json] | adaptive-mask-surface INPUT.lvxadap SHA256",
         )),
     }
 }

@@ -341,3 +341,29 @@ LVX_SHA=$(jq -er '.result.digests.blob_digest' adaptive-gyroid-report.json)
 ячеек. У неё статус `NotDistance`. Профиль квалифицирует хранение
 маски, а адаптивное извлечение поверхности Gyroid остаётся отдельным
 сценарием. [Манифест](../../conformance/cad/cad3-adaptive-gyroid-mask-v1.json)
+
+### Поверхность адаптивной маски
+
+Профиль `cad3-adaptive-gyroid-surface-v1` строит границу объединения
+занятых ячеек из проверенного LVXADAP. Каждая грань между занятой и
+пустой ячейкой даёт два наружу ориентированных треугольника. Соседние
+занятые ячейки общей грани в сетке не имеют. Перед извлечением
+проверяются известные Bool-значения и пустая кайма толщиной в одну
+ячейку. Область с занятой каймой отклоняется как обрезанная.
+
+```sh
+"$CLI" adaptive-mask-surface gyroid.lvxadap "$LVX_SHA" | jq -e .result > gyroid-surface.json
+"$VIEW_BUILD/target/debug/pack-voxel" mask gyroid.lvxadap < gyroid-surface.json > gyroid-scene.json
+VIEW_FIT=1 VIEW_EXPECTED_REVISION=1 VIEW_RECOVERY=1 WEBGPU_SOFTWARE=1 \
+  VIEW_SOURCE_SHA256="$LVX_SHA" node tools/cad/test-view-scene.mjs "$VIEW" gyroid-scene.json
+```
+
+Сетка описывает дискретную маску. Для аналитического Gyroid границы
+позиционной ошибки и расстояния Хаусдорфа имеют статус `Unavailable`.
+Сертификация топологии сетки имеет статус `NotCertified`. Living View
+связывает выбранный объект с SHA‑256 исходного LVXADAP.
+
+Для воспроизведения тестом задайте `LUMA_VOXEL_MASK_SURFACE_EVIDENCE`
+как путь к пустому каталогу. Тест Gyroid сохранит туда LVXADAP и
+`gyroid-surface.json` для проверки View.
+[Манифест](../../conformance/cad/cad3-adaptive-gyroid-surface-v1.json)
