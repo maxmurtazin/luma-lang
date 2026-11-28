@@ -701,3 +701,171 @@ fn publishes_pinned_gyroid_with_implicit_metric_and_historical_provenance() {
         .unwrap();
     }
 }
+
+#[test]
+fn publishes_balanced_adaptive_tree_for_the_captured_core_sphere() {
+    use sha2::{Digest, Sha256};
+
+    let provider =
+        std::env::var("LUMA_VOXEL_CLI").expect("absolute path to pinned upstream voxel-cli");
+    let mut fixture = Fixture::new();
+    fixture.edit(json!({"op":"add","kind":"sphere"}));
+    let node = fixture
+        .store
+        .voxel_sphere_source(PART, None)
+        .unwrap()
+        .entity;
+    fixture.edit(json!({"op":"properties","node":node,"values":{"radius":69.3359375}}));
+    let pin = fixture.call(&["source", PART], 0);
+    assert_eq!(pin["radius_m"], 0.0693359375);
+    fixture.edit(json!({"op":"properties","node":node,"values":{"radius":75.0}}));
+    assert_eq!(fixture.call(&["source", PART], 0)["radius_m"], 0.075);
+
+    let profile = fixture.dir.path().join("profile.json");
+    let output = fixture.dir.path().join("sphere.lvxadap");
+    fs::write(&profile, include_bytes!("adaptive-sphere.json")).unwrap();
+    let revision = pin["revision"].to_string();
+    let request = [
+        "adaptive-sphere",
+        &provider,
+        PART,
+        &revision,
+        pin["definition_hash"].as_str().unwrap(),
+        profile.to_str().unwrap(),
+        output.to_str().unwrap(),
+    ];
+    let result = fixture.call(&request, 0);
+    let bytes = fs::read(&output).unwrap();
+    let digest = format!("{:x}", Sha256::digest(&bytes));
+    assert!(bytes.starts_with(b"LVXADAP\0"));
+    assert_eq!(result["digests"]["blob_digest"], digest);
+    assert_eq!(result["part_source"], pin);
+    let surface = &result["surface"];
+    assert_eq!(surface["source_tree_digest"], result["tree_digest"]);
+    let report = &surface["report"];
+    let bound = report["hausdorff_error_upper_m"].as_f64().unwrap();
+    assert!((0.0..=0.01).contains(&bound));
+    assert!(report["mixed_level_faces"].as_u64().unwrap() > 0);
+    assert_eq!(report["boundary_edges"], 0);
+    assert_eq!(report["connected_components"], 1);
+    assert_eq!(report["euler_characteristic"], 2);
+    for vertex in surface["vertices"].as_array().unwrap() {
+        let [x, y, z]: [f64; 3] = serde_json::from_value(vertex["position_m"].clone()).unwrap();
+        assert!((x.hypot(y).hypot(z) - 0.0693359375).abs() <= bound);
+    }
+
+    let submit = [
+        "adaptive-submit",
+        &provider,
+        REQUEST,
+        PART,
+        &revision,
+        pin["definition_hash"].as_str().unwrap(),
+        profile.to_str().unwrap(),
+    ];
+    let admitted = fixture.call(&submit, 0);
+    let job = admitted["job"].to_string();
+    assert_eq!(fixture.call(&submit, 0), admitted);
+    assert_eq!(fixture.call(&["adaptive-receipt", REQUEST], 0), admitted);
+    let regular_provider = std::env::var("LUMA_VOXEL_PROVIDER").unwrap();
+    assert!(fixture
+        .call(&["adaptive-work", &regular_provider], 0)
+        .is_null());
+    let failed_attempt = if cfg!(feature = "checkpoint-fault-injection") {
+        assert_eq!(
+            fixture
+                .run(
+                    &["adaptive-work", &provider],
+                    Some("adaptive-sphere-job-before-publication")
+                )
+                .status
+                .code(),
+            Some(73)
+        );
+        assert_eq!(
+            fixture.call(&["adaptive-status", &job], 0)["state"],
+            "running"
+        );
+        1
+    } else {
+        0
+    };
+    assert_eq!(
+        fixture.call(&["adaptive-export", &job, output.to_str().unwrap()], 2)["code"],
+        "JobPending"
+    );
+    assert_eq!(
+        fixture.call(&["adaptive-cancel", &job], 0)["state"],
+        "cancelled"
+    );
+    assert_eq!(
+        fixture.call(&["adaptive-retry", &job, &failed_attempt.to_string()], 0)["state"],
+        "admitted"
+    );
+    let completed = fixture.call(&["adaptive-work", &provider], 0);
+    assert_eq!(completed["state"], "published");
+    assert_eq!(completed["attempt"], failed_attempt + 1);
+    let target = std::env::var_os("LUMA_VOXEL_ADAPTIVE_EVIDENCE");
+    let dir = target.as_ref().map(Path::new).unwrap_or(fixture.dir.path());
+    let exported = dir.join("adaptive-job.lvxadap");
+    let recovered = fixture.call(&["adaptive-export", &job, exported.to_str().unwrap()], 0);
+    assert_eq!(fs::read(&exported).unwrap(), bytes);
+    assert_eq!(recovered["part_source"], pin);
+    assert_eq!(recovered["surface"], result["surface"]);
+    assert!(recovered["job_manifest"].is_object());
+    if target.is_some() {
+        fs::write(
+            dir.join("adaptive-report.json"),
+            json!({"result":recovered}).to_string(),
+        )
+        .unwrap();
+    }
+
+    let decoded = |path: &Path| {
+        Command::new(&provider)
+            .arg("decode-adaptive-sphere")
+            .arg(path)
+            .arg(&digest)
+            .output()
+            .unwrap()
+    };
+    let decoded_original = decoded(&output);
+    assert!(decoded_original.status.success());
+    let decoded_original: Value = serde_json::from_slice(&decoded_original.stdout).unwrap();
+    assert_eq!(
+        decoded_original["result"]["artifact"]["tree_digest"],
+        result["tree_digest"]
+    );
+    let corrupt = fixture.dir.path().join("corrupt.lvxadap");
+    let mut altered = bytes.clone();
+    let last = altered.last_mut().unwrap();
+    *last ^= 1;
+    fs::write(&corrupt, altered).unwrap();
+    assert!(!decoded(&corrupt).status.success());
+
+    assert_eq!(fixture.call(&request, 2)["code"], "IoFailure");
+    assert_eq!(fs::read(&output).unwrap(), bytes);
+
+    let mut unattainable: Value =
+        serde_json::from_slice(include_bytes!("adaptive-sphere.json")).unwrap();
+    unattainable["max_hausdorff_error_m"] = json!(0.0);
+    fs::write(&profile, unattainable.to_string()).unwrap();
+    let refused = fixture.dir.path().join("refused.lvxadap");
+    let mut request = request;
+    request[6] = refused.to_str().unwrap();
+    fixture.call(&request, 2);
+    assert!(!refused.exists());
+    let wrong_hash = "0".repeat(64);
+    let mut stale = request;
+    stale[4] = &wrong_hash;
+    assert_eq!(fixture.call(&stale, 2)["code"], "MissingPinnedSource");
+    assert!(!refused.exists());
+
+    unattainable["grid"]["layout"] = json!("Node");
+    fs::write(&profile, unattainable.to_string()).unwrap();
+    assert_eq!(
+        fixture.call(&request, 2)["code"],
+        "UnsupportedAdaptiveProfile"
+    );
+    assert!(!refused.exists());
+}

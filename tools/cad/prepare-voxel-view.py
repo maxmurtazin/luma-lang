@@ -23,6 +23,14 @@ def main():
     subprocess.run(["git", "clone", "--quiet", "--no-checkout", source, destination], check=True)
     subprocess.run(["git", "-C", destination, "checkout", "--quiet", "--detach", pin], check=True)
     adapter = destination / "crates/core-adapter/src/bin"
+    manifest = adapter.parents[1] / "Cargo.toml"
+    contents = manifest.read_text(encoding="utf-8")
+    dependency = "serde_json.workspace = true"
+    if contents.count(dependency) != 1:
+        parser.error("unexpected serde_json dependency in pinned View adapter")
+    manifest.write_text(contents.replace(
+        dependency, 'serde_json = { workspace = true, features = ["float_roundtrip"] }'
+    ), encoding="utf-8")
     shutil.copyfile(ROOT / "integrations/living-voxel-core/pack-voxel.rs", adapter / "pack-voxel.rs")
     (adapter / "voxel-pin.txt").write_text(providers["voxel"]["commit"] + "\n", encoding="utf-8")
     print(destination / "Cargo.toml")

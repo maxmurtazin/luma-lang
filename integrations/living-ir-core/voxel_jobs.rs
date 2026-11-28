@@ -75,6 +75,30 @@ impl JobInput for LatticeJobInput {
     }
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AdaptiveJobInput {
+    pub source: SphereSource,
+    pub profile: Value,
+}
+
+impl JobInput for AdaptiveJobInput {
+    const PREFIX: &str = "adaptive-sphere";
+    const TASK: &str = "adaptive-sphere";
+    const OPERATION: &str = "voxel.adapt.sphere";
+    const SCHEMA: &str = "luma.voxel.lvxadap/1";
+    const INPUT_DOMAIN: &[u8] = b"luma-voxel-adaptive-input/1";
+    const RESULT_DOMAIN: &[u8] = b"luma-voxel-adaptive-result/1";
+
+    fn pin(&self) -> queue::SourcePin {
+        queue::SourcePin {
+            document: self.source.document.clone(),
+            revision: self.source.revision,
+            definition_digest: jobs::normalized_hash(&self.source.definition_hash),
+        }
+    }
+}
+
 impl ProjectStore {
     pub fn voxel_sphere_source(
         &self,
@@ -225,6 +249,38 @@ impl ProjectStore {
 
     pub fn lattice_voxel_job_result(&self, id: i64) -> Result<Value, Error> {
         self.artifact_job_result::<LatticeJobInput>(id)
+    }
+
+    pub fn admit_adaptive_voxel_job(
+        &self,
+        request: &str,
+        provider: &str,
+        part: &str,
+        pin: (u64, &str),
+        profile: Value,
+    ) -> Result<queue::Delivery, Error> {
+        let source = self.voxel_sphere_source(part, Some(pin))?;
+        self.admit_artifact_job(request, provider, AdaptiveJobInput { source, profile })
+    }
+
+    pub fn adaptive_voxel_receipt(&self, request: &str) -> Result<queue::Delivery, Error> {
+        self.artifact_job_receipt::<AdaptiveJobInput>(request)
+    }
+
+    pub fn run_adaptive_voxel_job(
+        &self,
+        provider: &str,
+        compute: impl FnOnce(&AdaptiveJobInput, &dyn Fn() -> bool) -> Result<Value, &'static str>,
+    ) -> Result<Option<queue::JobReceipt>, Error> {
+        self.run_voxel_artifact_job(provider, compute)
+    }
+
+    pub fn adaptive_voxel_status(&self, id: i64) -> Result<queue::JobReceipt, Error> {
+        self.artifact_job_status::<AdaptiveJobInput>(id)
+    }
+
+    pub fn adaptive_voxel_result(&self, id: i64) -> Result<Value, Error> {
+        self.artifact_job_result::<AdaptiveJobInput>(id)
     }
 
     pub fn admit_voxel_job(

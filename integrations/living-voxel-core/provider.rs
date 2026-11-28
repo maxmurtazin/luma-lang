@@ -10,10 +10,19 @@ use std::{
 };
 
 pub(super) fn operate(provider: &Path, operation: &str, request: &Value) -> Result<Value> {
+    operate_while(provider, operation, request, &|| true)
+}
+
+pub(super) fn operate_while(
+    provider: &Path,
+    operation: &str,
+    request: &Value,
+    current: &dyn Fn() -> bool,
+) -> Result<Value> {
     let temp = tempfile::tempdir().map_err(io_error)?;
     let input = temp.path().join("request.json");
     fs::write(&input, request.to_string()).map_err(io_error)?;
-    let outcome = call(
+    call(
         provider,
         &[
             "operate".as_ref(),
@@ -22,8 +31,17 @@ pub(super) fn operate(provider: &Path, operation: &str, request: &Value) -> Resu
             input.as_os_str(),
         ],
         &temp.path().join("response.json"),
-    )?;
-    Ok(outcome["result"].clone())
+        current,
+    )
+}
+
+pub(super) fn run_while(
+    provider: &Path,
+    args: &[&std::ffi::OsStr],
+    current: &dyn Fn() -> bool,
+) -> Result<Value> {
+    let temp = tempfile::tempdir().map_err(io_error)?;
+    call(provider, args, &temp.path().join("response.json"), current)
 }
 
 pub(super) fn decode(provider: &Path, bytes: &[u8], digest: &[u8; 32]) -> Result<Value> {
@@ -38,15 +56,24 @@ pub(super) fn decode(provider: &Path, bytes: &[u8], digest: &[u8; 32]) -> Result
         provider,
         &["decode".as_ref(), input.as_os_str(), expected.as_ref()],
         &temp.path().join("response.json"),
+        &|| true,
     )?;
-    let field = &outcome["result"]["field"];
+    let field = &outcome["field"];
     if !field.is_object() {
         return Err(json!({"code":"CorruptArtifact"}));
     }
     Ok(field.clone())
 }
 
-fn call(provider: &Path, args: &[&std::ffi::OsStr], response: &Path) -> Result<Value> {
+fn call(
+    provider: &Path,
+    args: &[&std::ffi::OsStr],
+    response: &Path,
+    current: &dyn Fn() -> bool,
+) -> Result<Value> {
+    if !current() {
+        return Err(json!({"code":"Cancelled"}));
+    }
     let mut child = Command::new(provider.canonicalize().map_err(io_error)?)
         .args(args)
         .env_remove("LUMA_CAD_PROJECT_KEY")
@@ -61,10 +88,15 @@ fn call(provider: &Path, args: &[&std::ffi::OsStr], response: &Path) -> Result<V
         if let Some(status) = child.try_wait().map_err(io_error)? {
             break status;
         }
-        if Instant::now() >= timeout {
+        let active = current();
+        if !active || Instant::now() >= timeout {
             let _ = child.kill();
             let _ = child.wait();
-            return Err(json!({"code":"LimitExceeded","message":"Voxel CLI timed out"}));
+            return Err(if active {
+                json!({"code":"LimitExceeded","message":"Voxel CLI timed out"})
+            } else {
+                json!({"code":"Cancelled"})
+            });
         }
         std::thread::sleep(Duration::from_millis(10));
     };
@@ -72,7 +104,7 @@ fn call(provider: &Path, args: &[&std::ffi::OsStr], response: &Path) -> Result<V
     let mut outcome: Value =
         serde_json::from_slice(&read(response, 16 * 1024 * 1024)?).map_err(|_| failure())?;
     if status.success() && outcome["outcome"] == "Success" && outcome["result"].is_object() {
-        return Ok(outcome);
+        return Ok(outcome["result"].take());
     }
     if outcome["outcome"] == "LimitExceeded" {
         return Err(json!({"code":"LimitExceeded","diagnostic":outcome["diagnostic"]}));

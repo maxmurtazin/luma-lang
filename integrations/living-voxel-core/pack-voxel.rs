@@ -1,11 +1,14 @@
 //! Pack a sampled surface as an immutable View ExternalAsset.
 use living_view_contract::{AffineTransform64, SceneStamp, SourceBinding};
-use living_view_core_adapter::{MeshPacket, SceneBuilder};
+use living_view_core_adapter::{MeshPacket, SceneBuilder, SceneBundle};
 use serde::Deserialize;
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
     error::Error,
+    fs::File,
     io::{self, Read},
+    path::Path,
 };
 
 const LIMIT: usize = 24 * 1024 * 1024;
@@ -42,11 +45,50 @@ struct Triangle {
     vertices: [u32; 3],
 }
 
+#[derive(Deserialize)]
+struct AdaptiveEnvelope {
+    result: AdaptiveWire,
+}
+
+#[derive(Deserialize)]
+struct AdaptiveWire {
+    profile: String,
+    voxel_revision: String,
+    part_source: Value,
+    provider_binary_sha256: String,
+    digests: AdaptiveDigests,
+    tree_digest: String,
+    surface: AdaptiveSurface,
+}
+
+#[derive(Deserialize)]
+struct AdaptiveDigests {
+    blob_digest: String,
+    manifest_digest: String,
+}
+
+#[derive(Deserialize)]
+struct AdaptiveSurface {
+    schema: String,
+    profile: String,
+    source_digest: String,
+    source_tree_digest: String,
+    vertices: Vec<Vertex>,
+    triangles: Vec<Triangle>,
+    report: Value,
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let mut bytes = Vec::new();
     io::stdin().take(LIMIT as u64 + 1).read_to_end(&mut bytes)?;
     if bytes.len() > LIMIT {
         return Err("Voxel surface exceeds the View input limit".into());
+    }
+    let args: Vec<_> = std::env::args_os().skip(1).collect();
+    match args.as_slice() {
+        [mode, tree] if mode == "adaptive" => return pack_adaptive(&bytes, Path::new(tree)),
+        [] => {}
+        _ => return Err("usage: pack-voxel [adaptive INPUT.lvxadap] < report.json".into()),
     }
     let wire: Wire = serde_json::from_slice(&bytes)?;
     let surface = wire.surface;
@@ -63,34 +105,120 @@ fn main() -> Result<(), Box<dyn Error>> {
     {
         return Err("Unsupported Voxel surface profile".into());
     }
-    let positions: Vec<_> = surface
-        .vertices
+    let content_digest = format!("{:x}", Sha256::digest(&bytes));
+    let bundle = scene(
+        surface.vertices,
+        surface.triangles,
+        &wire.voxel_revision,
+        &surface.source_digest,
+        &content_digest,
+    )?;
+    serde_json::to_writer(io::stdout().lock(), &bundle)?;
+    Ok(())
+}
+
+fn pack_adaptive(bytes: &[u8], tree: &Path) -> Result<(), Box<dyn Error>> {
+    let wire: AdaptiveEnvelope = serde_json::from_slice(bytes)?;
+    let report = wire.result;
+    let surface = report.surface;
+    let hausdorff = surface.report["hausdorff_error_upper_m"].as_f64();
+    if report.voxel_revision != include_str!("voxel-pin.txt").trim()
+        || report.profile != "cad3-adaptive-sphere-v1"
+        || surface.schema != "living.voxel.mesh/v1"
+        || surface.profile != "AdaptiveSphereDualContouring"
+        || surface.source_tree_digest != report.tree_digest
+        || !is_digest(&report.tree_digest)
+        || !is_digest(&surface.source_digest)
+        || !is_digest(&report.digests.manifest_digest)
+        || !is_digest(&report.provider_binary_sha256)
+        || !report.part_source["definition_hash"]
+            .as_str()
+            .is_some_and(is_digest)
+        || report.part_source["revision"].as_u64().is_none()
+        || surface.vertices.is_empty()
+        || surface.vertices.len() > 8192
+        || surface.triangles.is_empty()
+        || surface.triangles.len() > 16384
+        || surface.report["boundary_edges"] != 0
+        || surface.report["connected_components"] != 1
+        || surface.report["euler_characteristic"] != 2
+        || surface.report["topology_checks"] != "RadiallyEmbeddedClosedGenusZero"
+        || !hausdorff.is_some_and(|value| value.is_finite() && value >= 0.0)
+    {
+        return Err("Unsupported adaptive Voxel report".into());
+    }
+    const MAX_TREE: u64 = 8 * 1024 * 1024;
+    let mut tree_bytes = Vec::new();
+    File::open(tree)?
+        .take(MAX_TREE + 1)
+        .read_to_end(&mut tree_bytes)?;
+    if tree_bytes.len() as u64 > MAX_TREE
+        || !tree_bytes.starts_with(b"LVXADAP\0")
+        || report.digests.blob_digest != format!("{:x}", Sha256::digest(&tree_bytes))
+    {
+        return Err("LVXADAP digest differs from the adaptive report".into());
+    }
+    let content_digest = format!("{:x}", Sha256::digest(bytes));
+    let bundle = scene(
+        surface.vertices,
+        surface.triangles,
+        &report.voxel_revision,
+        &report.digests.blob_digest,
+        &content_digest,
+    )?;
+    serde_json::to_writer(
+        io::stdout().lock(),
+        &json!({
+            "bundle":bundle,
+            "evidence":{
+                "schema":"luma.cad.adaptive-view/1",
+                "part_source":report.part_source,
+                "voxel_revision":report.voxel_revision,
+                "provider_binary_sha256":report.provider_binary_sha256,
+                "provider_report_sha256":content_digest,
+                "lvxadap_sha256":report.digests.blob_digest,
+                "manifest_digest":report.digests.manifest_digest,
+                "tree_digest":report.tree_digest,
+                "analytic_source_digest":surface.source_digest,
+                "provider_surface_report":surface.report,
+                "view_mesh_accuracy":"Unavailable"
+            }
+        }),
+    )?;
+    Ok(())
+}
+
+fn scene(
+    vertices: Vec<Vertex>,
+    triangles: Vec<Triangle>,
+    voxel_revision: &str,
+    asset_id: &str,
+    content_digest: &str,
+) -> Result<SceneBundle, Box<dyn Error>> {
+    let positions: Vec<_> = vertices
         .into_iter()
         .map(|vertex| vertex.position_m)
         .collect();
-    let triangles: Vec<_> = surface
-        .triangles
+    let triangles: Vec<_> = triangles
         .into_iter()
         .map(|triangle| triangle.vertices)
         .collect();
-    let content_digest = format!("{:x}", Sha256::digest(&bytes));
     let mut builder = SceneBuilder::new(SceneStamp {
         scene_id: format!("voxel-surface:{content_digest}"),
         revision: 1,
     });
     let geometry = builder.mesh(MeshPacket::from_si(&positions, &triangles, 0, || false)?)?;
     builder.occurrence(
-        vec![format!("voxel-{}", surface.source_digest)],
+        vec![format!("voxel-{asset_id}")],
         AffineTransform64::IDENTITY,
         geometry,
         Some(SourceBinding::ExternalAsset {
-            provider: format!("living-voxel-core@{}", wire.voxel_revision),
-            asset_id: surface.source_digest,
-            content_digest,
+            provider: format!("living-voxel-core@{voxel_revision}"),
+            asset_id: asset_id.into(),
+            content_digest: content_digest.into(),
         }),
     )?;
-    serde_json::to_writer(io::stdout().lock(), &builder.finish())?;
-    Ok(())
+    Ok(builder.finish())
 }
 
 fn is_digest(value: &str) -> bool {

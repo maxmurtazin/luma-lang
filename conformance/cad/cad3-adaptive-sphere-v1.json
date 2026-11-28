@@ -1,0 +1,44 @@
+{
+  "profile": "cad3-adaptive-sphere-v1",
+  "schema_version": 1,
+  "builds_on": "cad3-voxel-project-v1",
+  "provider_commits": {
+    "core": "e8d5a465dbc943b746ce9f3607fe526f1b3a93df",
+    "voxel": "c17511db9258c1d06100c21b34ff0c03bb469b41"
+  },
+  "target": "Linux x86-64, Rust 1.100.0",
+  "entry_point": "adaptive-sphere",
+  "source": "historical Core editor analytic sphere",
+  "layout": "CellCenter",
+  "max_level": 5,
+  "max_refinement_regions": 8,
+  "artifact": "LVXADAP",
+  "surface": {
+    "profile": "AdaptiveSphereDualContouring",
+    "balance": "2:1 across mixed levels",
+    "closed_sphere": true,
+    "error_metric": "Hausdorff upper bound in meters",
+    "fixture_tolerance_m": 0.01
+  },
+  "evidence": [
+    "examples/cad/voxel-adaptive-sphere.json",
+    "integrations/living-voxel-core/project_test.rs",
+    "tools/cad/test-adaptive-view.py",
+    "tools/cad/test-view-scene.mjs"
+  ],
+  "queue": [
+    "adaptive-submit",
+    "adaptive-work",
+    "adaptive-receipt",
+    "adaptive-status",
+    "adaptive-cancel",
+    "adaptive-retry",
+    "adaptive-export"
+  ],
+  "view": {
+    "provider_commit": "a94fe6cca6f1d2982bb85e4cd4170422ba77f7b4",
+    "target": "Chromium 159, software WebGPU",
+    "source_binding": "ExternalAsset",
+    "display_mesh_accuracy": "Unavailable"
+  }
+}
