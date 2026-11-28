@@ -13,7 +13,7 @@ pub(super) fn operate(provider: &Path, operation: &str, request: &Value) -> Resu
     let temp = tempfile::tempdir().map_err(io_error)?;
     let input = temp.path().join("request.json");
     fs::write(&input, request.to_string()).map_err(io_error)?;
-    let outcome = call(
+    call(
         provider,
         &[
             "operate".as_ref(),
@@ -22,8 +22,12 @@ pub(super) fn operate(provider: &Path, operation: &str, request: &Value) -> Resu
             input.as_os_str(),
         ],
         &temp.path().join("response.json"),
-    )?;
-    Ok(outcome["result"].clone())
+    )
+}
+
+pub(super) fn run(provider: &Path, args: &[&std::ffi::OsStr]) -> Result<Value> {
+    let temp = tempfile::tempdir().map_err(io_error)?;
+    call(provider, args, &temp.path().join("response.json"))
 }
 
 pub(super) fn decode(provider: &Path, bytes: &[u8], digest: &[u8; 32]) -> Result<Value> {
@@ -39,7 +43,7 @@ pub(super) fn decode(provider: &Path, bytes: &[u8], digest: &[u8; 32]) -> Result
         &["decode".as_ref(), input.as_os_str(), expected.as_ref()],
         &temp.path().join("response.json"),
     )?;
-    let field = &outcome["result"]["field"];
+    let field = &outcome["field"];
     if !field.is_object() {
         return Err(json!({"code":"CorruptArtifact"}));
     }
@@ -72,7 +76,7 @@ fn call(provider: &Path, args: &[&std::ffi::OsStr], response: &Path) -> Result<V
     let mut outcome: Value =
         serde_json::from_slice(&read(response, 16 * 1024 * 1024)?).map_err(|_| failure())?;
     if status.success() && outcome["outcome"] == "Success" && outcome["result"].is_object() {
-        return Ok(outcome);
+        return Ok(outcome["result"].take());
     }
     if outcome["outcome"] == "LimitExceeded" {
         return Err(json!({"code":"LimitExceeded","diagnostic":outcome["diagnostic"]}));

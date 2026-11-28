@@ -60,9 +60,10 @@ tempfile = "=3.27.0"
 """, encoding="utf-8")
     project = destination / "project"
     project.mkdir()
-    for file in ("project.rs", "project_test.rs", "blocks.rs", "paged.rs", "provider.rs"):
+    for file in ("project.rs", "project_test.rs", "blocks.rs", "paged.rs", "provider.rs", "adaptive.rs"):
         shutil.copyfile(integration / file, project / file)
     shutil.copyfile(ROOT / "examples/cad/voxel-sphere.json", project / "sphere.json")
+    shutil.copyfile(ROOT / "examples/cad/voxel-adaptive-sphere.json", project / "adaptive-sphere.json")
     shutil.copyfile(ROOT / "examples/cad/voxel-sample-command.json", project / "sample-command.json")
     shutil.copyfile(integration / "project.Cargo.lock", project / "Cargo.lock")
     (project / "Cargo.toml").write_text("""[package]

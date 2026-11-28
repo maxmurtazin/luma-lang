@@ -240,3 +240,42 @@ VIEW_FIT=1 VIEW_EXPECTED_REVISION=1 WEBGPU_SOFTWARE=1 \
 проектный тест `publishes_pinned_gyroid_with_implicit_metric_and_historical_provenance`.
 Он создаёт Part и сохраняет LVX, его SHA‑256 и вход для `pack-voxel`.
 [Манифест Gyroid](../../conformance/cad/cad3-gyroid-regular-v1.json)
+
+## Адаптивная сфера
+
+Профиль `cad3-adaptive-sphere-v1` строит адаптивное дерево для
+аналитической сферы из закреплённой ревизии Core Part. Команда принимает
+сетку `CellCenter` в метрах, глубину до 5, до восьми областей уточнения
+и допустимую верхнюю границу ошибки Хаусдорфа. Пример использует сферу
+радиуса 69,3359375 мм с центром в начале координат.
+
+```sh
+"$PROJECT_CLI" "$DB" "$PROJECT" source "$PART"
+"$PROJECT_CLI" "$DB" "$PROJECT" adaptive-sphere "$VOXEL_CLI" \
+  "$PART" "$PART_REV" "$DEFINITION_HASH" examples/cad/voxel-adaptive-sphere.json \
+  sphere.lvxadap > adaptive-report.json
+
+LVX_SHA=$(jq -er '.result.digests.blob_digest' adaptive-report.json)
+"$VOXEL_CLI" decode-adaptive-sphere sphere.lvxadap "$LVX_SHA"
+```
+
+`source` возвращает номер и хеш принятой ревизии Part. Используйте
+`voxel-cli` из закреплённого Living Voxel, как в разделе о проектных
+объёмах. Команда передаёт во все шаги одну копию исполняемого файла.
+Она декодирует созданный LVXADAP, сверяет SHA‑256 и исходную сферу,
+затем извлекает замкнутую поверхность методом Adaptive Sphere Dual
+Contouring. Экспорт записывает новый файл после проверки дерева,
+топологии и границы ошибки. Существующий файл защищён от
+перезаписи.
+
+Отчёт связывает ревизию Part, хеш бинарника, хеши файла и дерева и
+поверхность с численной границей ошибки. Сам LVXADAP хранит
+аналитическую сферу и данные дерева поставщика. Сохраните отчёт для
+привязки к авторской ревизии Core. Маршрут выполняется синхронно.
+Адаптивные решётки Gyroid, очередь адаптивных задач и передача
+адаптивной поверхности в Living View остаются вне этого профиля.
+
+Тест `publishes_balanced_adaptive_tree_for_the_captured_core_sphere`
+проверяет переходы 2:1, замкнутость сетки, сохранение исторической
+сферы и отказ при повреждённом файле или недостижимой точности.
+[Профиль приёмки](../../conformance/cad/cad3-adaptive-sphere-v1.json)
