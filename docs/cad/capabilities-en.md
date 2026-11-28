@@ -20,7 +20,7 @@ Runtime availability is scoped to the verified integration profiles.
 | `param.length` | CAD-1 | implemented | absent | planned | unavailable | not_run / not_run | The Luma host binding is planned. |
 | `param.set` | CAD-1 | implemented | absent | planned | unavailable | not_run / not_run | The Luma host binding is planned. |
 | `project.parameter` | CAD-1 | implemented | absent | planned | unavailable | not_run / not_run | The Luma host binding is planned. |
-| `render.still` | CAD-6 | implemented | absent | planned | unavailable | not_run / not_run | The Luma host binding is planned. |
+| `render.still` | CAD-6 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Prepare or queue one pinned Studio presentation as a WebGL2 PNG with a durable receipt. |
 | `sim.query` | CAD-4 | experimental | qualified_profile | qualified_profile | available | passed / not_run | A Luma command reads an archived cell or face observation with its physical quantity, units and address. |
 | `sim.solve` | CAD-4 | experimental | qualified_profile | qualified_profile | available | passed / not_run | A Luma command declares a stationary Box study with captured material and boundaries. The Core queue publishes its verified Living Simulation archive. |
 | `sketch.profile` | CAD-2 | implemented | qualified_profile | qualified_profile | available | passed / not_run | Closed and fully constrained embedded XY sketch validated by the pinned solver. |

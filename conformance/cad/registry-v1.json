@@ -922,7 +922,6 @@
           "DeclareTask"
         ],
         "modes": [
-          "recipe",
           "command"
         ],
         "phases": [
@@ -938,31 +937,32 @@
         "provider_contract": "studio@938eafee7a6b1f0c2a9a00d98814a33b457dd33d"
       },
       "provider": "studio",
-      "backend_operation": "Blender Cycles CPU export",
+      "backend_operation": "WebGL2 preview-raster PNG still",
       "backend_version": "0.1.0",
-      "adapter_version": "absent",
+      "adapter_version": "luma-cad-studio@1",
       "stage": "CAD-6",
       "backend": "implemented",
-      "adapter": "absent",
-      "binding": "planned",
-      "availability": "unavailable",
+      "adapter": "qualified_profile",
+      "binding": "qualified_profile",
+      "availability": "available",
       "input_support": "requires_preflight",
       "target_verification": {
-        "t0": "not_run",
+        "t0": "passed",
         "t1": "not_run"
       },
       "evidence": [
         "docs/S5-RASTER-EXPORT.md",
-        "docs/S6-LIVING-IR-PREVIEW.md"
+        "docs/S6-LIVING-IR-PREVIEW.md",
+        "apps/standalone/tools/render-queue.mjs"
       ],
       "required_grants": [
         "job-submit"
       ],
-      "limits": "Pinned presentation and source; standalone queue ownership",
+      "limits": "Native Studio command, one PNG from a pinned presentation and exact rational time. Even size up to 1920×1080. Standalone queue ownership.",
       "numerical_profile": "si-f64-v1",
       "reason": {
-        "en": "The Luma host binding is planned.",
-        "ru": "Binding в Luma запланирован."
+        "en": "Prepare or queue one pinned Studio presentation as a WebGL2 PNG with a durable receipt.",
+        "ru": "Подготовка или постановка в очередь одного PNG WebGL2 по закреплённой презентации Studio с долговечной квитанцией."
       }
     },
     "sim.query": {
