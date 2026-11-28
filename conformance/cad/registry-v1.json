@@ -475,6 +475,130 @@
         "ru": "Командный профиль встроенного Draft с зарегистрированным Part и единой транзакцией Core."
       }
     },
+    "elements.find": {
+      "descriptor": {
+        "qualified_name": "elements.find",
+        "operation_id": "elements.find",
+        "operation_version": {
+          "major": 1,
+          "minor": 0
+        },
+        "parameters": [
+          {
+            "name": "query",
+            "type": "Text"
+          }
+        ],
+        "result_type": "ElementSearchResult",
+        "type_scheme": {
+          "kind": "monomorphic"
+        },
+        "effects": [
+          "ReadPinned"
+        ],
+        "modes": [
+          "command"
+        ],
+        "phases": [
+          "prepare"
+        ],
+        "capability_predicates": [
+          "elements.find"
+        ],
+        "diagnostic_codes": [
+          "UnsupportedCapability",
+          "UnsupportedSchemaVersion"
+        ],
+        "provider_contract": "elements@13b06f7ad2885385e27b81d5ee0f118e89217cb0"
+      },
+      "provider": "elements",
+      "backend_operation": "captured catalog search",
+      "backend_version": "0.1.0",
+      "adapter_version": "luma-cad-elements@1",
+      "stage": "CAD-5",
+      "backend": "implemented",
+      "adapter": "qualified_profile",
+      "binding": "qualified_profile",
+      "availability": "available",
+      "input_support": "requires_preflight",
+      "target_verification": {
+        "t0": "passed",
+        "t1": "not_run"
+      },
+      "evidence": [
+        "src/catalog.rs",
+        "src/store.rs"
+      ],
+      "required_grants": [],
+      "limits": "Read-only command against a local Elements catalog, at most 16 returned items per search",
+      "numerical_profile": "si-f64-v1",
+      "reason": {
+        "en": "Search the captured Elements catalog and select an exact package and definition revision.",
+        "ru": "Поиск по снимку каталога Elements с выбором точной версии пакета и ревизии определения."
+      }
+    },
+    "elements.resolve": {
+      "descriptor": {
+        "qualified_name": "elements.resolve",
+        "operation_id": "elements.resolve",
+        "operation_version": {
+          "major": 1,
+          "minor": 0
+        },
+        "parameters": [
+          {
+            "name": "pin",
+            "type": "ElementRevisionRef"
+          }
+        ],
+        "result_type": "ElementDefinitionRef",
+        "type_scheme": {
+          "kind": "monomorphic"
+        },
+        "effects": [
+          "ReadPinned"
+        ],
+        "modes": [
+          "command"
+        ],
+        "phases": [
+          "prepare"
+        ],
+        "capability_predicates": [
+          "elements.resolve"
+        ],
+        "diagnostic_codes": [
+          "UnsupportedCapability",
+          "UnsupportedSchemaVersion"
+        ],
+        "provider_contract": "elements@13b06f7ad2885385e27b81d5ee0f118e89217cb0"
+      },
+      "provider": "elements",
+      "backend_operation": "exact versioned catalog description",
+      "backend_version": "0.1.0",
+      "adapter_version": "luma-cad-elements@1",
+      "stage": "CAD-5",
+      "backend": "implemented",
+      "adapter": "qualified_profile",
+      "binding": "qualified_profile",
+      "availability": "available",
+      "input_support": "requires_preflight",
+      "target_verification": {
+        "t0": "passed",
+        "t1": "not_run"
+      },
+      "evidence": [
+        "src/catalog.rs",
+        "src/store.rs"
+      ],
+      "required_grants": [],
+      "limits": "Read-only command checks package identity, manifest digest, definition digest, and required dependency pins",
+      "numerical_profile": "si-f64-v1",
+      "reason": {
+        "en": "Resolve a pinned definition with package provenance, variants, and dependency pins.",
+        "ru": "Чтение закреплённого определения с происхождением пакета, вариантами и закреплёнными зависимостями."
+      }
+    },
     "elements.place": {
       "descriptor": {
         "qualified_name": "elements.place",

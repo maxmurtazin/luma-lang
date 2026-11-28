@@ -17,7 +17,7 @@
       "schema/cad/registry-v1.json": "sha256:a57e6cb7a87338b9a2080e2b1f162c9a3243b76d70907e7622129713560e9f58",
       "schema/cad/sketch-profile-v1.json": "sha256:06237d88913edee9628d806be19c4b8a4b2aae94197f21b219379800f1055716",
       "schema/cad/wire-v1.json": "sha256:1a0a8fe30c338c333d15626abb7c32917684287bc87dc0f3bd9febc0d3a60986",
-      "conformance/cad/registry-v1.json": "sha256:3f85688fc0cc0517bb8848ecec2c5dca107de98b3af680abccbf75a291b3b17f",
+      "conformance/cad/registry-v1.json": "sha256:378eb3f88fc956b7c7cf1843976f01efefd41524d5f15b0d938d1a0c776e552a",
       "conformance/cad/cad2-profile-v1.json": "sha256:71252872b985b3fb2ff30ea27ba7648f78160573894a5d41633be1c2e8de646d",
       "conformance/cad/cad3-regular-sphere-v1.json": "sha256:b35943fbe8b3c808f18a36cb35450897fbf4aa52a6945c725769ec26bb3e92f4",
       "conformance/cad/cad3-voxel-project-v1.json": "sha256:d509226d46722300062f0eed086779ebca102409612f6828c2f17b219c11d6ec",
@@ -34,7 +34,9 @@
       "conformance/cad/cad4-box-dc-v1.json": "sha256:e98594275481f06ad56ccf5268555bdac57248b86b71a1fc0be7a15658df0cfc",
       "examples/cad/box-dc-study.json": "sha256:62649edac211ee627a3bf2454953430d6b4a549087e3668545d48574f2510dd0",
       "examples/cad/box-solve-command.json": "sha256:cc149a551af8f8134d00e87c4cc3ff1f7f4d4c4102cf3bc5c090b6243e873b83",
-      "examples/cad/box-query-command.json": "sha256:5d821146debb233c5b4b9bd3cca46deb85938a1b2f060fdaf7621f038a05c1a9"
+      "examples/cad/box-query-command.json": "sha256:5d821146debb233c5b4b9bd3cca46deb85938a1b2f060fdaf7621f038a05c1a9",
+      "examples/cad/elements-find-command.json": "sha256:eb52a3d26c23b0efc3fc7bf36d50bfd15d2b49e03b155ca3d3afa0fe282b3f20",
+      "examples/cad/elements-resolve-command.json": "sha256:84e90a2dc108b899c96d6f2c862cdf54b9e17a84207d4c0a67797bef807742fb"
     }
   },
   "numeric_profiles": [
@@ -137,7 +139,10 @@
       "selection": "inventory",
       "review_paths": [
         "docs/ADAPTER-CONTRACT.md",
-        "src/capabilities.rs"
+        "src/capabilities.rs",
+        "src/catalog.rs",
+        "src/store.rs",
+        "Cargo.lock"
       ]
     }
   },

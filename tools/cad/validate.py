@@ -353,7 +353,7 @@ def verify_cad2_profile(lock, registry):
                     and entry["target"] == "t0" and entry["entry_points"]
                     and entry["checks"] and set(entry["checks"]) <= set(checks)
                     and targets == {"t0": "passed", "t1": "not_run"}, f"Unqualified CAD-2 status for {name}")
-        elif name not in {"voxel.sample", "sim.solve", "sim.query"}:
+        elif name not in {"voxel.sample", "sim.solve", "sim.query", "elements.find", "elements.resolve"}:
             require(row["binding"] == "planned" and row["availability"] == "unavailable"
                     and set(targets.values()) == {"not_run"}, f"Unsupported status inflation for {name}")
 
@@ -514,6 +514,21 @@ def verify_cad4_profiles(lock, registry):
                 f"Invalid CAD-4 command binding {operation}")
 
 
+def verify_elements_catalog(lock, registry):
+    for name in ("find", "resolve"):
+        fixture = f"examples/cad/elements-{name}-command.json"
+        row = registry["capabilities"][f"elements.{name}"]
+        require(fixture in lock["contract"]["inputs"]
+                and row["stage"] == "CAD-5"
+                and row["provider"] == "elements"
+                and row["descriptor"]["modes"] == ["command"]
+                and row["descriptor"]["effects"] == ["ReadPinned"]
+                and row["binding"] == row["adapter"] == "qualified_profile"
+                and row["availability"] == "available"
+                and row["target_verification"] == {"t0": "passed", "t1": "not_run"},
+                f"Invalid CAD-5 Elements catalog binding {name}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--write-docs", action="store_true")
@@ -542,6 +557,7 @@ def main():
     verify_cad2_profile(lock, registry)
     verify_cad3_profile(lock, registry)
     verify_cad4_profiles(lock, registry)
+    verify_elements_catalog(lock, registry)
     operations = {}
     for name, row in registry["capabilities"].items():
         descriptor = row["descriptor"]
@@ -569,7 +585,7 @@ def main():
             path.write_text(expected, encoding="utf-8")
         require(path.read_text(encoding="utf-8") == expected, f"Stale capability reference {path.name}")
     validate_links([*DOCS.glob("*.md"), *SPEC.parent.glob("*.md")])
-    print(f"Validated CAD contracts, lock, {len(operations)} capability entries, CAD-2/3/4 evidence and documentation")
+    print(f"Validated CAD contracts, lock, {len(operations)} capability entries, CAD-2/3/4/5 evidence and documentation")
 
 
 if __name__ == "__main__":

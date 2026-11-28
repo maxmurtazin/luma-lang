@@ -1,0 +1,8 @@
+{
+  "bundle_version": 1,
+  "entry": "resolve.luma",
+  "files": {
+    "resolve.luma": "use elements\npart = elements.resolve(elements.pinned_revision())\n"
+  },
+  "source_digest": "sha256:702abd840101c20f3407395000fa4fb0818fad0bfc993a11294f12dfbb5c8044"
+}
