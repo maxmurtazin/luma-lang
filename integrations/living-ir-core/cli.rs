@@ -75,6 +75,10 @@ fn run(args: &[String]) -> Result<Value, Error> {
                 "documents": registry.documents,
             }))
         }
+        ("assembly-bom", [document]) => store.assembly_bom(document, None, &context),
+        ("assembly-bom", [document, configuration]) => {
+            store.assembly_bom(document, Some(configuration), &context)
+        }
         ("preview", [mode, part, revision, bundle, destination, jobs @ ..]) => {
             let revision = revision.parse().map_err(|_| usage())?;
             let source = String::from_utf8(read(bundle, 256 * 1024)?)
@@ -237,5 +241,5 @@ fn key() -> Result<[u8; 32], Error> {
 }
 
 fn usage() -> Error {
-    error("Usage", "luma-cad-project DB PROJECT init PART OP | create-part PART REVISION OP | preview MODE PART REVISION BUNDLE TOKEN [JOB_KEY ...] | bind PART REVISION BINDINGS TOKEN [JOB_KEY ...] | recipe-info PART | detach PART REVISION TOKEN | apply TOKEN OP | receipt PART OP | job PART KEY | work | job-cancel JOB | job-retry JOB ATTEMPT | job-definition JOB | scene PART OP SCRATCH")
+    error("Usage", "luma-cad-project DB PROJECT init PART OP | create-part PART REVISION OP | assembly-bom ASSEMBLY [CONFIGURATION] | preview MODE PART REVISION BUNDLE TOKEN [JOB_KEY ...] | bind PART REVISION BINDINGS TOKEN [JOB_KEY ...] | recipe-info PART | detach PART REVISION TOKEN | apply TOKEN OP | receipt PART OP | job PART KEY | work | job-cancel JOB | job-retry JOB ATTEMPT | job-definition JOB | scene PART OP SCRATCH")
 }

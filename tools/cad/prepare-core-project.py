@@ -262,7 +262,7 @@ def main():
             fingerprint.update(hashlib.sha256(path.read_bytes()).digest())
         fingerprint.update(hashlib.sha256((ROOT / "tools/cad/compose_embedded_2d.py").read_bytes()).digest())
     module = crate / "src/checkpoint/project/luma_cad.rs"
-    for name in ("jobs.rs", "bindings.rs", "brep_jobs.rs", "artifact_jobs.rs", "voxel_jobs.rs", "thermal_jobs.rs"):
+    for name in ("jobs.rs", "bindings.rs", "brep_jobs.rs", "artifact_jobs.rs", "assembly_reports.rs", "voxel_jobs.rs", "thermal_jobs.rs"):
         content = (INTEGRATION / name).read_text()
         patches[module.parent / "luma_cad" / name] = content
         fingerprint.update(hashlib.sha256(content.encode()).digest())
