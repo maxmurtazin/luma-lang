@@ -1059,3 +1059,124 @@ fn publishes_balanced_adaptive_tree_for_the_captured_core_sphere() {
     );
     assert!(!refused.exists());
 }
+
+#[cfg(feature = "cad4-thermal-tests")]
+#[test]
+fn recovers_stationary_box_heat_from_the_historical_part_and_material() {
+    let solver = std::env::var("LUMA_SIM_CLI").expect("absolute path to the pinned lsim");
+    let mut fixture = Fixture::new();
+    fixture.edit(json!({"op":"add","kind":"sphere"}));
+    assert_eq!(
+        fixture.call(&["heat-source", PART], 2)["code"],
+        "UnsupportedGeometry"
+    );
+    fixture.edit(json!({"op":"add","kind":"box"}));
+    let box_node = fixture.call(&["heat-source", PART], 0)["entity"].clone();
+    fixture.edit(json!({"op":"properties","node":box_node,
+        "values":{"width":40.0,"height":30.0,"depth":20.0,"position_x":5.0}
+    }));
+    let pin = fixture.call(&["heat-source", PART], 0);
+    assert_eq!(pin["extent_m"], json!([0.04, 0.03, 0.02]));
+    assert_eq!(pin["origin_m"], json!([-0.015, -0.015, -0.01]));
+    let grid = fixture.dir.path().join("heat-study.json");
+    fs::write(&grid, include_bytes!("box-heat-study.json")).unwrap();
+    let revision = pin["revision"].to_string();
+    let hash = pin["definition_hash"].as_str().unwrap();
+    let submit = [
+        "heat-submit",
+        &solver,
+        REQUEST,
+        PART,
+        &revision,
+        hash,
+        grid.to_str().unwrap(),
+    ];
+    let admission = fixture.call(&submit, 0);
+    assert_eq!(fixture.call(&submit, 0), admission);
+    assert_eq!(fixture.call(&["heat-receipt", REQUEST], 0), admission);
+    let job = admission["job"].to_string();
+    fixture.edit(json!({"op":"properties","node":box_node,"values":{"width":80,"rotation_z":15}}));
+    assert_eq!(
+        fixture.call(&["heat-source", PART], 2)["code"],
+        "UnsupportedGeometry"
+    );
+    let output = fixture.dir.path().join("box.lsim");
+    let export = ["heat-export", &job, output.to_str().unwrap()];
+    let attempt = if cfg!(feature = "checkpoint-fault-injection") {
+        assert_eq!(
+            fixture
+                .run(&["heat-work", &solver], Some("heat-job-before-publication"))
+                .status
+                .code(),
+            Some(73)
+        );
+        assert_eq!(fixture.call(&["heat-status", &job], 0)["state"], "running");
+        1
+    } else {
+        0
+    };
+    assert_eq!(fixture.call(&export, 2)["code"], "JobPending");
+    assert_eq!(
+        fixture.call(&["heat-cancel", &job], 0)["state"],
+        "cancelled"
+    );
+    assert_eq!(
+        fixture.call(&["heat-retry", &job, &attempt.to_string()], 0)["state"],
+        "admitted"
+    );
+    assert_eq!(
+        fixture.call(&["heat-work", &solver], 0)["state"],
+        "published"
+    );
+    let result = fixture.call(&export, 0);
+    let report = &result["report"];
+    assert_eq!(report["source"], pin);
+    assert_eq!(report["study"]["material"]["generation"], 1);
+    assert_eq!(report["outcome"], "Accepted");
+    let summary = &report["summary"];
+    assert_eq!(summary["qualification"], "Experimental");
+    let flows = summary["boundary_outward_heat_flow_w"].as_array().unwrap();
+    assert!((flows[0].as_f64().unwrap() - 1.2).abs() < 1e-8);
+    assert!((flows[1].as_f64().unwrap() + 1.2).abs() < 1e-8);
+    assert!(flows[2..].iter().all(|flow| flow.as_f64() == Some(0.0)));
+    let verification = &summary["verification"];
+    for key in [
+        "max_normalized_residual",
+        "normalized_outward_flow_imbalance",
+    ] {
+        assert!(
+            verification[key].as_f64().unwrap()
+                <= verification[format!("{key}_limit")].as_f64().unwrap()
+        );
+    }
+    let query = ["heat-cell", &solver, &job, "0", "0", "0"];
+    assert!((fixture.call(&query, 0)["value"].as_f64().unwrap() - 302.5).abs() < 1e-8);
+
+    let mut newer: Value = serde_json::from_slice(include_bytes!("box-heat-study.json")).unwrap();
+    newer["material"]["generation"] = json!(2);
+    newer["material"]["conductivity_w_per_m_k"] = json!(4);
+    fs::write(&grid, newer.to_string()).unwrap();
+    assert_eq!(fixture.call(&submit, 4)["code"], "RequestIdReuse");
+    let mut next = submit;
+    next[2] = "00000000-0000-4000-8000-000000000013";
+    let next_job = fixture.call(&next, 0)["job"].to_string();
+    assert_eq!(
+        fixture.call(&["heat-work", &solver], 0)["state"],
+        "published"
+    );
+    let next_output = fixture.dir.path().join("box-generation-2.lsim");
+    let second = fixture.call(
+        &["heat-export", &next_job, next_output.to_str().unwrap()],
+        0,
+    );
+    assert_eq!(second["report"]["study"]["material"]["generation"], 2);
+    let flux = second["report"]["summary"]["boundary_outward_heat_flow_w"][0]
+        .as_f64()
+        .unwrap();
+    assert!((flux - 2.4).abs() < 1e-8);
+    assert!((fixture.call(&query, 0)["value"].as_f64().unwrap() - 302.5).abs() < 1e-8);
+
+    newer["boundaries"] = json!([]);
+    fs::write(&grid, newer.to_string()).unwrap();
+    assert_eq!(fixture.call(&next, 2)["code"], "InvalidHeatStudy");
+}

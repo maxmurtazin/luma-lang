@@ -62,11 +62,13 @@ tempfile = "=3.27.0"
     project = destination / "project"
     project.mkdir()
     (project / "voxel-pin.txt").write_text(pins["voxel"] + "\n", encoding="utf-8")
-    for file in ("project.rs", "project_test.rs", "blocks.rs", "paged.rs", "provider.rs", "adaptive.rs"):
+    (project / "simulation-pin.txt").write_text(providers["simulation"]["commit"] + "\n", encoding="utf-8")
+    for file in ("project.rs", "project_test.rs", "blocks.rs", "paged.rs", "provider.rs", "adaptive.rs", "thermal.rs"):
         shutil.copyfile(integration / file, project / file)
     shutil.copyfile(ROOT / "examples/cad/voxel-sphere.json", project / "sphere.json")
     shutil.copyfile(ROOT / "examples/cad/voxel-adaptive-sphere.json", project / "adaptive-sphere.json")
     shutil.copyfile(ROOT / "examples/cad/voxel-adaptive-gyroid.json", project / "adaptive-gyroid.json")
+    shutil.copyfile(ROOT / "examples/cad/box-heat-study.json", project / "box-heat-study.json")
     shutil.copyfile(ROOT / "examples/cad/voxel-sample-command.json", project / "sample-command.json")
     shutil.copyfile(integration / "project.Cargo.lock", project / "Cargo.lock")
     (project / "Cargo.toml").write_text("""[package]
@@ -83,6 +85,7 @@ name = "project"
 path = "project_test.rs"
 
 [features]
+cad4-thermal-tests = []
 checkpoint-fault-injection = ["living-cad-viewer/checkpoint-fault-injection"]
 
 [dependencies]
